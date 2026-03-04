@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  /* Default to neon */
+  --tgwr-bg-0: #05070a;
+  --tgwr-bg-1: #070b12;
+  --tgwr-bg-2: #070716;
+
+  --tgwr-card-rgb: 7, 11, 18;
+  --tgwr-border-rgb: 148, 163, 184;
+  --tgwr-fg: #e2e8f0;
+  --tgwr-muted-rgb: 148, 163, 184;
+
+  --tgwr-accent1-rgb: 56, 189, 248;
+  --tgwr-accent2-rgb: 217, 70, 239;
+  --tgwr-grid-rgb: 56, 189, 248;
+}
+
+/*
+  Themes: apply to <body> as .theme-neon | .theme-cyber | .theme-midnight
+  We use RGB vars so we can do rgba(var(--x), a).
+*/
+body.theme-neon {
+  --tgwr-bg-0: #05070a;
+  --tgwr-bg-1: #070b12;
+  --tgwr-bg-2: #070716;
+
+  --tgwr-card-rgb: 7, 11, 18;
+  --tgwr-border-rgb: 148, 163, 184;
+  --tgwr-fg: #e2e8f0;
+  --tgwr-muted-rgb: 148, 163, 184;
+
+  --tgwr-accent1-rgb: 56, 189, 248; /* sky */
+  --tgwr-accent2-rgb: 217, 70, 239; /* fuchsia */
+  --tgwr-grid-rgb: 56, 189, 248;
+}
+
+body.theme-cyber {
+  --tgwr-bg-0: #04060a;
+  --tgwr-bg-1: #061019;
+  --tgwr-bg-2: #050a10;
+
+  --tgwr-card-rgb: 5, 12, 18;
+  --tgwr-border-rgb: 94, 234, 212;
+  --tgwr-fg: #dcfce7;
+  --tgwr-muted-rgb: 125, 211, 252;
+
+  --tgwr-accent1-rgb: 45, 212, 191; /* teal */
+  --tgwr-accent2-rgb: 163, 230, 53; /* lime */
+  --tgwr-grid-rgb: 45, 212, 191;
+}
+
+body.theme-midnight {
+  --tgwr-bg-0: #050716;
+  --tgwr-bg-1: #070a1b;
+  --tgwr-bg-2: #040611;
+
+  --tgwr-card-rgb: 7, 10, 27;
+  --tgwr-border-rgb: 99, 102, 241;
+  --tgwr-fg: #e0e7ff;
+  --tgwr-muted-rgb: 165, 180, 252;
+
+  --tgwr-accent1-rgb: 99, 102, 241; /* indigo */
+  --tgwr-accent2-rgb: 59, 130, 246; /* blue */
+  --tgwr-grid-rgb: 99, 102, 241;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, 'Apple Color Emoji',
+    'Segoe UI Emoji';
+  color: var(--tgwr-fg);
+  overflow: hidden;
+  background:
+    radial-gradient(900px circle at 18% 8%, rgba(var(--tgwr-accent1-rgb), 0.16), transparent 58%),
+    radial-gradient(820px circle at 86% 92%, rgba(var(--tgwr-accent2-rgb), 0.12), transparent 60%),
+    linear-gradient(180deg, var(--tgwr-bg-0) 0%, var(--tgwr-bg-1) 45%, var(--tgwr-bg-2) 100%);
+}
+
+/* Grid overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background-image:
+    linear-gradient(to right, rgba(var(--tgwr-grid-rgb), 0.10) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--tgwr-grid-rgb), 0.08) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.28) 58%, transparent 76%);
+}
+
+/* Subtle scanlines for slide cards */
+.tgwr-scanlines::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.08;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.10) 0px,
+    rgba(255, 255, 255, 0.10) 1px,
+    transparent 2px,
+    transparent 6px
+  );
+  mix-blend-mode: overlay;
+}
+
+.tgwr-gradient-text {
+  background: linear-gradient(90deg, rgba(var(--tgwr-accent1-rgb), 1), rgba(var(--tgwr-accent2-rgb), 1));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes tgwr-float {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.tgwr-float {
+  animation: tgwr-float 6.5s ease-in-out infinite;
+}
