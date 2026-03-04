@@ -146,7 +146,6 @@ npm run dev
 <br/>
 <br/>
 
-
 <div align="center">
 
 ```text
@@ -163,4 +162,6 @@ npm run dev
              $WAG_TECHNOLOGIES_v1.0     
                            
       ✧ ᴍᴀᴅᴇ ʙʏ IWANNASOME ꜰᴇᴀᴛ. dvunya ꜰᴇᴀᴛ TeMyCh ✧
-
+      
+```
+</div>
