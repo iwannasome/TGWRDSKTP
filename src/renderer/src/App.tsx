@@ -117,7 +117,7 @@ export default function App(): JSX.Element {
     setPeriod((p) => (p === 'all_time' ? 'year' : 'all_time'))
   }, [])
 
-const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Promise<boolean> => {
+  const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Promise<boolean> => {
     try {
       console.log('[TGWR] Попытка загрузки отчета. Путь:', dbPathArg, '| Старт:', isStartup)
       const res = await window.tgwr.loadReport(dbPathArg)
@@ -125,7 +125,7 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
 
       if (!res || !res.ok) {
         if (!isStartup) {
-          setReportBuild(prev => ({
+          setReportBuild((prev) => ({
             ...prev,
             running: false,
             error: `Ошибка бекенда: ${res?.error || 'отчет не найден'}`
@@ -136,7 +136,7 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
 
       if (!res.report) {
         if (!isStartup) {
-          setReportBuild(prev => ({
+          setReportBuild((prev) => ({
             ...prev,
             running: false,
             error: `Отчет загружен, но данные отсутствуют.`
@@ -150,9 +150,9 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
       if (typeof parsedReport === 'string') {
         try {
           parsedReport = JSON.parse(parsedReport)
-        } catch (e) {
+        } catch {
           if (!isStartup) {
-            setReportBuild(prev => ({ ...prev, running: false, error: 'Ошибка парсинга JSON отчета.' }))
+            setReportBuild((prev) => ({ ...prev, running: false, error: 'Ошибка парсинга JSON отчета.' }))
           }
           return false
         }
@@ -166,12 +166,12 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
       setView('slides')
 
       // Сбрасываем ошибку, если загрузилось
-      setReportBuild(prev => ({ ...prev, running: false, error: undefined }))
+      setReportBuild((prev) => ({ ...prev, running: false, error: undefined }))
       return true
     } catch (err) {
       console.error('[TGWR] Ошибка IPC:', err)
       if (!isStartup) {
-        setReportBuild(prev => ({
+        setReportBuild((prev) => ({
           ...prev,
           running: false,
           error: `Критическая ошибка IPC: ${String(err)}`
@@ -181,7 +181,7 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
     }
   }, [])
 
-// Try to load existing report.json on startup.
+  // Try to load existing report.json on startup.
   useEffect(() => {
     void loadReport(undefined, true) // true = это запуск, прячем красную ошибку
   }, [loadReport])
@@ -201,7 +201,7 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
         setWorkerError(null)
         setWorkerStatus({
           status: 'ok',
-          message: `Connected (pong${ver ? ` v${ver}` : ''})`,
+          message: `Подключен (отзывается${ver ? ` v${ver}` : ''})`,
           ts: new Date().toISOString()
         })
         return
@@ -246,7 +246,9 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
         if (!message) {
           const cc = typeof payload.current_chat === 'string' ? payload.current_chat : ''
           const cf = typeof payload.current_file === 'string' ? payload.current_file : ''
-          const parts = [cc, cf].map((s) => s.trim()).filter(Boolean)
+          const parts = [cc, cf]
+            .map((s) => s.trim())
+            .filter(Boolean)
           if (parts.length) message = parts.join(' — ')
         }
 
@@ -375,7 +377,7 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
     if (!dbPath) return
     setReportBuild({ running: true, progress: { stage: 'compute_metrics', current: 0, total: 1 } })
     window.tgwr.sendWorker({ cmd: 'build_report', db_path: dbPath })
-  }, [dbPath, reportBuild.running])
+  }, [dbPath])
 
   const mainContent = useMemo(() => {
     if (report && view === 'slides') {
@@ -398,25 +400,25 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
     }
 
     return (
-      <div className="flex h-full w-full items-center justify-center px-6 py-10">
+      <div className="relative flex h-full w-full items-center justify-center px-6 py-10">
         <div className="w-full max-w-[920px] rounded-[36px] border border-white/10 bg-white/5 p-8 shadow-[0_40px_140px_rgba(0,0,0,0.65)]">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-                TGWR setup
+              <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+                $WAG_TECHNOLOGIE$ v1.0
               </div>
-              <div className="mt-2 text-[32px] font-bold text-slate-100">Импорт → отчёт → wrapped</div>
+              <div className="mt-2 text-[32px] font-bold text-slate-100">TGWR</div>
               <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                Когда report.json готов — стартуем со слайдов.
+                ✧ ᴍᴀᴅᴇ ʙʏ IWANNASOME ꜰᴇᴀᴛ. dvunya ꜰᴇᴀᴛ. TeMyCh ✧
               </div>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                worker
+              <div className="text-xs font-semibold uppercase tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                Анализатор
               </div>
               <div className="mt-1 text-sm font-semibold text-slate-100">
-                {workerStatus.status === 'ok' ? 'ONLINE' : 'OFFLINE'}
+                {workerStatus.status === 'ok' ? 'Работает' : 'OFFLINE'}
               </div>
               <div className="mt-1 max-w-[280px] text-xs text-[rgba(var(--tgwr-muted-rgb),0.85)]">
                 {workerStatus.message}
@@ -433,9 +435,9 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
             <div className="rounded-[28px] border border-white/10 bg-white/5 p-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <div className="text-[16px] font-semibold text-slate-100">1) Импорт Telegram Export</div>
+                  <div className="text-[16px] font-semibold text-slate-100">Импорт Telegram Export</div>
                   <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                    Выбери папку экспорта Telegram Desktop.
+                    Выбери папку где находится экспорт из Telegram Desktop.
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -463,8 +465,8 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
               </div>
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                  export dir
+                <div className="text-xs font-medium tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  Путь до папки экспорта
                 </div>
                 <div className="mt-2 break-all font-mono text-xs text-slate-100/90">{exportDir || '—'}</div>
               </div>
@@ -523,10 +525,8 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
             <div className="rounded-[28px] border border-white/10 bg-white/5 p-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <div className="text-[16px] font-semibold text-slate-100">2) Отчёт (report.json)</div>
-                  <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                    Генерация метрик и данных для 20 слайдов.
-                  </div>
+                  <div className="text-[16px] font-semibold text-slate-100">Здесь происходит магия</div>
+                  <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Генерация Wrapped.</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
@@ -540,7 +540,7 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
                         : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.7)]'
                     ].join(' ')}
                   >
-                    Сгенерировать отчёт
+                    Сгенерировать wrapped
                   </button>
                 </div>
               </div>
@@ -570,15 +570,15 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
               ) : null}
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                  report path
+                <div className="text-xs font-semibold tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  Путь до отчёта
                 </div>
                 <div className="mt-2 break-all font-mono text-xs text-slate-100/90">{reportPath || '—'}</div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
                 <div className="text-xs text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-                  Если report уже существует — TGWR попробует открыть его при запуске.
+                  Если отчет уже существует — TGWR попробует открыть его при запуске.
                 </div>
                 <button
                   type="button"
@@ -591,12 +591,29 @@ const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Pr
             </div>
 
             <details className="rounded-[28px] border border-white/10 bg-white/5 p-6">
-              <summary className="cursor-pointer select-none text-sm font-semibold text-slate-100">Last event (debug)</summary>
+              <summary className="cursor-pointer select-none text-sm font-semibold text-slate-100">
+                Последние события (для разработчиков)
+              </summary>
               <pre className="mt-4 max-h-[220px] overflow-auto rounded-2xl border border-white/10 bg-black/30 p-4 text-xs text-slate-100/90">
                 {JSON.stringify(lastEvent, null, 2)}
               </pre>
             </details>
           </div>
+        </div>
+
+        {/* твой “кредит” / ссылка — теперь это часть одного JSX дерева */}
+        <div className="fixed bottom-8 right-10 z-50 flex flex-col items-end text-right">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.3em] text-[rgba(var(--tgwr-muted-rgb),0.6)]">
+            TG Канал
+          </div>
+          <a
+            href="https://t.me/shizikjke"
+            target="_blank"
+            rel="noreferrer"
+            className="origin-right text-[14px] font-black uppercase tracking-wider text-slate-200 transition-all hover:scale-105 hover:text-cyan-400"
+          >
+            IWANNASOME
+          </a>
         </div>
       </div>
     )
