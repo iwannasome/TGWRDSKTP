@@ -2297,7 +2297,6 @@ def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
             }
         )
 
-    # lowest imbalance first, then bigger chats first, then stable id
     rows.sort(key=lambda r: (r["imbalance_ratio"], -r["total_messages"], r["peer_from_id"]))
     return rows[:10]
 def _achievements(all_time: Dict[str, Any]) -> List[Dict[str, Any]]:
