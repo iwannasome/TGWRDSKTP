@@ -23,9 +23,6 @@ export default function SlideFrame({ kicker, title, subtitle, footerHint, childr
       <div className="pointer-events-none absolute -left-40 -top-40 h-[520px] w-[520px] rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.22)] blur-[120px]" />
       <div className="pointer-events-none absolute -bottom-44 -right-44 h-[560px] w-[560px] rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.18)] blur-[130px]" />
 
-      {/* chrome corners */}
-      <div className="pointer-events-none absolute left-8 top-8 h-10 w-10 rounded-xl border border-[rgba(var(--tgwr-border-rgb),0.22)] bg-white/5" />
-      <div className="pointer-events-none absolute bottom-8 right-8 h-10 w-10 rounded-xl border border-[rgba(var(--tgwr-border-rgb),0.22)] bg-white/5" />
 
       <div className="relative flex h-full w-full flex-col px-[84px] py-[90px]">
         <div className="min-h-[150px]">

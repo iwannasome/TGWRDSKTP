@@ -28,9 +28,9 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
 
   return (
     <SlideFrame
-      kicker="Words"
+      kicker="IW$"
       title="Слова года"
-      subtitle="Топ-слова (без стоп-слов и ссылок). Простая word-cloud визуализация."
+      subtitle="Топ-слова."
     >
       <div className="flex h-full flex-col justify-center">
         <div className="rounded-[44px] border border-white/10 bg-white/5 p-10">

@@ -12,9 +12,9 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
 
   return (
     <SlideFrame
-      kicker="Consistency"
+      kicker="IW$"
       title="Самая длинная серия"
-      subtitle="Дни подряд с хотя бы 1 сообщением."
+      subtitle="C тобой так приятно общаться!"
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div

@@ -10,9 +10,8 @@ type Item = { key: string; label: string; icon: string }
 const ITEMS: Item[] = [
   { key: 'photo', label: 'Фото', icon: '🖼️' },
   { key: 'video', label: 'Видео', icon: '🎬' },
-  { key: 'voice', label: 'Voice', icon: '🎙️' },
+  { key: 'voice', label: 'Голосовые', icon: '🎙️' },
   { key: 'sticker', label: 'Стикеры', icon: '🧩' },
-  { key: 'gif', label: 'GIF', icon: '✨' },
   { key: 'file', label: 'Файлы', icon: '📎' },
   { key: 'other', label: 'Другое', icon: '📦' }
 ]
@@ -22,7 +21,7 @@ export default function Slide13MediaCounts({ report, period, exporting }: SlideC
   const media = getMediaCounts(p)
 
   return (
-    <SlideFrame kicker="Media" title="Медиа-режим" subtitle="Сколько вложений и медиа." >
+    <SlideFrame kicker="IW$" title="Медиа" subtitle="Покидай своих фоток" >
       <div className="flex h-full flex-col justify-center">
         <div className="rounded-[44px] border border-white/10 bg-white/5 p-10">
           {/* Сетка остается прежней, 3 колонки отлично вписываются в 1080px */}

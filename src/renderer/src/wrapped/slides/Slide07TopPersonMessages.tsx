@@ -17,7 +17,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
   const received = top ? getNumber(top, 'received_messages', 0) : 0
 
   return (
-    <SlideFrame kicker="People" title="Топ персона" subtitle="С кем больше всего сообщений." >
+    <SlideFrame kicker="People" title={<span className="tgwr-gradient-text font-semibold">Топ персона</span>} subtitle="С кем больше всего сообщений." >
       <div className="flex h-full flex-col justify-center">
         <motion.div
           // Отключаем "взлет" карточки при экспорте
@@ -40,7 +40,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
           <div className="mt-8 grid grid-cols-2 gap-6">
             <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Sent
+                Отправлено
               </div>
               <div className="mt-2 text-[26px] font-bold text-slate-50">
                 {formatInt(sent)}
@@ -49,7 +49,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
 
             <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Received
+                Получено
               </div>
               <div className="mt-2 text-[26px] font-bold text-slate-50">
                 {formatInt(received)}

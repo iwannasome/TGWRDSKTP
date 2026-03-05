@@ -12,9 +12,9 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
 
   return (
     <SlideFrame
-      kicker="Late hours"
-      title="Ночные сообщения"
-      subtitle="00:00–05:59 по MSK."
+      kicker="IW$"
+      title={<span className="tgwr-gradient-text font-semibold">Ночные сообщения</span>}
+      subtitle="Ты спишь?)"
     >
       <div className="flex h-full flex-col justify-center">
         <div className="grid grid-cols-2 gap-8">
@@ -26,7 +26,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
             className="rounded-[40px] border border-white/10 bg-white/5 p-9"
           >
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Night ratio
+              В процентах:
             </div>
             <div className="mt-4 text-[82px] font-bold leading-none">
               <span className="tgwr-gradient-text">{formatPercent01(night.ratio)}</span>
@@ -44,7 +44,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
             className="rounded-[40px] border border-white/10 bg-white/5 p-9"
           >
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Count
+              Количество:
             </div>
             <div className="mt-4 text-[76px] font-bold leading-none text-slate-50">
               {formatInt(night.count)}

@@ -19,19 +19,19 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
   const sentPct = Math.round(sentRatio * 100)
 
   return (
-    <SlideFrame kicker="Direction" title="Ты пишешь или тебе пишут" subtitle="Соотношение исходящих и входящих." >
+    <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Ты или тебе?</span>} subtitle="Если я бы не писал, ты бы не писала" >
       <div className="flex h-full flex-col justify-between">
         <div className="mt-8 grid grid-cols-2 gap-8">
           <div className="rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Sent
+              Отправлено
             </div>
             <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">{formatInt(sent)}</div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Received
+              Получено
             </div>
             <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">{formatInt(received)}</div>
           </div>
@@ -41,15 +41,15 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
           <div className="flex items-end justify-between gap-6">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Balance
+                Баланс в процентах
               </div>
               <div className="mt-2 text-[18px] font-semibold text-slate-100">
-                {sentPct}% sent · {100 - sentPct}% received
+                {sentPct}% отправлено · {100 - sentPct}% получено
               </div>
             </div>
             <div className="text-right">
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Total
+                Всего
               </div>
               <div className="mt-2 text-[18px] font-semibold text-slate-100">{formatInt(total)}</div>
             </div>
@@ -68,7 +68,7 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
           </div>
 
           <div className="mt-4 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.80)]">
-            Если исходящих = 0 — значит self_from_id не определён или from_id отсутствуют в данных.
+
           </div>
         </div>
       </div>

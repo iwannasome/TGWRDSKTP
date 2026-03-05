@@ -11,7 +11,7 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
 
   return (
     <SlideFrame
-      kicker="Text"
+      kicker="IW$"
       title="Самое длинное сообщение"
       subtitle="Длиннее — не значит лучше, но это забавно."
     >

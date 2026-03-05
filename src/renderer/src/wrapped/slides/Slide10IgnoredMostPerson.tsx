@@ -11,9 +11,9 @@ export default function Slide10IgnoredMostPerson({ report, period, exporting }: 
 
   return (
     <SlideFrame
-      kicker="Replies"
+      kicker="IW$"
       title="Кого игнорируешь дольше всех"
-      subtitle="Максимальная медиана ответа."
+      subtitle="Я что у тебя не один?"
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div

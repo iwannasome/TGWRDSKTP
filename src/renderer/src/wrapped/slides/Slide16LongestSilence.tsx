@@ -11,9 +11,9 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
 
   return (
     <SlideFrame
-      kicker="Gaps"
+      kicker="IW$"
       title="Самая длинная пауза"
-      subtitle="Максимальный разрыв между двумя сообщениями в одном чате."
+      subtitle="Давай возьмем паузу в общении?"
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
@@ -33,7 +33,7 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
           </div>
 
           <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
-            между сообщениями
+            между двумя сообщениями
           </div>
 
           {!s && (

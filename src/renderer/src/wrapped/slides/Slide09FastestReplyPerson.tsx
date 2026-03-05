@@ -13,7 +13,7 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
     <SlideFrame
       kicker="Replies"
       title="Кому отвечаешь быстрее всех"
-      subtitle="Медианное время ответа на сообщения других."
+      subtitle="Парни она мне написала!"
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div

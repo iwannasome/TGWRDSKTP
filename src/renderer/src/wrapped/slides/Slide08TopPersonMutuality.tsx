@@ -18,9 +18,9 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
 
   return (
     <SlideFrame
-      kicker="Balance"
+      kicker="IW$"
       title="Самая взаимная переписка"
-      subtitle="Минимальный дисбаланс sent/received при большом объёме."
+      subtitle="В общении все по ровну."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div

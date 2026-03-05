@@ -14,8 +14,8 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
 
   return (
     <SlideFrame
-      kicker="Peak"
-      title="Самый активный месяц"
+      kicker="IW$"
+      title={<span className="tgwr-gradient-text font-semibold">Самый активный месяц</span>}
       subtitle="Когда Telegram был на максималках."
     >
       <div className="flex h-full flex-col justify-center">

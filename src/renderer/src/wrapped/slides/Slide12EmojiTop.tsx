@@ -10,7 +10,7 @@ export default function Slide12EmojiTop({ report, period, exporting }: SlideComm
   const emojis = getEmojiTop(p).slice(0, 12)
 
   return (
-    <SlideFrame kicker="Emoji" title="Твои эмодзи" subtitle="Топ эмодзи (в тексте и sticker_emoji)." >
+    <SlideFrame kicker="IW$" title="Эмодзи" subtitle="Вместо тысячи слов" >
       <div className="flex h-full flex-col justify-center">
         <div className="rounded-[44px] border border-white/10 bg-white/5 p-10">
           {emojis.length === 0 ? (
@@ -35,7 +35,7 @@ export default function Slide12EmojiTop({ report, period, exporting }: SlideComm
                 >
                   <div className="text-[44px]">{e.emoji}</div>
                   <div className="mt-2 text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                    Count
+                    Сколько:
                   </div>
                   <div className="mt-2 text-[18px] font-bold text-slate-50">
                     {formatInt(e.count)}

@@ -15,13 +15,13 @@ export default function Slide02TotalMessages({
   const total = getTotalMessages(p)
   const year = getYearLabel(report)
 
-  const periodLabel = period === 'all_time' ? 'All-time' : year
+  const periodLabel = period === 'all_time' ? 'За все время' : year
 
   return (
     <SlideFrame
-      kicker="Activity"
-      title="Сколько сообщений"
-      subtitle="Один факт — один слайд. Переключай период и смотри как меняется картина."
+      kicker="IW$"
+      title={<span className="tgwr-gradient-text font-semibold">Твои сообщения</span>}
+      subtitle="Куча интересного впереди - смотри, впитывай и вспоминай"
       footerHint={exporting ? undefined : "Toggle влияет на все слайды."}
     >
       <div className="flex h-full flex-col justify-between">
@@ -39,7 +39,7 @@ export default function Slide02TotalMessages({
                   : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
               ].join(' ')}
             >
-              All-time
+              За все время
             </button>
             <button
               type="button"
@@ -57,7 +57,7 @@ export default function Slide02TotalMessages({
 
           <div className="mt-10">
             <div className="select-none text-[13px] font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Total messages · {periodLabel}
+              Всего сообщений · {periodLabel}
             </div>
 
             <motion.div
@@ -75,7 +75,6 @@ export default function Slide02TotalMessages({
               transition={{ duration: 0.35, delay: exporting ? 0 : 0.13 }}
               className="mt-6 max-w-[860px] text-[18px] leading-relaxed text-slate-100/90"
             >
-              Это все сообщения, которые попали в экспорт и в базу. Без фильтров. Как есть.
             </motion.div>
           </div>
         </div>

@@ -28,9 +28,9 @@ export default function Slide01Cover({ report, theme, onThemeChange, exporting }
 
   return (
     <SlideFrame
-      kicker="Telegram Wrapped"
-      title="TGWR"
-      subtitle="Твой Telegram — в цифрах. Полностью локально. Без серверов."
+      kicker="IW$"
+      title={<span className="tgwr-gradient-text font-semibold">TGWR</span>}
+      subtitle="Твой Telegram — в цифрах. Полностью локально и без риска слива."
       // Прячем инструкцию по навигации в PDF/PNG
       footerHint={exporting ? undefined : "Колесо мыши / стрелки — листать. Кнопка “Детали” — таблицы топ-10."}
     >
