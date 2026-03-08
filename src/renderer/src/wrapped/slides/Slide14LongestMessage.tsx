@@ -12,8 +12,8 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
   return (
     <SlideFrame
       kicker="IW$"
-      title="Самое длинное сообщение"
-      subtitle="Длиннее — не значит лучше, но это забавно."
+      title={<span className="tgwr-gradient-text font-semibold">Самое длинное сообщение</span>}
+      subtitle="Признание в чувствах, или просто абсурд другу"
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div

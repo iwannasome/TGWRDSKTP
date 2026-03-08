@@ -1751,6 +1751,42 @@ def _count_messages(conn: sqlite3.Connection, start_ts: int, end_ts: int, where_
     row = conn.execute(sql, p + params_extra).fetchone()
     return int(row[0]) if row and row[0] is not None else 0
 
+def _period_hours(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> int:
+    """
+    Number of real hours in the reporting period.
+
+    Rules:
+    - for bounded periods (like calendar year) use the full period width
+      (e.g. 2025 = 365 * 24 = 8760 hours)
+    - for all_time use span from first non-service message hour
+      to last non-service message hour, inclusive
+    """
+    # Finite bounded period (e.g. year)
+    if start_ts > 0 and end_ts > start_ts and end_ts < 2**61:
+        return max(1, int((int(end_ts) - int(start_ts)) // 3600))
+
+    # Open / all_time period: derive from actual first..last message span
+    base, p = _period_where_clause(start_ts, end_ts)
+    row = conn.execute(
+        f"SELECT MIN(date_ts), MAX(date_ts) "
+        f"FROM messages "
+        f"WHERE is_service = 0 AND {base};",
+        p,
+    ).fetchone()
+
+    if not row:
+        return 0
+
+    min_ts = int(row[0] or 0)
+    max_ts = int(row[1] or 0)
+
+    if min_ts <= 0 or max_ts <= 0 or max_ts < min_ts:
+        return 0
+
+    first_hour = min_ts // 3600
+    last_hour = max_ts // 3600
+
+    return max(1, int(last_hour - first_hour + 1))
 
 def _most_active_group(conn: sqlite3.Connection, start_ts: int, end_ts: int, group_expr: str, label: str) -> Dict[str, Any]:
     base, p = _period_where_clause(start_ts, end_ts)
@@ -2543,6 +2579,8 @@ def _compute_period_metrics(
         "most_active_hour": most_hour,
         "daily_activity": daily_activity,
         "hourly_activity": hourly_activity,
+        "period_hours": int(period_hours),
+        "average_messages_per_hour": float(average_messages_per_hour),
         "night_messages_count": int(night_messages),
         "night_messages_ratio": float(night_ratio),
         "media_counts": media,
