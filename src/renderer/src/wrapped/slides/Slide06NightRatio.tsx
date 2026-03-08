@@ -14,7 +14,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
     <SlideFrame
       kicker="IW$"
       title={<span className="tgwr-gradient-text font-semibold">Ночные сообщения</span>}
-      subtitle="Ты спишь?)"
+      subtitle="Спишь?)"
     >
       <div className="flex h-full flex-col justify-center">
         <div className="grid grid-cols-2 gap-8">

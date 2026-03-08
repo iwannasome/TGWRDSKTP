@@ -12,7 +12,7 @@ export default function Slide10IgnoredMostPerson({ report, period, exporting }: 
   return (
     <SlideFrame
       kicker="IW$"
-      title="Кого игнорируешь дольше всех"
+       title={<span className="tgwr-gradient-text font-semibold">Кого игнорируешь дольше всех</span>}
       subtitle="Я что у тебя не один?"
     >
       <div className="flex h-full flex-col justify-center">

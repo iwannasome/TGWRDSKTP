@@ -6,7 +6,7 @@ import type { SlideCommonProps } from '../slideTypes'
 export default function Slide20End(_props: SlideCommonProps): JSX.Element {
   return (
     <SlideFrame
-      kicker="The end"
+      kicker="IW$"
       title="Экспортируй / Поделись"
       subtitle="Report уже локально рядом с базой. Дальше — дело вкуса: скриншоты, запись экрана или просто сохранить для себя."
       footerHint="Спасибо, что используешь локальные инструменты."

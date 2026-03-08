@@ -21,7 +21,7 @@ export default function Slide13MediaCounts({ report, period, exporting }: SlideC
   const media = getMediaCounts(p)
 
   return (
-    <SlideFrame kicker="IW$" title="Медиа" subtitle="Покидай своих фоток" >
+    <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Медиа</span>} subtitle="Покидай своих фоток" >
       <div className="flex h-full flex-col justify-center">
         <div className="rounded-[44px] border border-white/10 bg-white/5 p-10">
           {/* Сетка остается прежней, 3 колонки отлично вписываются в 1080px */}

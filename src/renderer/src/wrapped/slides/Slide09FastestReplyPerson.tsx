@@ -11,8 +11,8 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
 
   return (
     <SlideFrame
-      kicker="Replies"
-      title="Кому отвечаешь быстрее всех"
+      kicker="IW$"
+       title={<span className="tgwr-gradient-text font-semibold">Кому отвечаешь быстрее всех</span>}
       subtitle="Парни она мне написала!"
     >
       <div className="flex h-full flex-col justify-center">

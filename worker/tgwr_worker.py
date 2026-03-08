@@ -1811,65 +1811,85 @@ def _distinct_days_count(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
     return int(row[0] or 0) if row else 0
 
 
-def _hourly_activity(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
-    base, p = _period_where_clause(start_ts, end_ts)
-    counts: List[int] = [0] * 24
-    q = (
-        f"SELECT CAST(strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS h, COUNT(*) AS cnt "
-        f"FROM messages WHERE is_service = 0 AND {base} "
-        f"GROUP BY h ORDER BY h;"
-    )
+def _daily_activity(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
+    """
+    Returns per-day activity in MSK as:
+    [
+      {"date": "2025-01-01", "count": 123},
+      ...
+    ]
 
-    for row in conn.execute(q, p):
-        try:
-            hour = int(row[0] or 0)
-            cnt = int(row[1] or 0)
-        except Exception:
-            continue
-        if 0 <= hour < 24:
-            counts[hour] = cnt
-
-    return [{"hour": int(hour), "count": int(counts[hour])} for hour in range(24)]
-
-
-def _daily_activity(
-    conn: sqlite3.Connection,
-    start_ts: int,
-    end_ts: int,
-    fill_full_range: bool = False,
-) -> List[Dict[str, Any]]:
+    For bounded windows (like a single calendar year), it fills missing dates with 0
+    so the renderer can build an honest day-by-day heatmap. For unbounded/all-time
+    windows, it returns only dates that have messages.
+    """
     base, p = _period_where_clause(start_ts, end_ts)
     q = (
         f"SELECT date((date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS d, COUNT(*) AS cnt "
-        f"FROM messages WHERE is_service = 0 AND {base} "
-        f"GROUP BY d ORDER BY d;"
+        f"FROM messages "
+        f"WHERE is_service = 0 AND {base} "
+        f"GROUP BY d "
+        f"ORDER BY d;"
     )
 
-    counts_by_date: Dict[str, int] = {}
+    counts: Dict[str, int] = {}
     for row in conn.execute(q, p):
-        d = row[0] if isinstance(row[0], str) else None
-        if not d:
+        d = row[0]
+        cnt = int(row[1] or 0)
+        if isinstance(d, str):
+            counts[d] = cnt
+
+    # Only materialize full calendar ranges for sane bounded periods.
+    # For all_time (start_ts=0, end_ts=2**62), returning every day would be meaningless.
+    if start_ts > 0 and end_ts > start_ts and (end_ts - start_ts) <= 370 * 86400 * 2:
+        try:
+            msk = _moscow_tzinfo()
+            start_date = datetime.fromtimestamp(start_ts, tz=msk).date()
+            end_date_exclusive = datetime.fromtimestamp(max(start_ts, end_ts - 1), tz=msk).date()
+            out: List[Dict[str, Any]] = []
+            cur = start_date
+            while cur <= end_date_exclusive:
+                key = cur.strftime('%Y-%m-%d')
+                out.append({"date": key, "count": int(counts.get(key, 0))})
+                cur += timedelta(days=1)
+            return out
+        except Exception:
+            pass
+
+    return [{"date": d, "count": int(cnt)} for d, cnt in sorted(counts.items())]
+
+
+
+def _hourly_activity(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
+    """
+    Returns 24-hour distribution in MSK as:
+    [
+      {"hour": 0, "count": 23551},
+      {"hour": 1, "count": 20684},
+      ...
+      {"hour": 23, "count": 19225}
+    ]
+    """
+    base, p = _period_where_clause(start_ts, end_ts)
+    q = (
+        f"SELECT CAST(strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS h, COUNT(*) AS cnt "
+        f"FROM messages "
+        f"WHERE is_service = 0 AND {base} "
+        f"GROUP BY h "
+        f"ORDER BY h;"
+    )
+
+    counts = [0] * 24
+    for row in conn.execute(q, p):
+        try:
+            h = int(row[0])
+            cnt = int(row[1] or 0)
+            if 0 <= h <= 23:
+                counts[h] = cnt
+        except Exception:
             continue
-        counts_by_date[d] = int(row[1] or 0)
 
-    if not counts_by_date:
-        return []
-
-    if not fill_full_range:
-        return [{"date": d, "count": int(cnt)} for d, cnt in sorted(counts_by_date.items())]
-
-    msk = _moscow_tzinfo()
-    start_date = datetime.fromtimestamp(int(start_ts), tz=msk).date()
-    end_date = datetime.fromtimestamp(int(max(start_ts, end_ts - 1)), tz=msk).date()
-
-    out: List[Dict[str, Any]] = []
-    cur = start_date
-    while cur <= end_date:
-        key = cur.isoformat()
-        out.append({"date": key, "count": int(counts_by_date.get(key, 0))})
-        cur += timedelta(days=1)
-
-    return out
+    return [{"hour": h, "count": int(counts[h])} for h in range(24)]
 
 
 def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Dict[str, Any]]:
@@ -1903,6 +1923,16 @@ def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
         active_days = int(row[7] or 0)
         night_msgs = int(row[8] or 0)
         day_msgs = int(row[9] or 0)
+        time_span_seconds = max(0, last_ts - first_ts) if first_ts and last_ts else 0
+        time_span_days = 0
+        if first_ts > 0 and last_ts > 0 and last_ts >= first_ts:
+            try:
+                msk = _moscow_tzinfo()
+                first_date = datetime.fromtimestamp(first_ts, tz=msk).date()
+                last_date = datetime.fromtimestamp(last_ts, tz=msk).date()
+                time_span_days = max(1, (last_date - first_date).days + 1)
+            except Exception:
+                time_span_days = max(0, int(time_span_seconds // 86400))
         out[peer] = {
             "peer_from_id": peer,
             "display_name": display_name,
@@ -1911,7 +1941,8 @@ def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
             "received_messages": recv,
             "first_ts": first_ts,
             "last_ts": last_ts,
-            "time_span_seconds": max(0, last_ts - first_ts) if first_ts and last_ts else 0,
+            "time_span_seconds": int(time_span_seconds),
+            "time_span_days": int(time_span_days),
             "active_days": active_days,
             "night_messages": night_msgs,
             "day_messages": day_msgs,
@@ -2341,7 +2372,15 @@ def _top_10_people_by_messages(people: Dict[str, Dict[str, Any]]) -> List[Dict[s
 
 
 def _top_10_people_by_time_span(people: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    lst = sorted(people.values(), key=lambda x: int(x.get("time_span_seconds", 0) or 0), reverse=True)
+    lst = sorted(
+        people.values(),
+        key=lambda x: (
+            int(x.get("time_span_days", 0) or 0),
+            int(x.get("time_span_seconds", 0) or 0),
+            int(x.get("total_messages", 0) or 0),
+        ),
+        reverse=True,
+    )
     out: List[Dict[str, Any]] = []
     for it in lst[:10]:
         out.append(
@@ -2349,6 +2388,8 @@ def _top_10_people_by_time_span(people: Dict[str, Dict[str, Any]]) -> List[Dict[
                 "peer_from_id": it.get("peer_from_id"),
                 "display_name": it.get("display_name"),
                 "time_span_seconds": int(it.get("time_span_seconds", 0) or 0),
+                "span_days": int(it.get("time_span_days", 0) or 0),
+                "time_span_days": int(it.get("time_span_days", 0) or 0),
                 "first_ts": it.get("first_ts"),
                 "last_ts": it.get("last_ts"),
                 "total_messages": int(it.get("total_messages", 0) or 0),
@@ -2513,6 +2554,12 @@ def _compute_period_metrics(
     active_days_count = _distinct_days_count(conn, start_ts, end_ts)
     avg_msgs_per_day = _safe_div(total, active_days_count) if active_days_count else 0.0
 
+    daily_activity = _daily_activity(conn, start_ts, end_ts)
+    hourly_activity = _hourly_activity(conn, start_ts, end_ts)
+
+    period_hours = _period_hours(conn, start_ts, end_ts)
+    average_messages_per_hour = _safe_div(total, period_hours) if period_hours > 0 else 0.0
+
     silence = _longest_silence_gap(conn, start_ts, end_ts)
     streak = _longest_streak_days(conn, start_ts, end_ts)
 
@@ -2520,8 +2567,6 @@ def _compute_period_metrics(
 
     textm = _text_metrics_sent(conn, start_ts, end_ts)
     media = _media_counts(conn, start_ts, end_ts)
-    daily_activity = _daily_activity(conn, start_ts, end_ts, fill_full_range=(label == "year"))
-    hourly_activity = _hourly_activity(conn, start_ts, end_ts)
 
     if label == "year":
         median_reply = int(reply_stats.get("global_median_year_seconds", 0) or 0)
@@ -2539,7 +2584,10 @@ def _compute_period_metrics(
         for peer_id, med in per_peer_median.items():
             try:
                 samples = int(per_peer_samples.get(peer_id, 0) or 0)
+                total_messages_for_peer = int((people.get(peer_id, {}) or {}).get("total_messages", 0) or 0)
                 if samples < 3:
+                    continue
+                if total_messages_for_peer < 2000:
                     continue
                 med_items.append((int(med or 0), -samples, peer_id))
             except Exception:

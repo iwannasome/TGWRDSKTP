@@ -17,7 +17,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
   const received = top ? getNumber(top, 'received_messages', 0) : 0
 
   return (
-    <SlideFrame kicker="People" title={<span className="tgwr-gradient-text font-semibold">Топ персона</span>} subtitle="С кем больше всего сообщений." >
+    <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Топ персона</span>} subtitle="Это твой любимец, или история давно минувших дней?" >
       <div className="flex h-full flex-col justify-center">
         <motion.div
           // Отключаем "взлет" карточки при экспорте

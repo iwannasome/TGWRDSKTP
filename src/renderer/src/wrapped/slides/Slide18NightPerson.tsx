@@ -12,9 +12,9 @@ export default function Slide18NightPerson({ report, period, exporting }: SlideC
 
   return (
     <SlideFrame
-      kicker="Night"
+      kicker="IW$"
       title="Ночной человек"
-      subtitle="С кем чаще всего переписываешься ночью (00:00–05:59)."
+      subtitle="Твои ночные моменты останутся при тебе, а я лишь покажу с кем их было больше всего."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
