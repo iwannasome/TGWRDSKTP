@@ -27,6 +27,8 @@ import Slide17DayPerson from './slides/Slide17DayPerson'
 import Slide18NightPerson from './slides/Slide18NightPerson'
 import Slide19Achievements from './slides/Slide19Achievements'
 import Slide20End from './slides/Slide20End'
+import Slide21Credits from './slides/Slide21Credits'
+
 
 const SLIDE_W = 1080
 const SLIDE_H = 1920
@@ -51,7 +53,8 @@ const slides: SlideDef[] = [
   { id: 's17', title: 'Day Person', Component: Slide17DayPerson },
   { id: 's18', title: 'Night Person', Component: Slide18NightPerson },
   { id: 's19', title: 'Achievements', Component: Slide19Achievements },
-  { id: 's20', title: 'Final Slide', Component: Slide20End }
+  { id: 's20', title: 'Final Slide', Component: Slide20End },
+  { id: 's21', title: 'Credits', Component: Slide21Credits }
 ]
 
 type SlidesViewProps = {
