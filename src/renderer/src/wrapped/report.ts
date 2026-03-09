@@ -61,6 +61,12 @@ export function getActiveDaysCount(p: Record<string, unknown>): number {
   return getNumber(p, 'active_days_count', 0)
 }
 
+/**
+ * Return daily activity for a period. The worker emits this as an array of objects
+ * like { date: 'YYYY-MM-DD', count: N }. When not present or malformed
+ * returns an empty array. If the array contains numbers instead of objects
+ * it will treat each index as that day's count.
+ */
 export function getDailyActivity(p: Record<string, unknown>): DailyActivityPoint[] {
   const arr = getArray(p, 'daily_activity')
   const out: DailyActivityPoint[] = []
@@ -84,6 +90,11 @@ export function getDailyActivity(p: Record<string, unknown>): DailyActivityPoint
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }
 
+/**
+ * Return hourly activity for a period. The worker emits this as either an array of
+ * objects like { hour: 0, count: N } or a plain array of counts indexed by hour.
+ * Always returns a normalized 24-hour array.
+ */
 export function getHourlyActivity(p: Record<string, unknown>): HourlyActivityPoint[] {
   const arr = getArray(p, 'hourly_activity')
   const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }))
@@ -138,9 +149,10 @@ export function getPersonId(item: Record<string, unknown> | null): string {
   return getString(item, 'peer_from_id', '')
 }
 
-export function getReplyChampion(p: Record<string, unknown>, key: 'who_you_reply_fastest' | 'who_you_ignore_most'):
-  | { name: string; seconds: number }
-  | null {
+export function getReplyChampion(
+  p: Record<string, unknown>,
+  key: 'who_you_reply_fastest' | 'who_you_ignore_most'
+): { name: string; seconds: number } | null {
   const obj = getRecord(p, key)
   if (!obj) return null
   const name = getString(obj, 'display_name', '') || getString(obj, 'peer_from_id', '')
@@ -175,6 +187,34 @@ export function getLongestMessage(p: Record<string, unknown>): {
   return { length, snippet, name: name || '—' }
 }
 
+export function getTopLongestMessages(p: Record<string, unknown>): Array<{
+  length: number
+  snippet: string
+  name: string
+}> {
+  const arr = getArray(p, 'top_longest_messages_sent')
+  const out: Array<{ length: number; snippet: string; name: string }> = []
+
+  for (const item of arr) {
+    const obj = asRecord(item)
+    if (!obj) continue
+    const length = getNumber(obj, 'length_chars', 0)
+    const snippet = getString(obj, 'snippet', '')
+    const name = getString(obj, 'display_name', '') || getString(obj, 'peer_from_id', '') || '—'
+    if (!snippet && length <= 0) continue
+    out.push({
+      length,
+      snippet,
+      name
+    })
+  }
+
+  if (out.length > 0) return out.slice(0, 5)
+
+  const fallback = getLongestMessage(p)
+  return fallback ? [fallback] : []
+}
+
 export function getLongestStreak(p: Record<string, unknown>): {
   days: number
   start: string
@@ -188,8 +228,6 @@ export function getLongestStreak(p: Record<string, unknown>): {
   if (days <= 0) return null
   return { days, start, end }
 }
-
-
 
 export function getLongestPersonStreak(
   report: unknown,
@@ -209,6 +247,7 @@ export function getLongestPersonStreak(
 
   return { lengthDays, start, end, peerFromId, displayName }
 }
+
 export function getLongestSilence(p: Record<string, unknown>): {
   gapSeconds: number
   chatName: string

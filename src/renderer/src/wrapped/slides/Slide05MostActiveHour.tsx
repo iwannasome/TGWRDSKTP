@@ -130,7 +130,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
             value={formatInt(averagePerHour)}
             hint={
               periodHours > 0
-                ? `по всем ${formatInt(periodHours)} часам периода`
+                ? `За все ${formatInt(periodHours)} часов`
                 : 'среднее по всему выбранному периоду'
             }
             delay={0.14}
@@ -212,16 +212,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
                 fill="rgba(var(--tgwr-accent1-rgb),0.10)"
                 stroke="rgba(var(--tgwr-accent1-rgb),0.22)"
               />
-              <text
-                x={chart.chartLeft + chart.chartWidth - 67}
-                y={chart.averageY + 3}
-                textAnchor="middle"
-                fontSize="12"
-                fontWeight="700"
-                fill="rgba(255,255,255,0.86)"
-              >
-                avg · {formatInt(averagePerHour)}
-              </text>
+
 
               {hourlyActivity.map((item, index) => {
                 const ratio = chart.maxValue > 0 ? item.count / chart.maxValue : 0
