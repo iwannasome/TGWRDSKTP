@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "TGWR (Telegram Wrapped) — fully local desktop app (Electron + Python worker)",
+  "author": "iwannasome",
   "license": "MIT",
   "main": "dist/main/index.js",
   "type": "module",
@@ -10,7 +11,14 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+
+    "pack": "npm run build && electron-builder --dir",
+    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:win:portable": "npm run build && electron-builder --win portable",
+    "dist:mac": "npm run build && electron-builder --mac dmg",
+    "dist:linux": "npm run build && electron-builder --linux AppImage",
+    "dist:current": "npm run build && electron-builder"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",
@@ -25,11 +33,78 @@
     "@types/react-dom": "^18.2.25",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.19",
-    "electron": "^31.0.2",
-    "electron-vite": "^2.1.0",
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5",
-    "vite": "^5.2.11"
+    "vite": "^7.3.1"
+  },
+  "build": {
+    "appId": "com.iwannasome.tgwr",
+    "productName": "TGWR",
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "worker",
+        "to": "worker",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.utilities",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
   }
 }

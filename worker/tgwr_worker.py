@@ -286,6 +286,8 @@ def create_indexes(conn: sqlite3.Connection) -> None:
 
 
 MSK_OFFSET_SECONDS = 3 * 60 * 60
+BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
+
 
 
 def _get_table_columns(conn: sqlite3.Connection, table: str) -> List[str]:
@@ -1775,65 +1777,114 @@ def _distinct_days_count(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
     return int(row[0] or 0) if row else 0
 
 
-def _hourly_activity(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
+
+def _period_hours(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> int:
+    """
+    Number of real hours in the reporting period.
+
+    - bounded periods (for example calendar year) use the whole window width
+    - all_time uses the span from first non-service message hour to last one
+    """
+    if start_ts > 0 and end_ts > start_ts and end_ts < 2**61:
+        return max(1, int((int(end_ts) - int(start_ts)) // 3600))
+
     base, p = _period_where_clause(start_ts, end_ts)
-    counts: List[int] = [0] * 24
-    q = (
-        f"SELECT CAST(strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS h, COUNT(*) AS cnt "
-        f"FROM messages WHERE is_service = 0 AND {base} "
-        f"GROUP BY h ORDER BY h;"
-    )
+    row = conn.execute(
+        f"SELECT MIN(date_ts), MAX(date_ts) FROM messages WHERE is_service = 0 AND {base};",
+        p,
+    ).fetchone()
+    if not row:
+        return 0
 
-    for row in conn.execute(q, p):
-        try:
-            hour = int(row[0] or 0)
-            cnt = int(row[1] or 0)
-        except Exception:
-            continue
-        if 0 <= hour < 24:
-            counts[hour] = cnt
+    min_ts = int(row[0] or 0)
+    max_ts = int(row[1] or 0)
+    if min_ts <= 0 or max_ts <= 0 or max_ts < min_ts:
+        return 0
 
-    return [{"hour": int(hour), "count": int(counts[hour])} for hour in range(24)]
+    first_hour = min_ts // 3600
+    last_hour = max_ts // 3600
+    return max(1, int(last_hour - first_hour + 1))
 
 
-def _daily_activity(
-    conn: sqlite3.Connection,
-    start_ts: int,
-    end_ts: int,
-    fill_full_range: bool = False,
-) -> List[Dict[str, Any]]:
+def _daily_activity(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
+    """
+    Returns per-day activity in MSK as:
+    [
+      {"date": "2025-01-01", "count": 123},
+      ...
+    ]
+
+    For bounded windows (like a single calendar year), it fills missing dates with 0
+    so the renderer can build an honest day-by-day heatmap. For unbounded/all-time
+    windows, it returns only dates that have messages.
+    """
     base, p = _period_where_clause(start_ts, end_ts)
     q = (
         f"SELECT date((date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS d, COUNT(*) AS cnt "
-        f"FROM messages WHERE is_service = 0 AND {base} "
-        f"GROUP BY d ORDER BY d;"
+        f"FROM messages "
+        f"WHERE is_service = 0 AND {base} "
+        f"GROUP BY d "
+        f"ORDER BY d;"
     )
 
-    counts_by_date: Dict[str, int] = {}
+    counts: Dict[str, int] = {}
     for row in conn.execute(q, p):
-        d = row[0] if isinstance(row[0], str) else None
-        if not d:
+        d = row[0]
+        cnt = int(row[1] or 0)
+        if isinstance(d, str):
+            counts[d] = cnt
+
+    # Only materialize full calendar ranges for sane bounded periods.
+    # For all_time (start_ts=0, end_ts=2**62), returning every day would be meaningless.
+    if start_ts > 0 and end_ts > start_ts and (end_ts - start_ts) <= 370 * 86400 * 2:
+        try:
+            msk = _moscow_tzinfo()
+            start_date = datetime.fromtimestamp(start_ts, tz=msk).date()
+            end_date_exclusive = datetime.fromtimestamp(max(start_ts, end_ts - 1), tz=msk).date()
+            out: List[Dict[str, Any]] = []
+            cur = start_date
+            while cur <= end_date_exclusive:
+                key = cur.strftime('%Y-%m-%d')
+                out.append({"date": key, "count": int(counts.get(key, 0))})
+                cur += timedelta(days=1)
+            return out
+        except Exception:
+            pass
+
+    return [{"date": d, "count": int(cnt)} for d, cnt in sorted(counts.items())]
+
+
+
+def _hourly_activity(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> List[Dict[str, Any]]:
+    """
+    Returns 24-hour distribution in MSK as:
+    [
+      {"hour": 0, "count": 23551},
+      {"hour": 1, "count": 20684},
+      ...
+      {"hour": 23, "count": 19225}
+    ]
+    """
+    base, p = _period_where_clause(start_ts, end_ts)
+    q = (
+        f"SELECT CAST(strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS h, COUNT(*) AS cnt "
+        f"FROM messages "
+        f"WHERE is_service = 0 AND {base} "
+        f"GROUP BY h "
+        f"ORDER BY h;"
+    )
+
+    counts = [0] * 24
+    for row in conn.execute(q, p):
+        try:
+            h = int(row[0])
+            cnt = int(row[1] or 0)
+            if 0 <= h <= 23:
+                counts[h] = cnt
+        except Exception:
             continue
-        counts_by_date[d] = int(row[1] or 0)
 
-    if not counts_by_date:
-        return []
-
-    if not fill_full_range:
-        return [{"date": d, "count": int(cnt)} for d, cnt in sorted(counts_by_date.items())]
-
-    msk = _moscow_tzinfo()
-    start_date = datetime.fromtimestamp(int(start_ts), tz=msk).date()
-    end_date = datetime.fromtimestamp(int(max(start_ts, end_ts - 1)), tz=msk).date()
-
-    out: List[Dict[str, Any]] = []
-    cur = start_date
-    while cur <= end_date:
-        key = cur.isoformat()
-        out.append({"date": key, "count": int(counts_by_date.get(key, 0))})
-        cur += timedelta(days=1)
-
-    return out
+    return [{"hour": h, "count": int(counts[h])} for h in range(24)]
 
 
 def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Dict[str, Any]]:
@@ -1850,7 +1901,10 @@ def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
         f"       SUM(CASE WHEN CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 0 AND 5 THEN 1 ELSE 0 END) AS night_messages, "
         f"       SUM(CASE WHEN CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 6 AND 17 THEN 1 ELSE 0 END) AS day_messages "
         "FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
-        f"WHERE m.is_service = 0 AND c.peer_from_id IS NOT NULL AND {base} "
+        f"WHERE m.is_service = 0 AND c.peer_from_id IS NOT NULL AND TRIM(c.peer_from_id) != '' "
+        f"  AND c.peer_from_id NOT IN ('user1098898489', 'user6686969898') "
+        f"  AND (c.name IS NULL OR (c.name NOT LIKE '%Saved Messages%' AND c.name NOT LIKE '%Избранное%')) "
+        f"  AND {base} "
         "GROUP BY c.peer_from_id;"
     )
     out: Dict[str, Dict[str, Any]] = {}
@@ -1867,6 +1921,16 @@ def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
         active_days = int(row[7] or 0)
         night_msgs = int(row[8] or 0)
         day_msgs = int(row[9] or 0)
+        time_span_seconds = max(0, last_ts - first_ts) if first_ts and last_ts else 0
+        time_span_days = 0
+        if first_ts > 0 and last_ts > 0 and last_ts >= first_ts:
+            try:
+                msk = _moscow_tzinfo()
+                first_date = datetime.fromtimestamp(first_ts, tz=msk).date()
+                last_date = datetime.fromtimestamp(last_ts, tz=msk).date()
+                time_span_days = max(1, (last_date - first_date).days + 1)
+            except Exception:
+                time_span_days = max(0, int(time_span_seconds // 86400))
         out[peer] = {
             "peer_from_id": peer,
             "display_name": display_name,
@@ -1875,14 +1939,14 @@ def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
             "received_messages": recv,
             "first_ts": first_ts,
             "last_ts": last_ts,
-            "time_span_seconds": max(0, last_ts - first_ts) if first_ts and last_ts else 0,
+            "time_span_seconds": int(time_span_seconds),
+            "time_span_days": int(time_span_days),
             "active_days": active_days,
             "night_messages": night_msgs,
             "day_messages": day_msgs,
             "mutuality_abs_diff": abs(sent - recv),
         }
     return out
-
 
 def _compute_reply_times(conn: sqlite3.Connection, year_start_ts: int, year_end_ts: int) -> Dict[str, Any]:
     q = (
@@ -1920,6 +1984,8 @@ def _compute_reply_times(conn: sqlite3.Connection, year_start_ts: int, year_end_
             last_peer = peer_id
 
         if ts <= 0 or not peer_id:
+            continue
+        if peer_id in BANNED_PEER_IDS:
             continue
 
         if is_out == 0:
@@ -1959,6 +2025,17 @@ def _compute_reply_times(conn: sqlite3.Connection, year_start_ts: int, year_end_
 
 def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
     base, p = _period_where_clause(start_ts, end_ts)
+
+    banned_pks = set()
+    ban_q = """
+        SELECT chat_pk FROM chats
+        WHERE peer_from_id IN ('user1098898489', 'user6686969898')
+           OR name LIKE '%Saved Messages%'
+           OR name LIKE '%Избранное%'
+    """
+    for r in conn.execute(ban_q):
+        banned_pks.add(r[0])
+
     q = f"SELECT chat_pk, date_ts FROM messages WHERE is_service = 0 AND {base} ORDER BY chat_pk, date_ts;"
     max_gap = 0
     max_chat_pk: Optional[int] = None
@@ -1972,6 +2049,8 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
         chat_pk = int(row[0])
+        if chat_pk in banned_pks:
+            continue
         ts = int(row[1] or 0)
         if ts <= 0:
             continue
@@ -2007,7 +2086,6 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
         "from_ts": max_prev_ts,
         "to_ts": max_cur_ts,
     }
-
 
 def _longest_streak_days(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
     base, p = _period_where_clause(start_ts, end_ts)
@@ -2054,10 +2132,8 @@ def _longest_streak_days(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
 def _longest_person_streak(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Optional[Dict[str, Any]]:
     base, p = _period_where_clause(start_ts, end_ts)
 
-    # Вытаскиваем твой ID, чтобы исключить чат с самим собой
     self_from_id = meta_get(conn, "self_from_id") or "UNKNOWN_SELF"
 
-    # Фильтруем Избранное, ботов и самого себя
     q = (
         f"SELECT c.peer_from_id, "
         f"       MAX(c.name) AS display_name, "
@@ -2067,14 +2143,13 @@ def _longest_person_streak(conn: sqlite3.Connection, start_ts: int, end_ts: int)
         f"  AND c.peer_from_id IS NOT NULL "
         f"  AND TRIM(c.peer_from_id) != '' "
         f"  AND c.peer_from_id != ? "
-        f"  AND c.peer_from_id != 'user1098898489' " # <--- ПЕРМАБАН ЗДЕСЬ
+        f"  AND c.peer_from_id NOT IN ('user1098898489', 'user6686969898') "
         f"  AND (c.name IS NULL OR (c.name NOT LIKE '%Saved Messages%' AND c.name NOT LIKE '%Избранное%')) "
         f"  AND {base} "
         f"GROUP BY c.peer_from_id, d "
         f"ORDER BY c.peer_from_id, d;"
     )
 
-    # Передаем твой ID первым параметром в запрос
     params = (self_from_id,) + p
 
     best_len = 0
@@ -2134,7 +2209,6 @@ def _longest_person_streak(conn: sqlite3.Connection, start_ts: int, end_ts: int)
 
             prev_date_obj = d_obj
 
-    # Последняя проверка после выхода из цикла
     if current_len > best_len:
         best_len = current_len
         best_start = current_start
@@ -2152,7 +2226,6 @@ def _longest_person_streak(conn: sqlite3.Connection, start_ts: int, end_ts: int)
         "peer_from_id": best_peer,
         "display_name": best_name,
     }
-
 
 def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
     base, p = _period_where_clause(start_ts, end_ts)
@@ -2174,6 +2247,19 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
         "msg_id": None,
         "date_ts": None,
     }
+    top_longest: List[Dict[str, Any]] = []
+
+    def _push_top_longest(item: Dict[str, Any]) -> None:
+        top_longest.append(item)
+        top_longest.sort(
+            key=lambda x: (
+                int(x.get("length_chars", 0) or 0),
+                int(x.get("date_ts", 0) or 0),
+            ),
+            reverse=True,
+        )
+        if len(top_longest) > 5:
+            del top_longest[5:]
 
     word_counter: Counter[str] = Counter()
     emoji_counter: Counter[str] = Counter()
@@ -2201,16 +2287,21 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
                 l = len(cleaned)
                 total_len += l
                 count_len += 1
+
+                msg_item = {
+                    "length_chars": int(l),
+                    "snippet": (cleaned[:320] + "…") if len(cleaned) > 320 else cleaned,
+                    "peer_from_id": peer_id,
+                    "display_name": chat_name,
+                    "msg_id": str(msg_id) if msg_id is not None else None,
+                    "date_ts": date_ts if date_ts > 0 else None,
+                }
+
                 if l > longest_len:
                     longest_len = l
-                    longest = {
-                        "length_chars": int(l),
-                        "snippet": (cleaned[:220] + "…") if len(cleaned) > 220 else cleaned,
-                        "peer_from_id": peer_id,
-                        "display_name": chat_name,
-                        "msg_id": str(msg_id) if msg_id is not None else None,
-                        "date_ts": date_ts if date_ts > 0 else None,
-                    }
+                    longest = dict(msg_item)
+
+                _push_top_longest(msg_item)
 
                 toks = tokenize_words(cleaned)
                 if toks:
@@ -2234,6 +2325,7 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
         "average_msg_length_sent_chars": int(avg_len),
         "average_msg_length_sent_samples": int(count_len),
         "longest_message_sent": longest,
+        "top_longest_messages_sent": top_longest,
         "top_words": top_words,
         "word_cloud": word_cloud,
         "top_emojis": top_emojis,
@@ -2241,7 +2333,6 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
         "unique_words_sent": int(len(word_counter)),
         "total_emojis_sent": int(sum(emoji_counter.values())),
     }
-
 
 def _media_counts(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, int]:
     base, p = _period_where_clause(start_ts, end_ts)
@@ -2305,7 +2396,15 @@ def _top_10_people_by_messages(people: Dict[str, Dict[str, Any]]) -> List[Dict[s
 
 
 def _top_10_people_by_time_span(people: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-    lst = sorted(people.values(), key=lambda x: int(x.get("time_span_seconds", 0) or 0), reverse=True)
+    lst = sorted(
+        people.values(),
+        key=lambda x: (
+            int(x.get("time_span_days", 0) or 0),
+            int(x.get("time_span_seconds", 0) or 0),
+            int(x.get("total_messages", 0) or 0),
+        ),
+        reverse=True,
+    )
     out: List[Dict[str, Any]] = []
     for it in lst[:10]:
         out.append(
@@ -2313,6 +2412,8 @@ def _top_10_people_by_time_span(people: Dict[str, Dict[str, Any]]) -> List[Dict[
                 "peer_from_id": it.get("peer_from_id"),
                 "display_name": it.get("display_name"),
                 "time_span_seconds": int(it.get("time_span_seconds", 0) or 0),
+                "span_days": int(it.get("time_span_days", 0) or 0),
+                "time_span_days": int(it.get("time_span_days", 0) or 0),
                 "first_ts": it.get("first_ts"),
                 "last_ts": it.get("last_ts"),
                 "total_messages": int(it.get("total_messages", 0) or 0),
@@ -2477,15 +2578,18 @@ def _compute_period_metrics(
     active_days_count = _distinct_days_count(conn, start_ts, end_ts)
     avg_msgs_per_day = _safe_div(total, active_days_count) if active_days_count else 0.0
 
+    daily_activity = _daily_activity(conn, start_ts, end_ts)
+    hourly_activity = _hourly_activity(conn, start_ts, end_ts)
+
+    period_hours = _period_hours(conn, start_ts, end_ts)
+    average_messages_per_hour = _safe_div(total, period_hours) if period_hours > 0 else 0.0
+
     silence = _longest_silence_gap(conn, start_ts, end_ts)
     streak = _longest_streak_days(conn, start_ts, end_ts)
-
     person_streak = _longest_person_streak(conn, start_ts, end_ts)
 
     textm = _text_metrics_sent(conn, start_ts, end_ts)
     media = _media_counts(conn, start_ts, end_ts)
-    daily_activity = _daily_activity(conn, start_ts, end_ts, fill_full_range=(label == "year"))
-    hourly_activity = _hourly_activity(conn, start_ts, end_ts)
 
     if label == "year":
         median_reply = int(reply_stats.get("global_median_year_seconds", 0) or 0)
@@ -2502,8 +2606,13 @@ def _compute_period_metrics(
     if isinstance(per_peer_median, dict) and isinstance(per_peer_samples, dict):
         for peer_id, med in per_peer_median.items():
             try:
+                if peer_id in BANNED_PEER_IDS:
+                    continue
                 samples = int(per_peer_samples.get(peer_id, 0) or 0)
+                total_messages_for_peer = int((people.get(peer_id, {}) or {}).get("total_messages", 0) or 0)
                 if samples < 3:
+                    continue
+                if total_messages_for_peer < 2000:
                     continue
                 med_items.append((int(med or 0), -samples, peer_id))
             except Exception:
@@ -2543,6 +2652,8 @@ def _compute_period_metrics(
         "most_active_hour": most_hour,
         "daily_activity": daily_activity,
         "hourly_activity": hourly_activity,
+        "period_hours": int(period_hours),
+        "average_messages_per_hour": float(average_messages_per_hour),
         "night_messages_count": int(night_messages),
         "night_messages_ratio": float(night_ratio),
         "media_counts": media,
@@ -2555,16 +2666,12 @@ def _compute_period_metrics(
             "peer_from_id": day_person.get("peer_from_id") if isinstance(day_person, dict) else None,
             "display_name": day_person.get("display_name") if isinstance(day_person, dict) else None,
             "messages": int(day_person.get("day_messages", 0) or 0) if isinstance(day_person, dict) else 0,
-        }
-        if isinstance(day_person, dict)
-        else None,
+        } if isinstance(day_person, dict) else None,
         "night_person": {
             "peer_from_id": night_person.get("peer_from_id") if isinstance(night_person, dict) else None,
             "display_name": night_person.get("display_name") if isinstance(night_person, dict) else None,
             "messages": int(night_person.get("night_messages", 0) or 0) if isinstance(night_person, dict) else 0,
-        }
-        if isinstance(night_person, dict)
-        else None,
+        } if isinstance(night_person, dict) else None,
         "longest_silence_gap": silence,
         "longest_streak_days": streak,
         "longest_person_streak": person_streak,
@@ -2578,7 +2685,6 @@ def _compute_period_metrics(
 
     metrics.update(textm)
     return metrics
-
 
 def do_build_report(db_path: str) -> None:
     if _CANCEL_EVENT.is_set():

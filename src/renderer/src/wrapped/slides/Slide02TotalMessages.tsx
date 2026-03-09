@@ -88,7 +88,7 @@ export default function Slide02TotalMessages({
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Context
+              Тип анализа
             </div>
             <div className="mt-2 text-[18px] font-semibold text-slate-100">Локальный анализ</div>
           </div>

@@ -137,10 +137,19 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
       const name = getString(it, 'display_name', '') || getString(it, 'peer_from_id', '') || '—'
       const firstTs = getNumber(it, 'first_ts', 0)
       const lastTs = getNumber(it, 'last_ts', 0)
+      const spanDaysDirect = getNumber(it, 'span_days', 0) || getNumber(it, 'time_span_days', 0)
+      const spanDaysFallback = (() => {
+        if (firstTs <= 0 || lastTs <= 0 || lastTs < firstTs) return 0
+        const first = new Date(firstTs * 1000)
+        const last = new Date(lastTs * 1000)
+        const firstUtc = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate())
+        const lastUtc = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate())
+        return Math.max(1, Math.floor((lastUtc - firstUtc) / 86400000) + 1)
+      })()
       return {
         rank: String(idx + 1),
         name,
-        span_days: formatInt(getNumber(it, 'span_days', 0)),
+        span_days: formatInt(spanDaysDirect > 0 ? spanDaysDirect : spanDaysFallback),
         first: formatTs(firstTs),
         last: formatTs(lastTs)
       }

@@ -150,7 +150,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
           <MetricCard
             label="Активных дней"
             value={<span className="tgwr-gradient-text">{formatInt(activeDays)}</span>}
-            hint="Сколько дней в этом году ты писал"
+            hint="Сколько дней ты писал (всего\2025)"
             delay={0.08}
             exporting={exporting}
           />

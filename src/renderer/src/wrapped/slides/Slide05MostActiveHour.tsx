@@ -31,13 +31,24 @@ function MetricCard({ label, value, hint, accent = false, delay, exporting }: Me
         {label}
       </div>
       <div className="mt-5 text-[58px] font-bold leading-[0.92] text-slate-50">{value}</div>
-      {hint ? <div className="mt-5 text-[16px] leading-snug text-[rgba(var(--tgwr-muted-rgb),0.90)]">{hint}</div> : <div />}
+      {hint ? (
+        <div className="mt-5 text-[16px] leading-snug text-[rgba(var(--tgwr-muted-rgb),0.90)]">{hint}</div>
+      ) : (
+        <div />
+      )}
     </motion.div>
   )
 }
 
+function readMetricNumber(obj: Record<string, unknown>, key: string): number | null {
+  const value = obj[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 export default function Slide05MostActiveHour({ report, period, exporting }: SlideCommonProps): JSX.Element {
   const p = getPeriod(report, period)
+  const periodMetrics = p as Record<string, unknown>
+
   const mostActiveHour = getMostActiveHour(p)
   const hourlyActivity = getHourlyActivity(p)
   const totalMessages = getTotalMessages(p)
@@ -45,14 +56,20 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
   const peakHour = mostActiveHour?.value ?? '0'
   const peakCount = mostActiveHour?.count ?? 0
 
-  const averagePerHour = hourlyActivity.length > 0
-    ? Math.round(hourlyActivity.reduce((acc, item) => acc + item.count, 0) / hourlyActivity.length)
-    : 0
+  const periodHours = Math.max(0, Math.round(readMetricNumber(periodMetrics, 'period_hours') ?? 0))
+
+  const averagePerHour = Math.max(
+    0,
+    Math.round(
+      readMetricNumber(periodMetrics, 'average_messages_per_hour') ??
+        (periodHours > 0 ? totalMessages / periodHours : 0)
+    )
+  )
 
   const chart = useMemo(() => {
     const values = hourlyActivity.map((item) => item.count)
     const maxValue = Math.max(...values, 1)
-    const averageValue = averagePerHour
+    const averageValue = Math.min(Math.max(0, averagePerHour), maxValue)
 
     const viewWidth = 844
     const viewHeight = 780
@@ -89,14 +106,14 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
     <SlideFrame
       kicker="IW$"
       title={<span className="tgwr-gradient-text font-semibold">Час-Пик</span>}
-      subtitle="Иногда нам много 24 часов, а иногда малол"
+      subtitle="Иногда нам много 24 часов, а иногда мало 25"
     >
       <div className="flex h-full min-h-0 flex-col gap-8">
         <div className="grid grid-cols-3 gap-6">
           <MetricCard
             label="Самый активный час"
             value={formatHour(peakHour)}
-            hint="Пик по московскому времени"
+            hint="Твой час для всего мира"
             accent
             delay={0.02}
             exporting={exporting}
@@ -109,9 +126,13 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
             exporting={exporting}
           />
           <MetricCard
-            label="Среднее / час"
+            label="Среднее за час"
             value={formatInt(averagePerHour)}
-            hint="Удобная точка сравнения для всего графика"
+            hint={
+              periodHours > 0
+                ? `За все ${formatInt(periodHours)} часов`
+                : 'среднее по всему выбранному периоду'
+            }
             delay={0.14}
             exporting={exporting}
           />
@@ -128,7 +149,9 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
               <div className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
                 24 hours profile
               </div>
-              <div className="mt-3 text-[18px] font-semibold text-slate-100">Высота столбца = активность в конкретный час</div>
+              <div className="mt-3 text-[18px] font-semibold text-slate-100">
+                Высота столбца = активность в конкретный час
+              </div>
             </div>
 
             <div className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.16)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-4 py-2 text-[12px] font-semibold text-slate-100">
@@ -137,7 +160,12 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
           </div>
 
           <div className="mt-7 flex min-h-0 flex-1 items-center justify-center rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(var(--tgwr-card-rgb),0.44),rgba(var(--tgwr-card-rgb),0.18))] px-5 py-5">
-            <svg viewBox={`0 0 ${chart.viewWidth} ${chart.viewHeight}`} className="h-full w-full" role="img" aria-label="Hourly activity chart">
+            <svg
+              viewBox={`0 0 ${chart.viewWidth} ${chart.viewHeight}`}
+              className="h-full w-full"
+              role="img"
+              aria-label="Hourly activity chart"
+            >
               <defs>
                 <linearGradient id="tgwr-hour-peak" x1="0" x2="0" y1="0" y2="1">
                   <stop offset="0%" stopColor="rgba(var(--tgwr-accent2-rgb),1)" />
@@ -184,16 +212,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
                 fill="rgba(var(--tgwr-accent1-rgb),0.10)"
                 stroke="rgba(var(--tgwr-accent1-rgb),0.22)"
               />
-              <text
-                x={chart.chartLeft + chart.chartWidth - 67}
-                y={chart.averageY + 3}
-                textAnchor="middle"
-                fontSize="12"
-                fontWeight="700"
-                fill="rgba(255,255,255,0.86)"
-              >
-                avg · {formatInt(averagePerHour)}
-              </text>
+
 
               {hourlyActivity.map((item, index) => {
                 const ratio = chart.maxValue > 0 ? item.count / chart.maxValue : 0

@@ -10,7 +10,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
 
   return (
     <SlideFrame
-      kicker="Achievements"
+      kicker="IW$"
       title="Ачивки"
       subtitle="Небольшие титулы за стиль общения."
       // Скрываем подсказку про скролл на экспорте, чтобы не смущать людей в PDF

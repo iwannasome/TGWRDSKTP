@@ -29,8 +29,8 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
   return (
     <SlideFrame
       kicker="IW$"
-      title="Слова года"
-      subtitle="Топ-слова."
+      title={<span className="tgwr-gradient-text font-semibold">Cлова года</span>}
+      subtitle="Мы говорим и пишем тысячи слов в день. А что насчет взглянуть на самые популярные?"
     >
       <div className="flex h-full flex-col justify-center">
         <div className="rounded-[44px] border border-white/10 bg-white/5 p-10">

@@ -19,7 +19,7 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
   return (
     <SlideFrame
       kicker="IW$"
-      title="Самая взаимная переписка"
+       title={<span className="tgwr-gradient-text font-semibold">Самая взаимная переписка</span>}
       subtitle="В общении все по ровну."
     >
       <div className="flex h-full flex-col justify-center">

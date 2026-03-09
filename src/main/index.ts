@@ -202,7 +202,11 @@ function attachWorker(proc: ChildProcessWithoutNullStreams): void {
 function startWorker(): void {
   if (workerProc) return
 
-  const scriptPath = join(process.cwd(), 'worker', 'tgwr_worker.py')
+  const scriptPath = app.isPackaged
+  ? join(process.resourcesPath, 'worker', 'tgwr_worker.py')
+  : join(process.cwd(), 'worker', 'tgwr_worker.py')
+
+
   const mkArgs = (cmd: string): string[] => {
     if (process.platform === 'win32' && cmd === 'py') return ['-3', '-u', scriptPath]
     return ['-u', scriptPath]

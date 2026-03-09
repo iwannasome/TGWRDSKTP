@@ -11,9 +11,9 @@ export default function Slide17DayPerson({ report, period, exporting }: SlideCom
 
   return (
     <SlideFrame
-      kicker="Day"
+      kicker="IW$"
       title="Дневной человек"
-      subtitle="С кем чаще всего переписываешься днём (06:00–17:59)."
+      subtitle="Днем мы обычно посвящаем себя самим себе, но этот человек - он особенный и он всегда с тобой."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
@@ -33,7 +33,7 @@ export default function Slide17DayPerson({ report, period, exporting }: SlideCom
           </div>
 
           <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
-            сообщений в дневной зоне
+            Собщений днём  (6:00 - 18:00)
           </div>
 
           {!person && (
