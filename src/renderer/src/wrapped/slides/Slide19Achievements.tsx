@@ -169,7 +169,7 @@ function GridCard({ item, index, exporting }: GridCardProps): JSX.Element {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-[19px] font-semibold leading-[1.08] text-slate-100 break-words line-clamp-2 pr-2">{item.title}</div>
+              <div className="truncate text-[22px] font-semibold leading-tight text-slate-100">{item.title}</div>
               <div className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)]">
                 {item.description || 'Достижение за твой уникальный стиль общения.'}
               </div>
@@ -225,8 +225,8 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
 
   return (
     <SlideFrame
-      kicker="IW$"
-      title={<span className="tgwr-gradient-text font-semibold">Достижения</span>}
+      kicker="Achievements"
+      title="Ачивки"
       subtitle="Твои титулы за стиль общения — в одном экране."
       footerHint={undefined}
     >
@@ -256,7 +256,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
-                        Достижение
+                        Hero achievement
                       </div>
                       <div className="mt-5 text-[56px] font-bold leading-[0.92] text-slate-100">{hero.title}</div>
                     </div>
