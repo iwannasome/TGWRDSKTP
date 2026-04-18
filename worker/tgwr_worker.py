@@ -1,3 +1,4 @@
+
 import json
 import os
 import re
@@ -275,6 +276,7 @@ def recreate_db(db_path: str) -> sqlite3.Connection:
         """
     )
 
+    ensure_messages_unique_index(conn)
     return conn
 
 
@@ -283,6 +285,50 @@ def create_indexes(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX idx_messages_from_date ON messages(from_id, date_ts);")
     conn.execute("CREATE INDEX idx_messages_chat_out_date ON messages(chat_pk, is_out, date_ts);")
     conn.execute("CREATE INDEX idx_chats_peer ON chats(peer_from_id);")
+    ensure_messages_unique_index(conn)
+
+def ensure_messages_unique_index(conn: sqlite3.Connection) -> None:
+
+    try:
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_messages_chat_msg_id
+            ON messages(chat_pk, msg_id)
+            WHERE msg_id IS NOT NULL AND TRIM(msg_id) != '';
+            """
+        )
+    except Exception:
+        # On legacy DBs with duplicates this may fail until cleanup runs.
+        pass
+
+
+def dedupe_existing_messages_by_msg_id(conn: sqlite3.Connection) -> int:
+
+    try:
+        cur = conn.execute(
+            """
+            DELETE FROM messages
+            WHERE msg_pk IN (
+                SELECT m.msg_pk
+                FROM messages m
+                WHERE m.msg_id IS NOT NULL
+                  AND TRIM(m.msg_id) != ''
+                  AND m.msg_pk NOT IN (
+                      SELECT MIN(msg_pk)
+                      FROM messages
+                      WHERE msg_id IS NOT NULL
+                        AND TRIM(msg_id) != ''
+                      GROUP BY chat_pk, msg_id
+                  )
+            );
+            """
+        )
+        try:
+            return int(cur.rowcount or 0)
+        except Exception:
+            return 0
+    except Exception:
+        return 0
 
 
 MSK_OFFSET_SECONDS = 3 * 60 * 60
@@ -1011,7 +1057,7 @@ def calc_percent_units(unit_index: int, total_units: int, unit_fraction: float, 
 
 
 INSERT_SQL = """
-  INSERT INTO messages (
+  INSERT OR IGNORE INTO messages (
     chat_pk, msg_id, date_ts, from_id, from_name, text,
     media_type, sticker_emoji, is_edited, is_service, reply_to_msg_id
   )
@@ -1141,8 +1187,9 @@ def insert_json_messages_from_file(
             )
 
             if len(batch) >= batch_size:
+                before_changes = conn.total_changes
                 conn.executemany(INSERT_SQL, batch)
-                inserted += len(batch)
+                inserted += int(conn.total_changes - before_changes)
                 batch.clear()
 
             if (j + 1) % 500 == 0:
@@ -1150,8 +1197,9 @@ def insert_json_messages_from_file(
                 progress("insert_db", calc_percent_units(unit_index, total_units, frac), chat_name, rel_file)
 
         if batch:
+            before_changes = conn.total_changes
             conn.executemany(INSERT_SQL, batch)
-            inserted += len(batch)
+            inserted += int(conn.total_changes - before_changes)
             batch.clear()
 
         conn.execute("COMMIT;")
@@ -1280,8 +1328,9 @@ def insert_result_chat_messages(
             )
 
             if len(batch) >= batch_size:
+                before_changes = conn.total_changes
                 conn.executemany(INSERT_SQL, batch)
-                inserted += len(batch)
+                inserted += int(conn.total_changes - before_changes)
                 batch.clear()
 
             if (j + 1) % 500 == 0:
@@ -1289,8 +1338,9 @@ def insert_result_chat_messages(
                 progress("insert_db", calc_percent_units(unit_index, total_units, frac), chat_name, rel_file)
 
         if batch:
+            before_changes = conn.total_changes
             conn.executemany(INSERT_SQL, batch)
-            inserted += len(batch)
+            inserted += int(conn.total_changes - before_changes)
             batch.clear()
 
         conn.execute("COMMIT;")
@@ -1377,8 +1427,9 @@ def insert_html_messages_from_file(
             )
 
             if len(batch) >= batch_size:
+                before_changes = conn.total_changes
                 conn.executemany(INSERT_SQL, batch)
-                inserted += len(batch)
+                inserted += int(conn.total_changes - before_changes)
                 batch.clear()
 
             if seen % 300 == 0:
@@ -1386,8 +1437,9 @@ def insert_html_messages_from_file(
                 progress("insert_db", calc_percent_units(unit_index, total_units, frac), chat_name, rel_file)
 
         if batch:
+            before_changes = conn.total_changes
             conn.executemany(INSERT_SQL, batch)
-            inserted += len(batch)
+            inserted += int(conn.total_changes - before_changes)
             batch.clear()
 
         conn.execute("COMMIT;")
@@ -2700,6 +2752,21 @@ def do_build_report(db_path: str) -> None:
     conn.row_factory = sqlite3.Row
     try:
         ensure_schema(conn)
+
+        removed_dupes = dedupe_existing_messages_by_msg_id(conn)
+        if removed_dupes > 0:
+            try:
+                conn.commit()
+            except Exception:
+                pass
+            write_json(
+                {
+                    "type": "warning",
+                    "message": f"Removed {removed_dupes} duplicate messages by (chat_pk, msg_id)"
+                }
+            )
+
+        ensure_messages_unique_index(conn)
 
         self_from_id = meta_get(conn, "self_from_id")
         if isinstance(self_from_id, str):
