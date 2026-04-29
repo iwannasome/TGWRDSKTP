@@ -152,25 +152,71 @@ export function getPersonId(item: Record<string, unknown> | null): string {
 export function getReplyChampion(
   p: Record<string, unknown>,
   key: 'who_you_reply_fastest' | 'who_you_ignore_most'
-): { name: string; seconds: number } | null {
+): {
+  name: string
+  seconds: number
+  samples: number
+  totalMessages: number
+  minimumMessagesRequired: number
+  deltaVsGlobalSeconds: number
+  deltaVsQualifiedMedianSeconds: number
+} | null {
   const obj = getRecord(p, key)
   if (!obj) return null
   const name = getString(obj, 'display_name', '') || getString(obj, 'peer_from_id', '')
   const seconds = getNumber(obj, 'median_reply_seconds', 0)
   if (!name) return null
-  return { name, seconds }
+  return {
+    name,
+    seconds,
+    samples: getNumber(obj, 'reply_samples', 0),
+    totalMessages: getNumber(obj, 'total_messages', 0),
+    minimumMessagesRequired: getNumber(obj, 'minimum_messages_required', 0),
+    deltaVsGlobalSeconds: getNumber(obj, 'delta_vs_global_seconds', 0),
+    deltaVsQualifiedMedianSeconds: getNumber(obj, 'delta_vs_qualified_median_seconds', 0)
+  }
 }
 
 export function getDayNightPerson(
   p: Record<string, unknown>,
   key: 'day_person' | 'night_person'
-): { name: string; messages: number } | null {
+): {
+  name: string
+  messages: number
+  totalMessages: number
+  dayRatio: number
+  nightRatio: number
+  dayPeakHour: Record<string, unknown> | null
+  nightPeakHour: Record<string, unknown> | null
+  dayPeakDate: Record<string, unknown> | null
+  nightPeakDate: Record<string, unknown> | null
+  dayWeekdayMessages: number
+  dayWeekendMessages: number
+  postMidnightMessages: number
+  dayBondScore: number
+  nightBondScore: number
+} | null {
   const obj = getRecord(p, key)
   if (!obj) return null
   const name = getString(obj, 'display_name', '') || getString(obj, 'peer_from_id', '')
   const messages = getNumber(obj, 'messages', 0)
   if (!name) return null
-  return { name, messages }
+  return {
+    name,
+    messages,
+    totalMessages: getNumber(obj, 'total_messages', 0),
+    dayRatio: getNumber(obj, 'day_ratio', 0),
+    nightRatio: getNumber(obj, 'night_ratio', 0),
+    dayPeakHour: getRecord(obj, 'day_peak_hour'),
+    nightPeakHour: getRecord(obj, 'night_peak_hour'),
+    dayPeakDate: getRecord(obj, 'day_peak_date'),
+    nightPeakDate: getRecord(obj, 'night_peak_date'),
+    dayWeekdayMessages: getNumber(obj, 'day_weekday_messages', 0),
+    dayWeekendMessages: getNumber(obj, 'day_weekend_messages', 0),
+    postMidnightMessages: getNumber(obj, 'post_midnight_messages', 0),
+    dayBondScore: getNumber(obj, 'day_bond_score', 0),
+    nightBondScore: getNumber(obj, 'night_bond_score', 0)
+  }
 }
 
 export function getLongestMessage(p: Record<string, unknown>): {
@@ -219,6 +265,7 @@ export function getLongestStreak(p: Record<string, unknown>): {
   days: number
   start: string
   end: string
+  runnerUpDays: number
 } | null {
   const obj = getRecord(p, 'longest_streak_days')
   if (!obj) return null
@@ -226,7 +273,8 @@ export function getLongestStreak(p: Record<string, unknown>): {
   const start = getString(obj, 'start_date', '')
   const end = getString(obj, 'end_date', '')
   if (days <= 0) return null
-  return { days, start, end }
+  const runner = getRecord(obj, 'runner_up')
+  return { days, start, end, runnerUpDays: getNumber(runner ?? {}, 'length_days', 0) }
 }
 
 export function getLongestPersonStreak(
@@ -251,13 +299,26 @@ export function getLongestPersonStreak(
 export function getLongestSilence(p: Record<string, unknown>): {
   gapSeconds: number
   chatName: string
+  fromDatetime: string
+  toDatetime: string
+  calendarDays: number
+  medianGapSeconds: number
+  gapVsMedianRatio: number
 } | null {
   const obj = getRecord(p, 'longest_silence_gap')
   if (!obj) return null
   const gapSeconds = getNumber(obj, 'gap_seconds', 0)
   const chatName = getString(obj, 'chat_name', '')
   if (gapSeconds <= 0) return null
-  return { gapSeconds, chatName: chatName || '—' }
+  return {
+    gapSeconds,
+    chatName: chatName || '—',
+    fromDatetime: getString(obj, 'from_datetime', ''),
+    toDatetime: getString(obj, 'to_datetime', ''),
+    calendarDays: getNumber(obj, 'calendar_days', 0),
+    medianGapSeconds: getNumber(obj, 'median_gap_seconds', 0),
+    gapVsMedianRatio: getNumber(obj, 'gap_vs_median_ratio', 0)
+  }
 }
 
 export function getMediaCounts(p: Record<string, unknown>): Record<string, number> {

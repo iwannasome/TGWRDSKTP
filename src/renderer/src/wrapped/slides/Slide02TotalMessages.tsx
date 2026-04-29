@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { formatInt } from '../format'
+import { formatInt, formatMonth } from '../format'
 import { getPeriod, getTotalMessages, getYearLabel } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
+import { getNumber, getRecord, getString } from '../safe'
 
 export default function Slide02TotalMessages({
   report,
@@ -14,6 +15,8 @@ export default function Slide02TotalMessages({
   const p = getPeriod(report, period)
   const total = getTotalMessages(p)
   const year = getYearLabel(report)
+  const avgPerDay = getNumber(p, 'avg_messages_per_active_day', 0)
+  const quietestMonth = getRecord(p, 'quietest_month')
 
   const periodLabel = period === 'all_time' ? 'За все время' : year
 
@@ -21,7 +24,7 @@ export default function Slide02TotalMessages({
     <SlideFrame
       kicker="IW$"
       title={<span className="tgwr-gradient-text font-semibold">Твои сообщения</span>}
-      subtitle="Куча интересного впереди - смотри, впитывай и вспоминай"
+      subtitle="Куча интересного впереди: смотри, впитывай и вспоминай."
       footerHint={exporting ? undefined : "Toggle влияет на все слайды."}
     >
       <div className="flex h-full flex-col justify-between">
@@ -69,28 +72,27 @@ export default function Slide02TotalMessages({
               <span className="tgwr-gradient-text select-none">{formatInt(total)}</span>
             </motion.div>
 
-            <motion.div
-              initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: exporting ? 0 : 0.13 }}
-              className="mt-6 max-w-[860px] text-[18px] leading-relaxed text-slate-100/90"
-            >
-            </motion.div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-5">
           <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Next
+            <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+              В активный день
             </div>
-            <div className="mt-2 text-[18px] font-semibold text-slate-100">Sent vs received</div>
+            <div className="mt-2 text-[34px] font-bold leading-none text-slate-50">{formatInt(Math.round(avgPerDay))}</div>
+            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">сообщений в среднем</div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              Тип анализа
+            <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+              Самый тихий месяц
             </div>
-            <div className="mt-2 text-[18px] font-semibold text-slate-100">Локальный анализ</div>
+            <div className="mt-2 text-[18px] font-semibold leading-snug text-slate-100">
+              {formatMonth(getString(quietestMonth ?? {}, 'value', ''))}
+            </div>
+            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+              {formatInt(getNumber(quietestMonth ?? {}, 'count', 0))} сообщений
+            </div>
           </div>
         </div>
       </div>

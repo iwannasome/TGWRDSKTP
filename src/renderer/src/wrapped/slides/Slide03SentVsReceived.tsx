@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
 import React, { useMemo } from 'react'
 import SlideFrame from '../SlideFrame'
-import { clamp, formatInt } from '../format'
+import { clamp, formatDateYYYYMMDD, formatInt } from '../format'
 import { getPeriod, getReceivedMessages, getSentMessages, getTotalMessages } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
+import { getNumber, getRecord, getString } from '../safe'
 
 export default function Slide03SentVsReceived({ report, period, exporting }: SlideCommonProps): JSX.Element {
   const p = getPeriod(report, period)
@@ -17,6 +18,9 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
   }, [sent, total])
 
   const sentPct = Math.round(sentRatio * 100)
+  const diff = Math.abs(sent - received)
+  const balancedDay = getRecord(p, 'most_balanced_day')
+  const oneSidedDay = getRecord(p, 'most_one_sided_day')
 
   return (
     <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Ты или тебе?</span>} subtitle="Если я бы не писал, ты бы не писала" >
@@ -69,6 +73,38 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
 
           <div className="mt-4 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.80)]">
 
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-3 gap-5">
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              Перекос
+            </div>
+            <div className="mt-2 text-[30px] font-bold leading-none text-slate-50">{formatInt(diff)}</div>
+            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">сообщений разницы</div>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              Ровный день
+            </div>
+            <div className="mt-2 text-[18px] font-semibold leading-snug text-slate-100">
+              {formatDateYYYYMMDD(getString(balancedDay ?? {}, 'date', ''))}
+            </div>
+            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+              diff {formatInt(getNumber(balancedDay ?? {}, 'abs_diff', 0))}
+            </div>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              Односторонний
+            </div>
+            <div className="mt-2 text-[18px] font-semibold leading-snug text-slate-100">
+              {formatDateYYYYMMDD(getString(oneSidedDay ?? {}, 'date', ''))}
+            </div>
+            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+              diff {formatInt(getNumber(oneSidedDay ?? {}, 'abs_diff', 0))}
+            </div>
           </div>
         </div>
       </div>

@@ -15,12 +15,15 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
   const total = top ? getNumber(top, 'total_messages', 0) : 0
   const diff = top ? getNumber(top, 'abs_diff', 0) : 0
   const ratio = top ? getNumber(top, 'imbalance_ratio', 0) : 0
+  const symmetry = top ? getNumber(top, 'symmetry_percent', Math.max(0, 100 - ratio * 100)) : 0
+  const activeDays = top ? getNumber(top, 'active_days', 0) : 0
+  const minimum = top ? getNumber(top, 'minimum_messages_required', 2000) : 2000
 
   return (
     <SlideFrame
       kicker="IW$"
-       title={<span className="tgwr-gradient-text font-semibold">Самая взаимная переписка</span>}
-      subtitle="В общении все по ровну."
+      title={<span className="tgwr-gradient-text font-semibold">Самая взаимная переписка</span>}
+      subtitle="В общении все поровну."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
@@ -31,26 +34,26 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
-          <div className="text-[22px] font-semibold text-slate-100">{name}</div>
+          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{name}</div>
 
           <div className="mt-6 grid grid-cols-3 gap-6">
             <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Total
+                Всего сообщений
               </div>
               <div className="mt-2 text-[28px] font-bold text-slate-50">{formatInt(total)}</div>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Abs diff
+                Разница реплик
               </div>
               <div className="mt-2 text-[28px] font-bold text-slate-50">{formatInt(diff)}</div>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Imbalance
+                Перекос диалога
               </div>
               <div className="mt-2 text-[28px] font-bold">
                 <span className="tgwr-gradient-text">{formatPercent01(ratio)}</span>
@@ -67,6 +70,25 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
               Чем меньше процент — тем ровнее диалог.
             </div>
           )}
+
+          <div className="mt-6 grid grid-cols-4 gap-4">
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">близко к 50/50</div>
+              <div className="mt-2 text-[24px] font-bold text-slate-50">{formatInt(Math.round(symmetry))}%</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">разница реплик</div>
+              <div className="mt-2 text-[24px] font-bold text-slate-50">{formatInt(diff)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">минимум сообщений</div>
+              <div className="mt-2 text-[24px] font-bold text-slate-50">{formatInt(minimum)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">активных дней</div>
+              <div className="mt-2 text-[24px] font-bold text-slate-50">{formatInt(activeDays)}</div>
+            </div>
+          </div>
         </motion.div>
       </div>
     </SlideFrame>

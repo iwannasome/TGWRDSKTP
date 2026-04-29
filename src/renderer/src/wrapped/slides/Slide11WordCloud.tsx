@@ -54,7 +54,7 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
                   style={{
                     fontSize: `${sizeFor(w.weight)}px`,
                     lineHeight: 1,
-                    letterSpacing: '-0.02em',
+                    letterSpacing: '0',
                     transform: `translateZ(0)`
                   }}
                   className={[

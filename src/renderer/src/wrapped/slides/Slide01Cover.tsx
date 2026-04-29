@@ -1,8 +1,10 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { getYearLabel } from '../report'
+import { formatDateYYYYMMDD, formatInt } from '../format'
+import { getPeriod, getYearLabel } from '../report'
 import type { SlideCommonProps, ThemeId } from '../slideTypes'
+import { getNumber, getRecord, getString } from '../safe'
 
 function ThemeChip({ id, active, onClick, exporting }: { id: ThemeId; active: boolean; onClick: () => void; exporting?: boolean }): JSX.Element {
   return (
@@ -25,6 +27,12 @@ function ThemeChip({ id, active, onClick, exporting }: { id: ThemeId; active: bo
 
 export default function Slide01Cover({ report, theme, onThemeChange, exporting }: SlideCommonProps): JSX.Element {
   const year = getYearLabel(report)
+  const allTime = getPeriod(report, 'all_time')
+  const span = getRecord(allTime, 'period_span')
+  const firstDate = formatDateYYYYMMDD(getString(span ?? {}, 'first_date', ''))
+  const lastDate = formatDateYYYYMMDD(getString(span ?? {}, 'last_date', ''))
+  const chats = getNumber(allTime, 'total_chats_personal', 0)
+  const activeDays = getNumber(allTime, 'active_days_count', 0)
 
   return (
     <SlideFrame
@@ -50,11 +58,41 @@ export default function Slide01Cover({ report, theme, onThemeChange, exporting }
           <motion.div
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: exporting ? 0 : 0.13 }}
+            className="mt-10 grid grid-cols-3 gap-4"
+          >
+            <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                Период
+              </div>
+              <div className="mt-3 text-[18px] font-semibold leading-snug text-slate-100">
+                {firstDate} - {lastDate}
+              </div>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                В анализе
+              </div>
+              <div className="mt-3 text-[30px] font-bold leading-none text-slate-50">{formatInt(chats)}</div>
+              <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">личных чатов</div>
+            </div>
+            <div className="rounded-3xl border border-[rgba(var(--tgwr-accent1-rgb),0.22)] bg-[rgba(var(--tgwr-accent1-rgb),0.08)] px-5 py-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                Локально
+              </div>
+              <div className="mt-3 text-[18px] font-semibold leading-snug text-slate-100">без выгрузки</div>
+              <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">{formatInt(activeDays)} активных дней</div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: exporting ? 0 : 0.16 }}
             className="mt-10"
           >
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-              {exporting ? 'Active Theme' : 'Theme'}
+              {exporting ? 'Активная тема' : 'Тема'}
             </div>
             <div className="mt-3 flex flex-wrap gap-3">
               <ThemeChip id="neon" active={theme === 'neon'} onClick={() => onThemeChange('neon')} exporting={exporting} />

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { formatSecondsHuman } from '../format'
+import { formatInt, formatSecondsHuman } from '../format'
 import { getLongestSilence, getPeriod } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
 
@@ -24,7 +24,7 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
-          <div className="text-[22px] font-semibold text-slate-100">{s?.chatName ?? '—'}</div>
+          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{s?.chatName ?? '—'}</div>
 
           <div className="mt-6 text-[96px] font-bold leading-none">
             <span className="tgwr-gradient-text">
@@ -35,6 +35,33 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
           <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
             между двумя сообщениями
           </div>
+
+          {s ? (
+            <div className="mt-7 grid grid-cols-5 gap-4">
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">начало</div>
+                <div className="mt-2 text-[12px] font-semibold leading-snug text-slate-100">{s.fromDatetime || '—'}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">конец</div>
+                <div className="mt-2 text-[12px] font-semibold leading-snug text-slate-100">{s.toDatetime || '—'}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дней тишины</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(s.calendarDays)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дольше обычного</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">x{formatInt(Math.round(s.gapVsMedianRatio))}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">тип паузы</div>
+                <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">
+                  {s.calendarDays >= 30 ? 'исчезновение' : s.calendarDays >= 7 ? 'отпуск' : 'пауза'}
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {!s && (
             <div className="mt-8 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">

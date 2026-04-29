@@ -123,13 +123,13 @@ function StatusChip({ earned }: StatusChipProps): JSX.Element {
   return (
     <div
       className={[
-        'inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em]',
+        'inline-flex shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
         earned
           ? 'border-[rgba(var(--tgwr-accent1-rgb),0.32)] bg-[rgba(var(--tgwr-accent1-rgb),0.12)] text-slate-50'
           : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.82)]'
       ].join(' ')}
     >
-      {earned ? 'Unlocked' : 'Locked'}
+      {earned ? 'Получено' : 'Закрыто'}
     </div>
   )
 }
@@ -169,8 +169,8 @@ function GridCard({ item, index, exporting }: GridCardProps): JSX.Element {
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="truncate text-[22px] font-semibold leading-tight text-slate-100">{item.title}</div>
-              <div className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)]">
+              <div className="line-clamp-2 break-all text-[22px] font-semibold leading-tight text-slate-100">{item.title}</div>
+              <div className="mt-2 line-clamp-2 break-all text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)]">
                 {item.description || 'Достижение за твой уникальный стиль общения.'}
               </div>
             </div>
@@ -179,7 +179,7 @@ function GridCard({ item, index, exporting }: GridCardProps): JSX.Element {
 
           <div className="mt-auto flex items-end justify-between pt-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-              score
+              очки
             </div>
             <div className="text-[26px] font-bold leading-none text-slate-100">{item.score}</div>
           </div>
@@ -251,26 +251,28 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
               <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.18)] blur-[56px]" />
               <div className="pointer-events-none absolute -left-10 bottom-0 h-36 w-36 rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.14)] blur-[40px]" />
 
-              <div className="relative grid h-full grid-cols-[1.2fr_0.8fr] gap-8">
+              <div className="relative grid h-full grid-cols-[minmax(0,1fr)_300px] gap-7">
                 <div className="flex min-w-0 flex-col">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
-                        Hero achievement
+                  <div className="min-w-0">
+                    <div className="min-w-0">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
+                          Главная ачивка
+                        </div>
+                        <StatusChip earned={hero.earned} />
                       </div>
-                      <div className="mt-5 text-[56px] font-bold leading-[0.92] text-slate-100">{hero.title}</div>
+                      <div className="mt-5 line-clamp-5 break-all text-[46px] font-bold leading-[0.94] text-slate-100">{hero.title}</div>
                     </div>
-                    <StatusChip earned={hero.earned} />
                   </div>
 
-                  <div className="mt-5 max-w-[480px] text-[18px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.95)]">
+                  <div className="mt-5 line-clamp-3 max-w-[480px] break-all text-[17px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.95)]">
                     {hero.description || 'Главный титул, который лучше всего описывает твой стиль общения.'}
                   </div>
 
                   <div className="mt-auto flex items-end justify-between pt-7">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                        score
+                        очки
                       </div>
                       <div className="mt-2 text-[74px] font-bold leading-none">
                         <span className="tgwr-gradient-text">{hero.score}</span>
@@ -279,15 +281,15 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
 
                     <div className="rounded-[26px] border border-white/10 bg-black/15 px-5 py-4 text-right">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                        best title
+                        лучший титул
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-slate-100">Твоя главная ачивка периода</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center">
-                  <div className="relative flex h-[300px] w-[300px] items-center justify-center rounded-[40px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.44)] p-8 backdrop-blur-sm">
+                <div className="flex min-w-0 items-center justify-center">
+                  <div className="relative flex h-[280px] w-[280px] items-center justify-center rounded-[40px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.44)] p-8 backdrop-blur-sm">
                     <div className="pointer-events-none absolute inset-0 rounded-[40px] bg-[radial-gradient(circle_at_center,rgba(var(--tgwr-accent1-rgb),0.16),transparent_65%)]" />
                     {heroBadgeSrc ? (
                       <img
@@ -312,16 +314,16 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
               <div className="flex items-end justify-between gap-6">
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
-                    Progress
+                    Прогресс
                   </div>
                   <div className="mt-2 text-[30px] font-semibold text-slate-100">
-                    {unlockedCount} / {totalCount} unlocked
+                    {unlockedCount} / {totalCount} получено
                   </div>
                 </div>
 
                 <div className="text-right">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                    completion
+                    завершено
                   </div>
                   <div className="mt-2 text-[30px] font-bold text-slate-100">{completionPercent}%</div>
                 </div>

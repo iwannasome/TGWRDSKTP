@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { formatInt } from '../format'
+import { formatInt, formatMonth, formatPercent01 } from '../format'
 import { getMediaCounts, getPeriod } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
+import { getNumber, getRecord, getString } from '../safe'
 
 type Item = { key: string; label: string; icon: string }
 
@@ -16,9 +17,14 @@ const ITEMS: Item[] = [
   { key: 'other', label: 'Другое', icon: '📦' }
 ]
 
+const LABEL_BY_KEY: Record<string, string> = Object.fromEntries(ITEMS.map((item) => [item.key, item.label]))
+
 export default function Slide13MediaCounts({ report, period, exporting }: SlideCommonProps): JSX.Element {
   const p = getPeriod(report, period)
   const media = getMediaCounts(p)
+  const topMedia = getRecord(p, 'top_media_type')
+  const mediaMonth = getRecord(p, 'most_media_month')
+  const topType = getString(topMedia ?? {}, 'type', '')
 
   return (
     <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Медиа</span>} subtitle="Покидай своих фоток" >
@@ -51,6 +57,30 @@ export default function Slide13MediaCounts({ report, period, exporting }: SlideC
                 </motion.div>
               )
             })}
+          </div>
+
+          <div className="mt-7 grid grid-cols-5 gap-4">
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медиа на 100</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(Math.round(getNumber(p, 'media_per_100_messages', 0)))}</div>
+              <div className="mt-1 text-[11px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">на 100 сообщений</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">главный формат</div>
+              <div className="mt-2 text-[18px] font-bold text-slate-50">{LABEL_BY_KEY[topType] ?? '—'}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медийный месяц</div>
+              <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">{formatMonth(getString(mediaMonth ?? {}, 'value', ''))}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля стикеров</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatPercent01(getNumber(p, 'sticker_ratio', 0))}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">только медиа</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(getNumber(p, 'media_only_messages', 0))}</div>
+            </div>
           </div>
         </div>
       </div>

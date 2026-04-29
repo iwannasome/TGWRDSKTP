@@ -1,14 +1,19 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { formatInt, formatPercent01 } from '../format'
+import { formatDateYYYYMMDD, formatHour, formatInt, formatPercent01 } from '../format'
 import { getNightRatio, getPeriod, getTotalMessages } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
+import { getNumber, getRecord, getString } from '../safe'
 
 export default function Slide06NightRatio({ report, period, exporting }: SlideCommonProps): JSX.Element {
   const p = getPeriod(report, period)
   const night = getNightRatio(p)
   const total = getTotalMessages(p)
+  const peakHour = getRecord(p, 'night_peak_hour')
+  const peakDate = getRecord(p, 'most_night_date')
+  const sleepBoundary = getRecord(p, 'sleep_boundary_hour')
+  const postMidnight = getNumber(p, 'post_midnight_messages', night.count)
 
   return (
     <SlideFrame
@@ -53,6 +58,39 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
               из {formatInt(total)} сообщений
             </div>
           </motion.div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-4 gap-4">
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              Пиковый ночной час
+            </div>
+            <div className="mt-2 text-[28px] font-bold text-slate-50">{formatHour(getNumber(peakHour ?? {}, 'hour', 0))}</div>
+            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">{formatInt(getNumber(peakHour ?? {}, 'count', 0))} сообщений</div>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              После полуночи
+            </div>
+            <div className="mt-2 text-[28px] font-bold text-slate-50">{formatInt(postMidnight)}</div>
+            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">00:00-05:59</div>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              Самая ночная дата
+            </div>
+            <div className="mt-2 text-[17px] font-semibold leading-snug text-slate-100">
+              {formatDateYYYYMMDD(getString(peakDate ?? {}, 'date', ''))}
+            </div>
+            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">{formatInt(getNumber(peakDate ?? {}, 'count', 0))} сообщений</div>
+          </div>
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              Последний поздний час
+            </div>
+            <div className="mt-2 text-[28px] font-bold text-slate-50">{formatHour(getNumber(sleepBoundary ?? {}, 'hour', 0))}</div>
+            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">последний активный</div>
+          </div>
         </div>
       </div>
     </SlideFrame>

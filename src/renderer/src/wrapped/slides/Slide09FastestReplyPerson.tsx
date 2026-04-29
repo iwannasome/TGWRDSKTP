@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { formatSecondsHuman } from '../format'
+import { formatInt, formatSecondsHuman } from '../format'
 import { getPeriod, getReplyChampion } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
 
@@ -12,7 +12,7 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
   return (
     <SlideFrame
       kicker="IW$"
-       title={<span className="tgwr-gradient-text font-semibold">Кому отвечаешь быстрее всех</span>}
+      title={<span className="tgwr-gradient-text font-semibold">Кому отвечаешь быстрее всех</span>}
       subtitle="Парни она мне написала!"
     >
       <div className="flex h-full flex-col justify-center">
@@ -23,7 +23,7 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
-          <div className="text-[22px] font-semibold text-slate-100">{champ?.name ?? '—'}</div>
+          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{champ?.name ?? '—'}</div>
 
           <div className="mt-6 text-[90px] font-bold leading-none">
             <span className="tgwr-gradient-text">
@@ -34,6 +34,27 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
           <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
             медиана ответа
           </div>
+
+          {champ ? (
+            <div className="mt-7 grid grid-cols-4 gap-4">
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">быстрее обычного</div>
+                <div className="mt-2 text-[18px] font-bold text-slate-50">{formatSecondsHuman(Math.max(0, champ.deltaVsGlobalSeconds))}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">ответов в расчете</div>
+                <div className="mt-2 text-[22px] font-bold text-slate-50">{formatInt(champ.samples)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">сообщений в чате</div>
+                <div className="mt-2 text-[22px] font-bold text-slate-50">{formatInt(champ.totalMessages)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">минимум для чата</div>
+                <div className="mt-2 text-[22px] font-bold text-slate-50">{formatInt(champ.minimumMessagesRequired)}</div>
+              </div>
+            </div>
+          ) : null}
 
           {!champ && (
             <div className="mt-8 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">

@@ -1,13 +1,28 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { formatInt } from '../format'
-import { getEmojiTop, getPeriod } from '../report'
+import { formatInt, formatPercent01 } from '../format'
+import { getEmojiTop, getPeriod, getSentMessages } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
+import { getNumber } from '../safe'
+
+function moodForEmoji(emoji: string): string {
+  if ('😂🤣😄😁😆🙂😊'.includes(emoji)) return 'смех'
+  if ('❤️💜💙💕💖😍😘'.includes(emoji)) return 'тепло'
+  if ('🔥⚡️✨💯'.includes(emoji)) return 'энергия'
+  if ('😭😢💔😔'.includes(emoji)) return 'драма'
+  return 'микс'
+}
 
 export default function Slide12EmojiTop({ report, period, exporting }: SlideCommonProps): JSX.Element {
   const p = getPeriod(report, period)
   const emojis = getEmojiTop(p).slice(0, 12)
+  const sent = getSentMessages(p)
+  const totalEmojis = getNumber(p, 'total_emojis_sent', 0)
+  const withEmoji = getNumber(p, 'messages_with_emoji_count', 0)
+  const streak = getNumber(p, 'emoji_streak_max_messages', 0)
+  const rareFrequent = emojis[emojis.length - 1]
+  const mood = emojis[0] ? moodForEmoji(emojis[0].emoji) : '—'
 
   return (
     <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Эмодзи</span>} subtitle="Вместо тысячи слов" >
@@ -44,6 +59,31 @@ export default function Slide12EmojiTop({ report, period, exporting }: SlideComm
               ))}
             </div>
           )}
+
+          <div className="mt-7 grid grid-cols-5 gap-4">
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">эмодзи на 100</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(Math.round((totalEmojis * 100) / Math.max(1, sent)))}</div>
+              <div className="mt-1 text-[11px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">на 100 сообщений</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">настроение</div>
+              <div className="mt-2 text-[18px] font-bold text-slate-50">{mood}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">последний в топе</div>
+              <div className="mt-2 text-[22px] leading-none">{rareFrequent?.emoji ?? '—'}</div>
+              <div className="mt-1 text-[11px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">{formatInt(rareFrequent?.count ?? 0)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">серия с эмодзи</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(streak)}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">сообщений с эмодзи</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatPercent01(withEmoji / Math.max(1, sent))}</div>
+            </div>
+          </div>
         </div>
       </div>
     </SlideFrame>

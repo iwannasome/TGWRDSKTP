@@ -1,14 +1,18 @@
 import { motion } from 'framer-motion'
 import React from 'react'
 import SlideFrame from '../SlideFrame'
-import { formatDateYYYYMMDD, formatInt } from '../format'
+import { formatDateYYYYMMDD, formatInt, formatPercent01 } from '../format'
 import { getLongestPersonStreak, getLongestStreak, getPeriod } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
+import { getNumber, getRecord } from '../safe'
 
 export default function Slide15LongestStreak({ report, period, exporting }: SlideCommonProps): JSX.Element {
   const p = getPeriod(report, period)
   const streak = getLongestStreak(p)
   const personStreak = getLongestPersonStreak(report, period)
+  const span = getRecord(p, 'period_span')
+  const spanDays = getNumber(span ?? {}, 'span_days', 0)
+  const percentOfPeriod = streak && spanDays > 0 ? streak.days / spanDays : 0
 
   return (
     <SlideFrame
@@ -25,7 +29,7 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
           <div className="text-[13px] font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-            Longest streak
+            Самая длинная серия
           </div>
 
           <div className="mt-4 text-[100px] font-bold leading-none">
@@ -43,7 +47,7 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
                 Самый длинный стрик с человеком
               </div>
               <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
-                <div className="text-[22px] font-semibold text-white">{personStreak.displayName}</div>
+                <div className="min-w-0 break-words text-[22px] font-semibold leading-tight text-white">{personStreak.displayName}</div>
                 <div className="text-[22px] font-bold text-white">{formatInt(personStreak.lengthDays)} дней</div>
               </div>
               {personStreak.start && personStreak.end ? (
@@ -51,6 +55,31 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
                   {`${formatDateYYYYMMDD(personStreak.start)} → ${formatDateYYYYMMDD(personStreak.end)}`}
                 </div>
               ) : null}
+            </div>
+          ) : null}
+
+          {streak ? (
+            <div className="mt-6 grid grid-cols-5 gap-4">
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">доля периода</div>
+                <div className="mt-2 text-[20px] font-bold text-white">{formatPercent01(percentOfPeriod)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">общий стрик</div>
+                <div className="mt-2 text-[20px] font-bold text-white">{formatInt(streak.days)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">стрик с человеком</div>
+                <div className="mt-2 text-[20px] font-bold text-white">{formatInt(personStreak?.lengthDays ?? 0)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">дата старта</div>
+                <div className="mt-2 text-[13px] font-semibold leading-snug text-white">{formatDateYYYYMMDD(streak.start)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">второй стрик</div>
+                <div className="mt-2 text-[20px] font-bold text-white">{formatInt(streak.runnerUpDays)}</div>
+              </div>
             </div>
           ) : null}
 

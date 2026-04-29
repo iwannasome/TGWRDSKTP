@@ -1628,7 +1628,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         ensure_removed(db_path + "-wal")
         ensure_removed(db_path + "-shm")
 
-        write_json({"type": "error", "message": "Import cancelled"})
+        write_json({"type": "import_error", "message": "Import cancelled"})
         return
 
     finally:
@@ -1646,14 +1646,14 @@ def start_import_thread(export_dir: str, mode: str, db_path: str) -> None:
         try:
             do_import(export_dir, mode, db_path)
         except Exception as e:
-            write_json({"type": "error", "message": str(e)})
+            write_json({"type": "import_error", "message": str(e)})
 
     with _IMPORT_LOCK:
         if _REPORT_THREAD is not None and _REPORT_THREAD.is_alive():
-            write_json({"type": "error", "message": "Report generation already running"})
+            write_json({"type": "import_error", "message": "Report generation already running"})
             return
         if _IMPORT_THREAD is not None and _IMPORT_THREAD.is_alive():
-            write_json({"type": "error", "message": "Import already running"})
+            write_json({"type": "import_error", "message": "Import already running"})
             return
 
         _CANCEL_EVENT.clear()
@@ -1939,6 +1939,126 @@ def _hourly_activity(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Li
     return [{"hour": h, "count": int(counts[h])} for h in range(24)]
 
 
+def _ts_to_msk_date(ts: Optional[int]) -> Optional[str]:
+    if not ts or int(ts) <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(int(ts), tz=_moscow_tzinfo()).strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def _ts_to_msk_datetime(ts: Optional[int]) -> Optional[str]:
+    if not ts or int(ts) <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(int(ts), tz=_moscow_tzinfo()).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return None
+
+
+def _period_span(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
+    base, p = _period_where_clause(start_ts, end_ts)
+    row = conn.execute(
+        f"SELECT MIN(date_ts), MAX(date_ts) FROM messages WHERE is_service = 0 AND {base};",
+        p,
+    ).fetchone()
+    first_ts = int(row[0] or 0) if row else 0
+    last_ts = int(row[1] or 0) if row else 0
+    first_date = _ts_to_msk_date(first_ts)
+    last_date = _ts_to_msk_date(last_ts)
+    days = 0
+    if first_date and last_date:
+        try:
+            days = (datetime.strptime(last_date, "%Y-%m-%d") - datetime.strptime(first_date, "%Y-%m-%d")).days + 1
+        except Exception:
+            days = 0
+    return {
+        "first_ts": first_ts or None,
+        "last_ts": last_ts or None,
+        "first_date": first_date,
+        "last_date": last_date,
+        "span_days": int(max(0, days)),
+    }
+
+
+def _month_activity_extremes(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
+    base, p = _period_where_clause(start_ts, end_ts)
+    rows = list(
+        conn.execute(
+            f"SELECT strftime('%Y-%m', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS m, COUNT(*) AS cnt "
+            f"FROM messages WHERE is_service = 0 AND {base} GROUP BY m ORDER BY m;",
+            p,
+        )
+    )
+    months = [{"value": r[0], "count": int(r[1] or 0)} for r in rows if isinstance(r[0], str)]
+    non_zero = [m for m in months if int(m["count"]) > 0]
+    quietest = min(non_zero, key=lambda x: (int(x["count"]), str(x["value"]))) if non_zero else None
+    return {"months": months, "quietest_month": quietest}
+
+
+def _daily_direction_extremes(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
+    base, p = _period_where_clause(start_ts, end_ts)
+    q = (
+        f"SELECT date((date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS d, "
+        f"       SUM(CASE WHEN is_out = 1 THEN 1 ELSE 0 END) AS sent, "
+        f"       SUM(CASE WHEN is_out = 0 THEN 1 ELSE 0 END) AS received "
+        f"FROM messages WHERE is_service = 0 AND {base} GROUP BY d;"
+    )
+    rows: List[Dict[str, Any]] = []
+    for r in conn.execute(q, p):
+        if not isinstance(r[0], str):
+            continue
+        sent = int(r[1] or 0)
+        recv = int(r[2] or 0)
+        total = sent + recv
+        if total <= 0:
+            continue
+        rows.append({"date": r[0], "sent": sent, "received": recv, "abs_diff": abs(sent - recv), "total": total})
+    if not rows:
+        return {"most_balanced_day": None, "most_one_sided_day": None}
+    balanced = min(rows, key=lambda x: (int(x["abs_diff"]), -int(x["total"]), str(x["date"])))
+    one_sided = max(rows, key=lambda x: (int(x["abs_diff"]), int(x["total"]), str(x["date"])))
+    return {"most_balanced_day": balanced, "most_one_sided_day": one_sided}
+
+
+def _night_insights(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
+    base, p = _period_where_clause(start_ts, end_ts)
+    night_hours = {0, 1, 2, 3, 4, 5}
+    hourly = _hourly_activity(conn, start_ts, end_ts)
+    night_hour_rows = [h for h in hourly if int(h.get("hour", -1)) in night_hours]
+    peak = max(night_hour_rows, key=lambda x: int(x.get("count", 0))) if night_hour_rows else None
+
+    row = conn.execute(
+        f"SELECT date((date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS d, COUNT(*) AS cnt "
+        f"FROM messages WHERE is_service = 0 AND {base} "
+        f"  AND CAST(strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 0 AND 5 "
+        f"GROUP BY d ORDER BY cnt DESC LIMIT 1;",
+        p,
+    ).fetchone()
+    peak_date = {"date": row[0], "count": int(row[1] or 0)} if row and isinstance(row[0], str) else None
+
+    # Last active hour before the usual night drop: choose the latest hour in 18..23
+    # that still has at least half of the average evening activity.
+    evening = [int(h.get("count", 0)) for h in hourly if 18 <= int(h.get("hour", -1)) <= 23]
+    avg_evening = _safe_div(sum(evening), len(evening)) if evening else 0
+    boundary = None
+    for h in reversed(hourly):
+        hour = int(h.get("hour", -1))
+        count = int(h.get("count", 0))
+        if 18 <= hour <= 23 and count >= avg_evening * 0.5:
+            boundary = {"hour": hour, "count": count}
+            break
+
+    post_midnight = sum(int(h.get("count", 0)) for h in night_hour_rows)
+    return {
+        "night_peak_hour": {"hour": int(peak.get("hour", 0)), "count": int(peak.get("count", 0))} if peak else None,
+        "post_midnight_messages": int(post_midnight),
+        "most_night_date": peak_date,
+        "sleep_boundary_hour": boundary,
+    }
+
+
 def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Dict[str, Any]]:
     base, p = _period_where_clause(start_ts, end_ts)
     sql = (
@@ -2093,6 +2213,7 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
     max_chat_pk: Optional[int] = None
     max_prev_ts: Optional[int] = None
     max_cur_ts: Optional[int] = None
+    gaps: List[int] = []
 
     last_chat: Optional[int] = None
     prev_ts: Optional[int] = None
@@ -2112,6 +2233,7 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
             continue
         if prev_ts is not None and ts > prev_ts:
             gap = ts - prev_ts
+            gaps.append(int(gap))
             if gap > max_gap:
                 max_gap = gap
                 max_chat_pk = chat_pk
@@ -2137,6 +2259,11 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
         "peer_from_id": peer_id,
         "from_ts": max_prev_ts,
         "to_ts": max_cur_ts,
+        "from_datetime": _ts_to_msk_datetime(max_prev_ts),
+        "to_datetime": _ts_to_msk_datetime(max_cur_ts),
+        "calendar_days": int(max(0, (max_gap + 86399) // 86400)) if max_gap else 0,
+        "median_gap_seconds": _median_int(gaps),
+        "gap_vs_median_ratio": float(_safe_div(max_gap, _median_int(gaps))) if gaps else 0.0,
     }
 
 def _longest_streak_days(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
@@ -2155,16 +2282,21 @@ def _longest_streak_days(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
     best_len = 1
     best_start = dates[0]
     best_end = dates[0]
+    streaks: List[Dict[str, Any]] = []
 
     cur_len = 1
     cur_start = dates[0]
     prev = _parse(dates[0])
+
+    def _push_streak(length: int, start: str, end: str) -> None:
+        streaks.append({"length_days": int(length), "start_date": start, "end_date": end})
 
     for d in dates[1:]:
         cur = _parse(d)
         if (cur - prev).days == 1:
             cur_len += 1
         else:
+            _push_streak(cur_len, cur_start, prev.strftime("%Y-%m-%d"))
             if cur_len > best_len:
                 best_len = cur_len
                 best_start = cur_start
@@ -2177,8 +2309,16 @@ def _longest_streak_days(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
         best_len = cur_len
         best_start = cur_start
         best_end = prev.strftime("%Y-%m-%d")
+    _push_streak(cur_len, cur_start, prev.strftime("%Y-%m-%d"))
 
-    return {"length_days": int(best_len), "start_date": best_start, "end_date": best_end}
+    streaks.sort(key=lambda x: int(x.get("length_days", 0) or 0), reverse=True)
+    runner_up = streaks[1] if len(streaks) > 1 else None
+    return {
+        "length_days": int(best_len),
+        "start_date": best_start,
+        "end_date": best_end,
+        "runner_up": runner_up,
+    }
 
 
 def _longest_person_streak(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Optional[Dict[str, Any]]:
@@ -2284,7 +2424,8 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
     q = (
         "SELECT m.text, m.sticker_emoji, m.msg_id, m.date_ts, c.name, c.peer_from_id "
         "FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
-        f"WHERE m.is_service = 0 AND m.is_out = 1 AND {base};"
+        f"WHERE m.is_service = 0 AND m.is_out = 1 AND {base} "
+        "ORDER BY m.date_ts;"
     )
 
     total_len = 0
@@ -2316,6 +2457,9 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
     word_counter: Counter[str] = Counter()
     emoji_counter: Counter[str] = Counter()
     total_words = 0
+    messages_with_emoji = 0
+    emoji_streak = 0
+    current_emoji_streak = 0
 
     fetch = conn.execute(q, p)
     while True:
@@ -2335,6 +2479,8 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
             peer_id = row[5] if isinstance(row[5], str) else None
 
             cleaned = clean_text_for_stats(text)
+            had_emoji = False
+
             if cleaned:
                 l = len(cleaned)
                 total_len += l
@@ -2363,9 +2509,18 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
                 emojis = extract_emojis(cleaned)
                 if emojis:
                     emoji_counter.update(emojis)
+                    had_emoji = True
 
             if sticker_emoji:
                 emoji_counter.update([sticker_emoji])
+                had_emoji = True
+
+            if had_emoji:
+                messages_with_emoji += 1
+                current_emoji_streak += 1
+                emoji_streak = max(emoji_streak, current_emoji_streak)
+            else:
+                current_emoji_streak = 0
 
     top_words = [{"word": w, "count": int(c)} for w, c in word_counter.most_common(50)]
     word_cloud = {w: int(c) for w, c in word_counter.most_common(200)}
@@ -2384,6 +2539,8 @@ def _text_metrics_sent(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> 
         "total_words_sent": int(total_words),
         "unique_words_sent": int(len(word_counter)),
         "total_emojis_sent": int(sum(emoji_counter.values())),
+        "messages_with_emoji_count": int(messages_with_emoji),
+        "emoji_streak_max_messages": int(emoji_streak),
     }
 
 def _media_counts(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, int]:
@@ -2398,6 +2555,42 @@ def _media_counts(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
             continue
         buckets[b] = int(buckets.get(b, 0) + cnt)
     return buckets
+
+
+def _media_insights(conn: sqlite3.Connection, start_ts: int, end_ts: int, media: Dict[str, int], total_messages: int) -> Dict[str, Any]:
+    base, p = _period_where_clause(start_ts, end_ts)
+    media_total = int(sum(int(v or 0) for v in media.values()))
+    top_key = None
+    top_count = 0
+    for key, value in media.items():
+        iv = int(value or 0)
+        if iv > top_count:
+            top_key = key
+            top_count = iv
+
+    row = conn.execute(
+        f"SELECT strftime('%Y-%m', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS m, COUNT(*) AS cnt "
+        f"FROM messages WHERE is_service = 0 AND media_type IS NOT NULL AND TRIM(media_type) != '' AND {base} "
+        f"GROUP BY m ORDER BY cnt DESC LIMIT 1;",
+        p,
+    ).fetchone()
+
+    media_only = conn.execute(
+        f"SELECT COUNT(*) FROM messages WHERE is_service = 0 "
+        f"AND media_type IS NOT NULL AND TRIM(media_type) != '' "
+        f"AND (text IS NULL OR TRIM(text) = '') AND {base};",
+        p,
+    ).fetchone()
+
+    sticker_count = int(media.get("sticker", 0) or 0)
+    return {
+        "media_total": int(media_total),
+        "media_per_100_messages": float(_safe_div(media_total * 100, total_messages)),
+        "top_media_type": {"type": top_key, "count": int(top_count)} if top_key else None,
+        "most_media_month": {"value": row[0], "count": int(row[1] or 0)} if row and isinstance(row[0], str) else None,
+        "sticker_ratio": float(_safe_div(sticker_count, media_total)),
+        "media_only_messages": int(media_only[0] or 0) if media_only else 0,
+    }
 
 
 def _deleted_messages_count(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> int:
@@ -2421,6 +2614,96 @@ def _pick_person_by_metric(people: Dict[str, Dict[str, Any]], key: str, reverse:
     return lst[0] if lst else None
 
 
+def _peer_activity_insights(conn: sqlite3.Connection, start_ts: int, end_ts: int, peer_id: Optional[str]) -> Dict[str, Any]:
+    if not peer_id:
+        return {}
+    base, p = _period_where_clause(start_ts, end_ts)
+    params = (peer_id,) + p
+
+    peak_day = conn.execute(
+        f"SELECT date((m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS d, COUNT(*) AS cnt "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"GROUP BY d ORDER BY cnt DESC LIMIT 1;",
+        params,
+    ).fetchone()
+    peak_month = conn.execute(
+        f"SELECT strftime('%Y-%m', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS mth, COUNT(*) AS cnt "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"GROUP BY mth ORDER BY cnt DESC LIMIT 1;",
+        params,
+    ).fetchone()
+    peak_hour = conn.execute(
+        f"SELECT CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS h, COUNT(*) AS cnt "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"GROUP BY h ORDER BY cnt DESC LIMIT 1;",
+        params,
+    ).fetchone()
+
+    day_peak_hour = conn.execute(
+        f"SELECT CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS h, COUNT(*) AS cnt "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"  AND CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 6 AND 17 "
+        f"GROUP BY h ORDER BY cnt DESC LIMIT 1;",
+        params,
+    ).fetchone()
+    night_peak_hour = conn.execute(
+        f"SELECT CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS h, COUNT(*) AS cnt "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"  AND CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 0 AND 5 "
+        f"GROUP BY h ORDER BY cnt DESC LIMIT 1;",
+        params,
+    ).fetchone()
+
+    day_peak_date = conn.execute(
+        f"SELECT date((m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS d, COUNT(*) AS cnt "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"  AND CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 6 AND 17 "
+        f"GROUP BY d ORDER BY cnt DESC LIMIT 1;",
+        params,
+    ).fetchone()
+    night_peak_date = conn.execute(
+        f"SELECT date((m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS d, COUNT(*) AS cnt "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"  AND CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 0 AND 5 "
+        f"GROUP BY d ORDER BY cnt DESC LIMIT 1;",
+        params,
+    ).fetchone()
+
+    day_week = conn.execute(
+        f"SELECT "
+        f"SUM(CASE WHEN CAST(strftime('%w', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 1 AND 5 THEN 1 ELSE 0 END), "
+        f"SUM(CASE WHEN CAST(strftime('%w', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) IN (0, 6) THEN 1 ELSE 0 END) "
+        f"FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        f"  AND CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 6 AND 17;",
+        params,
+    ).fetchone()
+
+    def point(row: Any, key: str) -> Optional[Dict[str, Any]]:
+        if not row:
+            return None
+        return {key: row[0], "count": int(row[1] or 0)}
+
+    return {
+        "peak_day": point(peak_day, "date"),
+        "peak_month": point(peak_month, "value"),
+        "peak_hour": point(peak_hour, "hour"),
+        "day_peak_hour": point(day_peak_hour, "hour"),
+        "night_peak_hour": point(night_peak_hour, "hour"),
+        "day_peak_date": point(day_peak_date, "date"),
+        "night_peak_date": point(night_peak_date, "date"),
+        "day_weekday_messages": int(day_week[0] or 0) if day_week else 0,
+        "day_weekend_messages": int(day_week[1] or 0) if day_week else 0,
+    }
+
+
 def _top_10_people_by_messages(people: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     items: List[Tuple[int, Dict[str, Any]]] = []
 
@@ -2433,7 +2716,10 @@ def _top_10_people_by_messages(people: Dict[str, Dict[str, Any]]) -> List[Dict[s
     items.sort(key=lambda x: x[0], reverse=True)
 
     out: List[Dict[str, Any]] = []
-    for total, it in items[:10]:
+    top_total = items[0][0] if items else 0
+    second_total = items[1][0] if len(items) > 1 else 0
+    for idx, (total, it) in enumerate(items[:10]):
+        active_days = int(it.get("active_days", 0) or 0)
         out.append(
             {
                 "peer_from_id": it.get("peer_from_id"),
@@ -2441,6 +2727,12 @@ def _top_10_people_by_messages(people: Dict[str, Dict[str, Any]]) -> List[Dict[s
                 "total_messages": total,
                 "sent_messages": int(it.get("sent_messages", 0) or 0),
                 "received_messages": int(it.get("received_messages", 0) or 0),
+                "active_days": active_days,
+                "messages_per_active_day": float(_safe_div(total, active_days)),
+                "first_ts": it.get("first_ts"),
+                "last_ts": it.get("last_ts"),
+                "rank": idx + 1,
+                "lead_over_next_messages": int(max(0, top_total - second_total)) if idx == 0 else 0,
             }
         )
 
@@ -2508,6 +2800,9 @@ def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "total_messages": total,
                 "abs_diff": abs_diff,
                 "imbalance_ratio": float(ratio),
+                "symmetry_percent": float(max(0.0, 1.0 - ratio) * 100.0),
+                "active_days": int(it.get("active_days", 0) or 0),
+                "minimum_messages_required": 2000,
             }
         )
 
@@ -2618,6 +2913,10 @@ def _compute_period_metrics(
     most_day = _most_active_group(conn, start_ts, end_ts, f"date((date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch')", "day")
     most_month = _most_active_group(conn, start_ts, end_ts, f"strftime('%Y-%m', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch')", "month")
     most_hour = _most_active_group(conn, start_ts, end_ts, f"strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch')", "hour")
+    period_span = _period_span(conn, start_ts, end_ts)
+    month_extremes = _month_activity_extremes(conn, start_ts, end_ts)
+    direction_extremes = _daily_direction_extremes(conn, start_ts, end_ts)
+    night_extra = _night_insights(conn, start_ts, end_ts)
 
     night_count = conn.execute(
         f"SELECT COUNT(*) FROM messages WHERE is_service = 0 AND date_ts >= ? AND date_ts < ? AND CAST(strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 0 AND 5;",
@@ -2641,6 +2940,7 @@ def _compute_period_metrics(
 
     textm = _text_metrics_sent(conn, start_ts, end_ts)
     media = _media_counts(conn, start_ts, end_ts)
+    media_extra = _media_insights(conn, start_ts, end_ts, media, total)
 
     if label == "year":
         median_reply = int(reply_stats.get("global_median_year_seconds", 0) or 0)
@@ -2653,7 +2953,9 @@ def _compute_period_metrics(
 
     fastest: Optional[Dict[str, Any]] = None
     slowest: Optional[Dict[str, Any]] = None
-    med_items = []
+    med_items_fast = []
+    med_items_slow = []
+    qualified_medians_3000: List[int] = []
     if isinstance(per_peer_median, dict) and isinstance(per_peer_samples, dict):
         for peer_id, med in per_peer_median.items():
             try:
@@ -2663,24 +2965,44 @@ def _compute_period_metrics(
                 total_messages_for_peer = int((people.get(peer_id, {}) or {}).get("total_messages", 0) or 0)
                 if samples < 3:
                     continue
-                if total_messages_for_peer < 2000:
-                    continue
-                med_items.append((int(med or 0), -samples, peer_id))
+                med_value = int(med or 0)
+                if total_messages_for_peer >= 2500:
+                    med_items_fast.append((med_value, -samples, peer_id))
+                if total_messages_for_peer >= 3000:
+                    med_items_slow.append((med_value, -samples, peer_id))
+                    qualified_medians_3000.append(med_value)
             except Exception:
                 continue
-    med_items.sort()
-    if med_items:
-        fastest_peer = med_items[0][2]
+    med_items_fast.sort()
+    med_items_slow.sort()
+    qualified_median_3000 = _median_int(qualified_medians_3000)
+    if med_items_fast:
+        fastest_peer = med_items_fast[0][2]
+        fastest_med = int(per_peer_median.get(fastest_peer, 0) or 0) if isinstance(per_peer_median, dict) else 0
+        fastest_samples = int(per_peer_samples.get(fastest_peer, 0) or 0) if isinstance(per_peer_samples, dict) else 0
+        fastest_total = int((people.get(fastest_peer, {}) or {}).get("total_messages", 0) or 0)
         fastest = {
             "peer_from_id": fastest_peer,
             "display_name": (people.get(fastest_peer, {}) or {}).get("display_name"),
-            "median_reply_seconds": int(per_peer_median.get(fastest_peer, 0) or 0) if isinstance(per_peer_median, dict) else 0,
+            "median_reply_seconds": fastest_med,
+            "reply_samples": fastest_samples,
+            "total_messages": fastest_total,
+            "minimum_messages_required": 2500,
+            "delta_vs_global_seconds": int(median_reply - fastest_med),
         }
-        slowest_peer = med_items[-1][2]
+    if med_items_slow:
+        slowest_peer = med_items_slow[-1][2]
+        slowest_med = int(per_peer_median.get(slowest_peer, 0) or 0) if isinstance(per_peer_median, dict) else 0
+        slowest_samples = int(per_peer_samples.get(slowest_peer, 0) or 0) if isinstance(per_peer_samples, dict) else 0
+        slowest_total = int((people.get(slowest_peer, {}) or {}).get("total_messages", 0) or 0)
         slowest = {
             "peer_from_id": slowest_peer,
             "display_name": (people.get(slowest_peer, {}) or {}).get("display_name"),
-            "median_reply_seconds": int(per_peer_median.get(slowest_peer, 0) or 0) if isinstance(per_peer_median, dict) else 0,
+            "median_reply_seconds": slowest_med,
+            "reply_samples": slowest_samples,
+            "total_messages": slowest_total,
+            "minimum_messages_required": 3000,
+            "delta_vs_qualified_median_seconds": int(slowest_med - qualified_median_3000),
         }
 
     day_person = _pick_person_by_metric(people, "day_messages", reverse=True)
@@ -2692,6 +3014,17 @@ def _compute_period_metrics(
     ).fetchone()
     messages_0608 = int(row_0608[0] or 0) if row_0608 else 0
 
+    top_messages = _top_10_people_by_messages(people)
+    for item in top_messages[:1]:
+        item.update(_peer_activity_insights(conn, start_ts, end_ts, item.get("peer_from_id") if isinstance(item.get("peer_from_id"), str) else None))
+
+    mutuality = _top_10_people_by_mutuality(people)
+
+    if isinstance(day_person, dict):
+        day_person.update(_peer_activity_insights(conn, start_ts, end_ts, day_person.get("peer_from_id") if isinstance(day_person.get("peer_from_id"), str) else None))
+    if isinstance(night_person, dict):
+        night_person.update(_peer_activity_insights(conn, start_ts, end_ts, night_person.get("peer_from_id") if isinstance(night_person.get("peer_from_id"), str) else None))
+
     metrics: Dict[str, Any] = {
         "total_messages": int(total),
         "sent_messages": int(sent),
@@ -2701,34 +3034,54 @@ def _compute_period_metrics(
         "most_active_day": most_day,
         "most_active_month": most_month,
         "most_active_hour": most_hour,
+        "period_span": period_span,
+        "quietest_month": month_extremes.get("quietest_month"),
+        "most_balanced_day": direction_extremes.get("most_balanced_day"),
+        "most_one_sided_day": direction_extremes.get("most_one_sided_day"),
         "daily_activity": daily_activity,
         "hourly_activity": hourly_activity,
         "period_hours": int(period_hours),
         "average_messages_per_hour": float(average_messages_per_hour),
         "night_messages_count": int(night_messages),
         "night_messages_ratio": float(night_ratio),
+        **night_extra,
         "media_counts": media,
+        **media_extra,
         "edited_messages_count": int(edited),
         "deleted_messages_count": int(deleted),
         "median_reply_time_to_others_seconds": int(median_reply),
+        "qualified_median_reply_3000_seconds": int(qualified_median_3000),
         "who_you_reply_fastest": fastest,
         "who_you_ignore_most": slowest,
         "day_person": {
             "peer_from_id": day_person.get("peer_from_id") if isinstance(day_person, dict) else None,
             "display_name": day_person.get("display_name") if isinstance(day_person, dict) else None,
             "messages": int(day_person.get("day_messages", 0) or 0) if isinstance(day_person, dict) else 0,
+            "total_messages": int(day_person.get("total_messages", 0) or 0) if isinstance(day_person, dict) else 0,
+            "day_ratio": float(_safe_div(int(day_person.get("day_messages", 0) or 0), int(day_person.get("total_messages", 0) or 0))) if isinstance(day_person, dict) else 0.0,
+            "day_peak_hour": day_person.get("day_peak_hour") if isinstance(day_person, dict) else None,
+            "day_peak_date": day_person.get("day_peak_date") if isinstance(day_person, dict) else None,
+            "day_weekday_messages": int(day_person.get("day_weekday_messages", 0) or 0) if isinstance(day_person, dict) else 0,
+            "day_weekend_messages": int(day_person.get("day_weekend_messages", 0) or 0) if isinstance(day_person, dict) else 0,
+            "day_bond_score": int(min(100, _safe_div(int(day_person.get("day_messages", 0) or 0) * 100, max(1, int(total))))) if isinstance(day_person, dict) else 0,
         } if isinstance(day_person, dict) else None,
         "night_person": {
             "peer_from_id": night_person.get("peer_from_id") if isinstance(night_person, dict) else None,
             "display_name": night_person.get("display_name") if isinstance(night_person, dict) else None,
             "messages": int(night_person.get("night_messages", 0) or 0) if isinstance(night_person, dict) else 0,
+            "total_messages": int(night_person.get("total_messages", 0) or 0) if isinstance(night_person, dict) else 0,
+            "night_ratio": float(_safe_div(int(night_person.get("night_messages", 0) or 0), int(night_person.get("total_messages", 0) or 0))) if isinstance(night_person, dict) else 0.0,
+            "night_peak_hour": night_person.get("night_peak_hour") if isinstance(night_person, dict) else None,
+            "night_peak_date": night_person.get("night_peak_date") if isinstance(night_person, dict) else None,
+            "post_midnight_messages": int(night_person.get("night_messages", 0) or 0) if isinstance(night_person, dict) else 0,
+            "night_bond_score": int(min(100, _safe_div(int(night_person.get("night_messages", 0) or 0) * 100, max(1, int(total))))) if isinstance(night_person, dict) else 0,
         } if isinstance(night_person, dict) else None,
         "longest_silence_gap": silence,
         "longest_streak_days": streak,
         "longest_person_streak": person_streak,
-        "top_10_people_by_messages": _top_10_people_by_messages(people),
+        "top_10_people_by_messages": top_messages,
         "top_10_people_by_time_span": _top_10_people_by_time_span(people),
-        "top_10_people_by_mutuality": _top_10_people_by_mutuality(people),
+        "top_10_people_by_mutuality": mutuality,
         "active_days_count": int(active_days_count),
         "avg_messages_per_active_day": float(avg_msgs_per_day),
         "messages_06_08": int(messages_0608),
@@ -2939,16 +3292,16 @@ def handle_command(cmd_obj: Any) -> None:
         db_path = cmd_obj.get("db_path")
 
         if not isinstance(export_dir, str) or not export_dir:
-            write_json({"type": "error", "message": "import_export: export_dir must be a non-empty string"})
+            write_json({"type": "import_error", "message": "import_export: export_dir must be a non-empty string"})
             return
         if not isinstance(mode, str) or not mode:
-            write_json({"type": "error", "message": "import_export: mode must be a non-empty string"})
+            write_json({"type": "import_error", "message": "import_export: mode must be a non-empty string"})
             return
         if not isinstance(db_path, str) or not db_path:
-            write_json({"type": "error", "message": "import_export: db_path must be a non-empty string"})
+            write_json({"type": "import_error", "message": "import_export: db_path must be a non-empty string"})
             return
         if not os.path.isdir(export_dir):
-            write_json({"type": "error", "message": "Export directory does not exist or is not a directory"})
+            write_json({"type": "import_error", "message": "Export directory does not exist or is not a directory"})
             return
 
         start_import_thread(export_dir=export_dir, mode=mode, db_path=db_path)

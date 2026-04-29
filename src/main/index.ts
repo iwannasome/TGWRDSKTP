@@ -396,14 +396,28 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
     if (!isSafeFilename(filename)) return { ok: false, error: 'Unsafe filename' }
 
     let bytes: Uint8Array
-    if (bytesAny instanceof Uint8Array) {
-      bytes = bytesAny
-    } else if (bytesAny instanceof ArrayBuffer) {
-      bytes = new Uint8Array(bytesAny)
-    } else if (ArrayBuffer.isView(bytesAny)) {
-      bytes = new Uint8Array(bytesAny.buffer, bytesAny.byteOffset, bytesAny.byteLength)
-    } else {
-      return { ok: false, error: 'bytes must be Uint8Array/ArrayBuffer' }
+    try {
+      if (Buffer.isBuffer(bytesAny)) {
+        bytes = bytesAny
+      } else if (bytesAny instanceof Uint8Array) {
+        bytes = bytesAny
+      } else if (bytesAny instanceof ArrayBuffer) {
+        bytes = new Uint8Array(bytesAny)
+      } else if (ArrayBuffer.isView(bytesAny)) {
+        bytes = new Uint8Array(bytesAny.buffer, bytesAny.byteOffset, bytesAny.byteLength)
+      } else if (Array.isArray(bytesAny)) {
+        bytes = Buffer.from(bytesAny)
+      } else if (typeof bytesAny === 'object' && bytesAny !== null) {
+        if ('length' in (bytesAny as any)) {
+          bytes = Buffer.from(bytesAny as any)
+        } else {
+          bytes = Buffer.from(Object.values(bytesAny) as number[])
+        }
+      } else {
+        return { ok: false, error: 'bytes must be Uint8Array/ArrayBuffer, got ' + typeof bytesAny }
+      }
+    } catch (e) {
+      return { ok: false, error: 'Failed to parse bytes: ' + String(e) }
     }
 
     await fsp.mkdir(dirPath, { recursive: true })

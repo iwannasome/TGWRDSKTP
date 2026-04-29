@@ -81,6 +81,16 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
+function getInitialSlideIndex(): number {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('tgwr_slide')
+    if (!raw) return 0
+    return clamp(Number(raw), 0, slides.length - 1)
+  } catch {
+    return 0
+  }
+}
+
 async function capturePngBytes(node: HTMLElement): Promise<Uint8Array> {
   try { await document.fonts?.ready } catch { }
   const blob = await htmlToImage.toBlob(node, {
@@ -102,7 +112,7 @@ export default function SlidesView({
   const year = getYearLabel(report)
   const periodLabel = period === 'all_time' ? 'ALL' : year
 
-  const [index, setIndex] = useState(0)
+  const [index, setIndex] = useState(() => getInitialSlideIndex())
   const [direction, setDirection] = useState<1 | -1>(1)
   const [exportState, setExportState] = useState<ExportState | null>(null)
   const [exportSlideIndex, setExportSlideIndex] = useState<number | null>(null)
@@ -113,6 +123,14 @@ export default function SlidesView({
   const lastWheelAtRef = useRef(0)
 
   const exporting = exportState?.running ?? false
+  const screenshotMode = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('tgwr_screenshot') === '1'
+    } catch {
+      return false
+    }
+  }, [])
+  const captureMode = exporting || screenshotMode
 
   const go = useCallback((delta: number) => {
     if (exporting) return
@@ -180,7 +198,9 @@ export default function SlidesView({
         setExportSlideIndex(i)
         await nextFrame(); await nextFrame(); await sleep(520)
 
-        const bytes = await capturePngBytes(exportStageRef.current!)
+        const exportNode = exportStageRef.current
+        if (!exportNode) throw new Error('Export stage is not ready')
+        const bytes = await capturePngBytes(exportNode)
 
         if (pdf) {
           const img = await pdf.embedPng(bytes)
@@ -197,8 +217,9 @@ export default function SlidesView({
 
       setExportState(prev => prev ? { ...prev, running: false, message: `Done! Check: ${dir}` } : null)
       setTimeout(() => setExportState(null), 3000)
-    } catch (err: any) {
-      setExportState(prev => prev ? { ...prev, running: false, error: err.message } : null)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      setExportState(prev => prev ? { ...prev, running: false, error: message } : null)
     } finally {
       setExportSlideIndex(null)
     }
@@ -232,21 +253,21 @@ export default function SlidesView({
             <motion.div
               key={index}
               custom={direction}
-              initial={{ opacity: 0, y: direction > 0 ? 100 : -100 }}
+              initial={captureMode ? { opacity: 1, y: 0 } : { opacity: 0, y: direction > 0 ? 100 : -100 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: direction > 0 ? -100 : 100 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
+              exit={captureMode ? { opacity: 1, y: 0 } : { opacity: 0, y: direction > 0 ? -100 : 100 }}
+              transition={{ duration: captureMode ? 0 : 0.4, ease: "easeOut" }}
               className="h-full w-full"
             >
-              <ActiveSlide {...{ report: parsed, period, onPeriodToggle, theme, onThemeChange }} />
+              <ActiveSlide {...{ report: parsed, period, onPeriodToggle, theme, onThemeChange, exporting: captureMode }} />
             </motion.div>
           </AnimatePresence>
         </motion.div>
       </div>
 
 {/* Тулбар управления (Перенесли в ПРАВЫЙ ВЕРХНИЙ УГОЛ) */}
-      {!exporting && (
-        <div className="fixed top-6 right-6 z-[100] flex items-center gap-4 rounded-full border border-white/10 bg-black/80 px-6 py-3 shadow-2xl backdrop-blur-xl">
+      {!captureMode && (
+        <div className="fixed left-6 right-6 top-20 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-[28px] border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl md:left-auto md:right-6 md:top-6 md:justify-start md:rounded-full md:px-6">
 
           {/* Стрелки навигации */}
           <div className="flex items-center gap-2">
@@ -316,7 +337,9 @@ export default function SlidesView({
       {exportState && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[200] bg-black/80 p-4 rounded-2xl border border-white/10 w-80 shadow-2xl backdrop-blur-md">
           <div className="text-xs font-bold tracking-widest text-white/50 mb-1">{exportState.kind.toUpperCase()} EXPORT</div>
-          <div className="text-sm font-semibold text-white mb-3">{exportState.message}</div>
+          <div className="text-sm font-semibold text-white mb-3">
+            {exportState.error ?? exportState.message}
+          </div>
           <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
             <div className="h-full bg-cyan-500 transition-all duration-300" style={{ width: `${(exportState.current/exportState.total)*100}%` }} />
           </div>

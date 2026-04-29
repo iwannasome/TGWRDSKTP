@@ -12,6 +12,8 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
+    "verify": "npm run typecheck && npm run test:synthetic && npm run pack",
 
     "pack": "npm run build && electron-builder --dir",
     "dist:win": "npm run build && electron-builder --win nsis",

@@ -37,13 +37,13 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.30, delay: exporting ? 0 : Math.min(0.22, 0.04 + idx * 0.03) }}
                 className={[
-                  'rounded-[36px] border px-7 py-6',
+                  'overflow-hidden rounded-[36px] border px-7 py-6',
                   idx === 0
                     ? 'border-[rgba(var(--tgwr-accent1-rgb),0.28)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] shadow-[0_0_32px_rgba(var(--tgwr-accent1-rgb),0.10)]'
                     : 'border-white/10 bg-white/5'
                 ].join(' ')}
               >
-                <div className="flex items-start justify-between gap-6">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-5">
                   <div className="flex min-w-0 items-start gap-5">
                     <div className={[
                       'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border text-[18px] font-bold',
@@ -55,18 +55,18 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
                     </div>
 
                     <div className="min-w-0">
-                      <div className="truncate text-[20px] font-semibold text-slate-100">{msg.name}</div>
-                      <div className="mt-2 text-[12px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                      <div className="line-clamp-2 break-words text-[19px] font-semibold leading-tight text-slate-100">{msg.name}</div>
+                      <div className="mt-2 text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                         Сообщение #{idx + 1}
                       </div>
                     </div>
                   </div>
 
-                  <div className="shrink-0 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                  <div className="w-[104px] shrink-0 rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-right">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                       Length
                     </div>
-                    <div className="mt-1 text-[24px] font-bold text-slate-50">{formatInt(msg.length)}</div>
+                    <div className="mt-1 text-[22px] font-bold leading-none text-slate-50">{formatInt(msg.length)}</div>
                     <div className="text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">chars</div>
                   </div>
                 </div>

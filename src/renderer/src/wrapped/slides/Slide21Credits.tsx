@@ -62,7 +62,7 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
             </div>
 
             <div className="text-right text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
-              special thanks
+              особая благодарность
             </div>
           </div>
 

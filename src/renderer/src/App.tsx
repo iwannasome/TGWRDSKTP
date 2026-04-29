@@ -119,9 +119,14 @@ export default function App(): JSX.Element {
 
   const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Promise<boolean> => {
     try {
-      console.log('[TGWR] Попытка загрузки отчета. Путь:', dbPathArg, '| Старт:', isStartup)
       const res = await window.tgwr.loadReport(dbPathArg)
-      console.log('[TGWR] Ответ от бекенда:', res)
+
+      if (typeof res?.db_path === 'string' && res.db_path) {
+        setDbPath(res.db_path)
+      }
+      if (typeof res?.report_path === 'string' && res.report_path) {
+        setReportPath(res.report_path)
+      }
 
       if (!res || !res.ok) {
         if (!isStartup) {
@@ -158,8 +163,6 @@ export default function App(): JSX.Element {
         }
       }
 
-      console.log('[TGWR] Отчет успешно распарсен, переключаем на слайды!', parsedReport)
-
       setDbPath(res.db_path)
       setReportPath(res.report_path)
       setReport(parsedReport) // Передаем именно объект!
@@ -169,7 +172,6 @@ export default function App(): JSX.Element {
       setReportBuild((prev) => ({ ...prev, running: false, error: undefined }))
       return true
     } catch (err) {
-      console.error('[TGWR] Ошибка IPC:', err)
       if (!isStartup) {
         setReportBuild((prev) => ({
           ...prev,
@@ -289,7 +291,8 @@ export default function App(): JSX.Element {
         setReportBuild({ running: false })
         const rp = typeof payload.report_path === 'string' ? payload.report_path : null
         if (rp) setReportPath(rp)
-        void loadReport(dbPath ?? undefined)
+        const doneDbPath = typeof payload.db_path === 'string' ? payload.db_path : (dbPath ?? undefined)
+        void loadReport(doneDbPath)
         return
       }
 
@@ -302,11 +305,29 @@ export default function App(): JSX.Element {
       if (type === 'import_error') {
         const msg = typeof payload.message === 'string' ? payload.message : 'Import error'
         setImportRunning(false)
+        setImportProgress(undefined)
         setImportError(msg)
         return
       }
+
+      if (type === 'error') {
+        const msg = typeof payload.message === 'string' ? payload.message : 'Worker error'
+        if (importRunning) {
+          setImportRunning(false)
+          setImportProgress(undefined)
+          setImportError(msg)
+          return
+        }
+        if (reportBuild.running) {
+          setReportBuild({ running: false, error: msg })
+          return
+        }
+        setWorkerError(msg)
+        setWorkerStatus({ status: 'fail', message: msg, ts: new Date().toISOString() })
+        return
+      }
     })
-  }, [dbPath, loadReport])
+  }, [dbPath, importRunning, loadReport, reportBuild.running])
 
   // Auto-ping + watchdog
   useEffect(() => {
@@ -345,7 +366,7 @@ export default function App(): JSX.Element {
     }
   }, [lastPongAt])
 
-  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !importRunning
+  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !!dbPath && !importRunning
 
   const onPickExportDir = useCallback(async () => {
     const dir = await window.tgwr.pickExportDir()
@@ -367,9 +388,10 @@ export default function App(): JSX.Element {
     window.tgwr.sendWorker({
       cmd: 'import_export',
       mode: 'desktop',
-      export_dir: dir
+      export_dir: dir,
+      db_path: dbPath
     })
-  }, [exportDir])
+  }, [dbPath, exportDir])
 
   const canBuildReport = !!dbPath && !reportBuild.running
 
@@ -400,7 +422,7 @@ export default function App(): JSX.Element {
     }
 
     return (
-      <div className="relative flex h-full w-full items-center justify-center px-6 py-10">
+      <div className="relative flex h-full w-full items-start justify-center overflow-auto px-4 py-6 sm:px-6 sm:py-10 xl:items-center">
         <div className="w-full max-w-[920px] rounded-[36px] border border-white/10 bg-white/5 p-8 shadow-[0_40px_140px_rgba(0,0,0,0.65)]">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
@@ -602,7 +624,7 @@ export default function App(): JSX.Element {
         </div>
 
         {/* твой “кредит” / ссылка — теперь это часть одного JSX дерева */}
-        <div className="fixed bottom-8 right-10 z-50 flex flex-col items-end text-right">
+        <div className="fixed bottom-8 right-10 z-50 hidden flex-col items-end text-right sm:flex">
           <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.3em] text-[rgba(var(--tgwr-muted-rgb),0.6)]">
             TG Канал
           </div>
@@ -645,5 +667,9 @@ export default function App(): JSX.Element {
     workerStatus.status
   ])
 
-  return <div className="h-screen w-screen">{mainContent}</div>
+  return (
+    <div className="h-screen w-screen" data-tgwr-view={view}>
+      {mainContent}
+    </div>
+  )
 }
