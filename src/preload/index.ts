@@ -6,6 +6,7 @@ const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
+const IPC_DELETE_REPORT = 'tgwr:delete-report' as const
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -35,6 +36,18 @@ export type WriteOutputFileResult =
       error?: string
     }
 
+export type DeleteReportResult =
+  | {
+      ok: true
+      db_path: string
+      report_path: string
+      deleted: boolean
+    }
+  | {
+      ok: false
+      error?: string
+    }
+
 export interface TgwrApi {
   onWorkerEvent: (cb: (payload: unknown) => void) => () => void
   sendWorker: (cmdObj: Record<string, unknown>) => void
@@ -45,6 +58,7 @@ export interface TgwrApi {
   writeOutputFile: (dirPath: string, filename: string, bytes: Uint8Array) => Promise<WriteOutputFileResult>
 
   loadReport: (dbPath?: string) => Promise<LoadReportResult>
+  deleteReport: (dbPath?: string) => Promise<DeleteReportResult>
 }
 
 const api: TgwrApi = {
@@ -98,6 +112,16 @@ const api: TgwrApi = {
     })
     if (isPlainObject(res) && typeof res.ok === 'boolean') {
       return res as LoadReportResult
+    }
+    return { ok: false, error: 'Invalid response from main process' }
+  },
+
+  deleteReport: async (dbPath?: string) => {
+    const res = await ipcRenderer.invoke(IPC_DELETE_REPORT, {
+      db_path: dbPath
+    })
+    if (isPlainObject(res) && typeof res.ok === 'boolean') {
+      return res as DeleteReportResult
     }
     return { ok: false, error: 'Invalid response from main process' }
   }

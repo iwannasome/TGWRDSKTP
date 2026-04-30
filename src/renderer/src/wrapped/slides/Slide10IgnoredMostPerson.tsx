@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatInt, formatSecondsHuman } from '../format'
 import { getPeriod, getReplyChampion } from '../report'
@@ -28,7 +29,17 @@ export default function Slide10IgnoredMostPerson({ report, period, exporting }: 
 
           <div className="mt-6 text-[90px] font-bold leading-none">
             <span className="tgwr-gradient-text">
-              {champ ? formatSecondsHuman(champ.seconds) : '—'}
+              {champ ? (
+                <AnimatedNumber
+                  value={champ.seconds}
+                  exporting={exporting}
+                  duration={0.86}
+                  delay={0.14}
+                  format={formatSecondsHuman}
+                />
+              ) : (
+                '—'
+              )}
             </span>
           </div>
 
@@ -40,19 +51,27 @@ export default function Slide10IgnoredMostPerson({ report, period, exporting }: 
             <div className="mt-7 grid grid-cols-4 gap-4">
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медленнее медианы</div>
-                <div className="mt-2 text-[18px] font-bold text-slate-50">{formatSecondsHuman(Math.max(0, champ.deltaVsQualifiedMedianSeconds))}</div>
+                <div className="mt-2 text-[18px] font-bold text-slate-50">
+                  <AnimatedNumber value={Math.max(0, champ.deltaVsQualifiedMedianSeconds)} exporting={exporting} duration={0.62} delay={0.28} format={formatSecondsHuman} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">долгих ответов</div>
-                <div className="mt-2 text-[22px] font-bold text-slate-50">{formatInt(champ.samples)}</div>
+                <div className="mt-2 text-[22px] font-bold text-slate-50">
+                  <AnimatedNumber value={champ.samples} exporting={exporting} duration={0.62} delay={0.32} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">сообщений в чате</div>
-                <div className="mt-2 text-[22px] font-bold text-slate-50">{formatInt(champ.totalMessages)}</div>
+                <div className="mt-2 text-[22px] font-bold text-slate-50">
+                  <AnimatedNumber value={champ.totalMessages} exporting={exporting} duration={0.62} delay={0.36} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">минимум для чата</div>
-                <div className="mt-2 text-[22px] font-bold text-slate-50">{formatInt(champ.minimumMessagesRequired)}</div>
+                <div className="mt-2 text-[22px] font-bold text-slate-50">
+                  <AnimatedNumber value={champ.minimumMessagesRequired} exporting={exporting} duration={0.62} delay={0.4} />
+                </div>
               </div>
             </div>
           ) : null}

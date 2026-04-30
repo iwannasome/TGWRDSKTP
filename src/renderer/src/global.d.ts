@@ -25,6 +25,18 @@ declare global {
     error?: string
   }
 
+  interface TgwrDeleteReportOk {
+    ok: true
+    db_path: string
+    report_path: string
+    deleted: boolean
+  }
+
+  interface TgwrDeleteReportFail {
+    ok: false
+    error?: string
+  }
+
   interface Window {
     tgwr: {
       onWorkerEvent: (cb: (payload: unknown) => void) => () => void
@@ -42,6 +54,10 @@ declare global {
       loadReport: (
         dbPath?: string
       ) => Promise<TgwrLoadReportOk | TgwrLoadReportFail>
+
+      deleteReport: (
+        dbPath?: string
+      ) => Promise<TgwrDeleteReportOk | TgwrDeleteReportFail>
     }
   }
 }

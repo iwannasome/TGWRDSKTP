@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatDateYYYYMMDD, formatInt, formatMonth, formatPercent01 } from '../format'
 import { getPeriod, getPersonName, getTop10, getTotalMessages, pickFirst } from '../report'
@@ -37,7 +38,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
           <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{name}</div>
 
           <div className="mt-5 text-[92px] font-bold leading-none">
-            <span className="tgwr-gradient-text">{formatInt(total)}</span>
+            <AnimatedNumber value={total} exporting={exporting} duration={0.92} delay={0.14} className="tgwr-gradient-text" />
           </div>
 
           <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
@@ -50,7 +51,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
                 Отправлено
               </div>
               <div className="mt-2 text-[26px] font-bold text-slate-50">
-                {formatInt(sent)}
+                <AnimatedNumber value={sent} exporting={exporting} duration={0.72} delay={0.28} />
               </div>
             </div>
 
@@ -59,7 +60,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
                 Получено
               </div>
               <div className="mt-2 text-[26px] font-bold text-slate-50">
-                {formatInt(received)}
+                <AnimatedNumber value={received} exporting={exporting} duration={0.72} delay={0.34} />
               </div>
             </div>
           </div>
@@ -67,11 +68,15 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
           <div className="mt-6 grid grid-cols-5 gap-3">
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля всех сообщений</div>
-              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatPercent01(share)}</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">
+                <AnimatedNumber value={share} exporting={exporting} duration={0.62} delay={0.4} format={formatPercent01} />
+              </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">в активный день</div>
-              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(Math.round(avgActiveDay))}</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">
+                <AnimatedNumber value={Math.round(avgActiveDay)} exporting={exporting} duration={0.62} delay={0.44} />
+              </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучший день</div>
@@ -83,7 +88,9 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">отрыв от #2</div>
-              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(lead)}</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">
+                <AnimatedNumber value={lead} exporting={exporting} duration={0.62} delay={0.48} />
+              </div>
             </div>
           </div>
 

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatDateYYYYMMDD, formatHour, formatInt, formatPercent01 } from '../format'
 import { getDayNightPerson, getPeriod } from '../report'
@@ -27,7 +28,11 @@ export default function Slide18NightPerson({ report, period, exporting }: SlideC
 
           <div className="mt-6 text-[92px] font-bold leading-none">
             <span className="tgwr-gradient-text">
-              {person ? formatInt(person.messages) : '—'}
+              {person ? (
+                <AnimatedNumber value={person.messages} exporting={exporting} duration={0.9} delay={0.14} />
+              ) : (
+                '—'
+              )}
             </span>
           </div>
 
@@ -43,11 +48,15 @@ export default function Slide18NightPerson({ report, period, exporting }: SlideC
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля ночью</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatPercent01(person.nightRatio)}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  <AnimatedNumber value={person.nightRatio} exporting={exporting} duration={0.62} delay={0.28} format={formatPercent01} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">после полуночи</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(person.postMidnightMessages)}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  <AnimatedNumber value={person.postMidnightMessages} exporting={exporting} duration={0.62} delay={0.32} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучшая ночь</div>
@@ -55,7 +64,9 @@ export default function Slide18NightPerson({ report, period, exporting }: SlideC
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">ночной индекс</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(person.nightBondScore)}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  <AnimatedNumber value={person.nightBondScore} exporting={exporting} duration={0.62} delay={0.36} />
+                </div>
               </div>
             </div>
           ) : null}

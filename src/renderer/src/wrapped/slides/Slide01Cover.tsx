@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatDateYYYYMMDD, formatInt } from '../format'
 import { getPeriod, getYearLabel } from '../report'
@@ -73,7 +74,9 @@ export default function Slide01Cover({ report, theme, onThemeChange, exporting }
               <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 В анализе
               </div>
-              <div className="mt-3 text-[30px] font-bold leading-none text-slate-50">{formatInt(chats)}</div>
+              <div className="mt-3 text-[30px] font-bold leading-none text-slate-50">
+                <AnimatedNumber value={chats} exporting={exporting} duration={0.7} delay={0.2} />
+              </div>
               <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">личных чатов</div>
             </div>
             <div className="rounded-3xl border border-[rgba(var(--tgwr-accent1-rgb),0.22)] bg-[rgba(var(--tgwr-accent1-rgb),0.08)] px-5 py-5">
@@ -81,7 +84,9 @@ export default function Slide01Cover({ report, theme, onThemeChange, exporting }
                 Локально
               </div>
               <div className="mt-3 text-[18px] font-semibold leading-snug text-slate-100">без выгрузки</div>
-              <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">{formatInt(activeDays)} активных дней</div>
+              <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+                <AnimatedNumber value={activeDays} exporting={exporting} duration={0.7} delay={0.24} /> активных дней
+              </div>
             </div>
           </motion.div>
 

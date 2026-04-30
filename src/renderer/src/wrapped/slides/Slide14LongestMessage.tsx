@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { ellipsize, formatInt } from '../format'
 import { getPeriod, getTopLongestMessages } from '../report'
@@ -66,7 +67,9 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
                     <div className="text-[10px] font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                       Length
                     </div>
-                    <div className="mt-1 text-[22px] font-bold leading-none text-slate-50">{formatInt(msg.length)}</div>
+                    <div className="mt-1 text-[22px] font-bold leading-none text-slate-50">
+                      <AnimatedNumber value={msg.length} exporting={exporting} duration={0.58} delay={0.12 + idx * 0.03} />
+                    </div>
                     <div className="text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">chars</div>
                   </div>
                 </div>

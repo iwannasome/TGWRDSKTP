@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatInt, formatMonth, formatPercent01 } from '../format'
 import { getMediaCounts, getPeriod } from '../report'
@@ -45,11 +46,21 @@ export default function Slide13MediaCounts({ report, period, exporting }: SlideC
                     duration: 0.25,
                     delay: exporting ? 0 : Math.min(0.25, idx * 0.03)
                   }}
-                  className="rounded-3xl border border-white/10 bg-white/5 px-7 py-6"
+                  whileHover={exporting ? undefined : { y: -6, scale: 1.02 }}
+                  whileTap={exporting ? undefined : { scale: 0.985 }}
+                  className="tgwr-hover-card rounded-3xl border border-white/10 bg-white/5 px-7 py-6"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="text-[28px]">{it.icon}</div>
-                    <div className="text-[18px] font-bold text-slate-50">{formatInt(value)}</div>
+                    <motion.div
+                      className="text-[28px]"
+                      whileHover={exporting ? undefined : { scale: 1.14, rotate: 3 }}
+                      transition={{ duration: 0.16 }}
+                    >
+                      {it.icon}
+                    </motion.div>
+                    <div className="text-[18px] font-bold text-slate-50">
+                      <AnimatedNumber value={value} exporting={exporting} duration={0.58} delay={0.08 + idx * 0.025} />
+                    </div>
                   </div>
                   <div className="mt-3 text-[13px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                     {it.label}
@@ -62,7 +73,9 @@ export default function Slide13MediaCounts({ report, period, exporting }: SlideC
           <div className="mt-7 grid grid-cols-5 gap-4">
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медиа на 100</div>
-              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(Math.round(getNumber(p, 'media_per_100_messages', 0)))}</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">
+                <AnimatedNumber value={Math.round(getNumber(p, 'media_per_100_messages', 0))} exporting={exporting} duration={0.62} delay={0.34} />
+              </div>
               <div className="mt-1 text-[11px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">на 100 сообщений</div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
@@ -75,11 +88,15 @@ export default function Slide13MediaCounts({ report, period, exporting }: SlideC
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля стикеров</div>
-              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatPercent01(getNumber(p, 'sticker_ratio', 0))}</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">
+                <AnimatedNumber value={getNumber(p, 'sticker_ratio', 0)} exporting={exporting} duration={0.62} delay={0.38} format={formatPercent01} />
+              </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">только медиа</div>
-              <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(getNumber(p, 'media_only_messages', 0))}</div>
+              <div className="mt-2 text-[20px] font-bold text-slate-50">
+                <AnimatedNumber value={getNumber(p, 'media_only_messages', 0)} exporting={exporting} duration={0.62} delay={0.42} />
+              </div>
             </div>
           </div>
         </div>

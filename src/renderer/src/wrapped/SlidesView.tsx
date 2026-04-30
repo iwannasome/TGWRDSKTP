@@ -30,8 +30,8 @@ import Slide20End from './slides/Slide20End'
 import Slide21Credits from './slides/Slide21Credits'
 
 
-const SLIDE_W = 1080
-const SLIDE_H = 1920
+const SLIDE_W = 1920
+const SLIDE_H = 1080
 
 const slides: SlideDef[] = [
   { id: 's1', title: 'Cover', Component: Slide01Cover },
@@ -93,6 +93,12 @@ function getInitialSlideIndex(): number {
 
 async function capturePngBytes(node: HTMLElement): Promise<Uint8Array> {
   try { await document.fonts?.ready } catch { }
+  const images = Array.from(node.querySelectorAll('img'))
+  await Promise.all(images.map(async (img) => {
+    if (img.complete) return
+    try { await img.decode() } catch { }
+  }))
+
   const blob = await htmlToImage.toBlob(node, {
     cacheBust: true,
     backgroundColor: '#05070a',
@@ -101,8 +107,18 @@ async function capturePngBytes(node: HTMLElement): Promise<Uint8Array> {
     pixelRatio: 1,
     style: { transform: 'none' }
   })
-  if (!blob) throw new Error('Failed to render slide')
-  return new Uint8Array(await blob.arrayBuffer())
+  if (blob) return new Uint8Array(await blob.arrayBuffer())
+
+  const dataUrl = await htmlToImage.toPng(node, {
+    cacheBust: true,
+    backgroundColor: '#05070a',
+    width: SLIDE_W,
+    height: SLIDE_H,
+    pixelRatio: 1,
+    style: { transform: 'none' }
+  })
+  const fallbackBlob = await fetch(dataUrl).then((res) => res.blob())
+  return new Uint8Array(await fallbackBlob.arrayBuffer())
 }
 
 export default function SlidesView({
@@ -121,6 +137,7 @@ export default function SlidesView({
   const stageRef = useRef<HTMLDivElement>(null)
   const exportStageRef = useRef<HTMLDivElement>(null)
   const lastWheelAtRef = useRef(0)
+  const exportRunningRef = useRef(false)
 
   const exporting = exportState?.running ?? false
   const screenshotMode = useMemo(() => {
@@ -134,8 +151,8 @@ export default function SlidesView({
 
   const go = useCallback((delta: number) => {
     if (exporting) return
-    setIndex((prev) => clamp(prev + delta, 0, slides.length - 1))
     setDirection(delta >= 0 ? 1 : -1)
+    setIndex((prev) => clamp(prev + delta, 0, slides.length - 1))
   }, [exporting])
 
   useEffect(() => {
@@ -171,8 +188,12 @@ export default function SlidesView({
 
   useLayoutEffect(() => {
     const update = () => {
-      const s = Math.min((window.innerWidth - 32) / SLIDE_W, (window.innerHeight - 32) / SLIDE_H)
-      setScale(clamp(s, 0.28, 0.92))
+      const desktopControlsRail = window.innerWidth >= 768 ? 220 : 0
+      const mobileControlsBar = window.innerWidth < 768 ? 96 : 0
+      const availableW = Math.max(320, window.innerWidth - desktopControlsRail - 32)
+      const availableH = Math.max(320, window.innerHeight - mobileControlsBar - 32)
+      const s = Math.min(availableW / SLIDE_W, availableH / SLIDE_H)
+      setScale(clamp(s, 0.12, 0.92))
     }
     update(); window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
@@ -184,9 +205,13 @@ export default function SlidesView({
   }, [])
 
   const runExportTask = useCallback(async (kind: ExportKind) => {
-    if (exporting) return
+    if (exporting || exportRunningRef.current) return
+    exportRunningRef.current = true
     const dir = await window.tgwr.pickOutputDir()
-    if (!dir) return
+    if (!dir) {
+      exportRunningRef.current = false
+      return
+    }
 
     setExportState({ running: true, kind, current: 0, total: slides.length, message: 'Starting...', outputDir: dir })
 
@@ -194,7 +219,7 @@ export default function SlidesView({
       const pdf = kind === 'pdf' ? await PDFDocument.create() : null
 
       for (let i = 0; i < slides.length; i++) {
-        setExportState(prev => prev ? { ...prev, current: i, message: `Rendering slide ${i+1}...` } : null)
+        setExportState(prev => prev ? { ...prev, current: i, message: `Rendering slide ${i + 1}...` } : null)
         setExportSlideIndex(i)
         await nextFrame(); await nextFrame(); await sleep(520)
 
@@ -208,6 +233,7 @@ export default function SlidesView({
         } else {
           await writeOutputFile(dir, `slide_${pad2(i + 1)}.png`, bytes)
         }
+        setExportState(prev => prev ? { ...prev, current: i + 1 } : null)
       }
 
       if (pdf) {
@@ -221,6 +247,7 @@ export default function SlidesView({
       const message = err instanceof Error ? err.message : String(err)
       setExportState(prev => prev ? { ...prev, running: false, error: message } : null)
     } finally {
+      exportRunningRef.current = false
       setExportSlideIndex(null)
     }
   }, [exporting, writeOutputFile])
@@ -229,29 +256,34 @@ export default function SlidesView({
   const ExportSlide = exportSlideIndex !== null ? slides[exportSlideIndex].Component : null
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#05070a]">
-      {/* HUD */}
-      <div className="pointer-events-none absolute left-6 top-6 z-20 flex w-[calc(100%-48px)] justify-between">
-        <div className="flex gap-3">
-          <div className="pointer-events-auto rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/70">
+    <div
+      className="relative h-screen w-screen overflow-hidden bg-[#05070a]"
+      data-tgwr-slide-index={index}
+      data-tgwr-slide-total={slides.length}
+    >
+      {/* Screenshot-only HUD. Regular viewing keeps these counters inside the controls rail. */}
+      {screenshotMode ? (
+        <div className="pointer-events-none absolute left-6 top-6 z-20 flex gap-3">
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/70">
             {index + 1} / {slides.length}
           </div>
-          <div className="pointer-events-auto rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/70">
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/70">
             {periodLabel}
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Основная сцена */}
-      <div className="flex h-full w-full items-center justify-center">
+      <div className="flex h-full w-full items-center justify-center pb-[96px] md:pl-[220px] md:pb-0">
         <motion.div
           ref={stageRef}
           style={{ width: SLIDE_W, height: SLIDE_H, scale, transformOrigin: 'center' }}
           className="relative rounded-[48px] border border-white/10 bg-[#05070a] shadow-2xl"
         >
-          <AnimatePresence mode="wait" custom={direction}>
+          <AnimatePresence initial={false} custom={direction}>
             <motion.div
               key={index}
+              data-tgwr-active-slide={index}
               custom={direction}
               initial={captureMode ? { opacity: 1, y: 0 } : { opacity: 0, y: direction > 0 ? 100 : -100 }}
               animate={{ opacity: 1, y: 0 }}
@@ -265,69 +297,107 @@ export default function SlidesView({
         </motion.div>
       </div>
 
-{/* Тулбар управления (Перенесли в ПРАВЫЙ ВЕРХНИЙ УГОЛ) */}
+      {/* Desktop controls */}
       {!captureMode && (
-        <div className="fixed left-6 right-6 top-20 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-[28px] border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl md:left-auto md:right-6 md:top-6 md:justify-start md:rounded-full md:px-6">
+        <div className="fixed bottom-5 left-4 right-4 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl md:bottom-auto md:left-6 md:right-auto md:top-1/2 md:w-[164px] md:-translate-y-1/2 md:flex-col md:items-stretch md:justify-start md:rounded-2xl md:px-4">
 
-          {/* Стрелки навигации */}
-          <div className="flex items-center gap-2">
-            <button onClick={() => go(-1)} className="p-2 text-slate-400 transition hover:text-white">↑</button>
-            <button onClick={() => go(1)} className="p-2 text-slate-400 transition hover:text-white">↓</button>
+          <div className="hidden text-[10px] font-bold uppercase tracking-[0.22em] text-white/40 md:block">
+            Slide deck
           </div>
 
-          <div className="h-4 w-[1px] bg-white/20" />
+          <div className="flex items-center justify-center gap-2 md:grid md:grid-cols-2">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] font-bold text-white/75">
+              {index + 1}/{slides.length}
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] font-bold text-white/75">
+              {periodLabel}
+            </div>
+          </div>
 
-          {/* Кнопка Детали */}
-          <button
+          <div className="flex items-center justify-center gap-2 md:justify-between">
+            <motion.button
+              type="button"
+              onClick={() => go(-1)}
+              whileHover={{ scale: 1.08, boxShadow: '0 0 18px rgba(var(--tgwr-accent1-rgb),0.18)' }}
+              whileTap={{ scale: 0.92 }}
+              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              aria-label="Предыдущий слайд"
+            >
+              ↑
+            </motion.button>
+            <motion.button
+              type="button"
+              onClick={() => go(1)}
+              whileHover={{ scale: 1.08, boxShadow: '0 0 18px rgba(var(--tgwr-accent1-rgb),0.18)' }}
+              whileTap={{ scale: 0.92 }}
+              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              aria-label="Следующий слайд"
+            >
+              ↓
+            </motion.button>
+          </div>
+
+          <div className="h-4 w-[1px] bg-white/20 md:h-[1px] md:w-full" />
+
+          <motion.button
             type="button"
             onClick={onOpenDetails}
-            className="flex items-center gap-2 px-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 transition hover:text-white"
+            whileHover={{ scale: 1.035 }}
+            whileTap={{ scale: 0.965 }}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
             Детали
-          </button>
+          </motion.button>
 
-          <div className="h-4 w-[1px] bg-white/20" />
+          <div className="h-4 w-[1px] bg-white/20 md:h-[1px] md:w-full" />
 
-          {/* Выбор темы */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2 md:grid md:grid-cols-1">
             {(['neon', 'cyber', 'midnight'] as ThemeId[]).map((t) => (
-              <button
+              <motion.button
                 key={t}
+                type="button"
                 onClick={() => onThemeChange(t)}
+                whileHover={{ scale: 1.035 }}
+                whileTap={{ scale: 0.965 }}
                 className={[
-                  'px-3 py-1 text-[10px] font-bold uppercase tracking-tighter transition rounded-full',
-                  theme === t ? 'bg-white/20 text-white' : 'text-slate-500 hover:text-slate-300'
+                  'rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-normal transition',
+                  theme === t ? 'bg-white/20 text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                 ].join(' ')}
               >
                 {t}
-              </button>
+              </motion.button>
             ))}
           </div>
 
-          <div className="h-4 w-[1px] bg-white/20" />
+          <div className="h-4 w-[1px] bg-white/20 md:h-[1px] md:w-full" />
 
-          {/* Кнопки Экспорта */}
-          <div className="flex items-center gap-3">
-            <button
+          <div className="flex items-center justify-center gap-3 md:grid md:grid-cols-2">
+            <motion.button
+              type="button"
               onClick={() => runExportTask('png')}
-              className="px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 rounded-full transition hover:bg-cyan-500/20"
+              whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(34,211,238,0.18)' }}
+              whileTap={{ scale: 0.965 }}
+              className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-500/20"
             >
               PNG
-            </button>
-            <button
+            </motion.button>
+            <motion.button
+              type="button"
               onClick={() => runExportTask('pdf')}
-              className="px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-purple-400 bg-purple-500/10 rounded-full transition hover:bg-purple-500/20"
+              whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(216,180,254,0.18)' }}
+              whileTap={{ scale: 0.965 }}
+              className="rounded-full bg-purple-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-purple-300 transition hover:bg-purple-500/20"
             >
               PDF
-            </button>
+            </motion.button>
           </div>
         </div>
       )}
 
       {/* Скрытая сцена для экспорта */}
       {ExportSlide && (
-        <div className="fixed left-[-2000px]" ref={exportStageRef}>
-          <div style={{ width: SLIDE_W, height: SLIDE_H }} className="bg-[#05070a]">
+        <div className="fixed left-[-4000px] top-0">
+          <div ref={exportStageRef} style={{ width: SLIDE_W, height: SLIDE_H }} className="bg-[#05070a]">
             <ExportSlide {...{ report: parsed, period, onPeriodToggle, theme, onThemeChange, exporting: true }} />
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatDateYYYYMMDD, formatHour, formatInt, formatPercent01 } from '../format'
 import { getDayNightPerson, getPeriod } from '../report'
@@ -29,7 +30,11 @@ export default function Slide17DayPerson({ report, period, exporting }: SlideCom
 
           <div className="mt-6 text-[92px] font-bold leading-none">
             <span className="tgwr-gradient-text">
-              {person ? formatInt(person.messages) : '—'}
+              {person ? (
+                <AnimatedNumber value={person.messages} exporting={exporting} duration={0.9} delay={0.14} />
+              ) : (
+                '—'
+              )}
             </span>
           </div>
 
@@ -45,11 +50,15 @@ export default function Slide17DayPerson({ report, period, exporting }: SlideCom
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля днем</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatPercent01(person.dayRatio)}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  <AnimatedNumber value={person.dayRatio} exporting={exporting} duration={0.62} delay={0.28} format={formatPercent01} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">сообщений в будни</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(person.dayWeekdayMessages)}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  <AnimatedNumber value={person.dayWeekdayMessages} exporting={exporting} duration={0.62} delay={0.32} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучший день</div>
@@ -57,7 +66,9 @@ export default function Slide17DayPerson({ report, period, exporting }: SlideCom
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дневной индекс</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(person.dayBondScore)}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  <AnimatedNumber value={person.dayBondScore} exporting={exporting} duration={0.62} delay={0.36} />
+                </div>
               </div>
             </div>
           ) : null}

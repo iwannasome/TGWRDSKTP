@@ -15,6 +15,7 @@ const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
+const IPC_DELETE_REPORT = 'tgwr:delete-report' as const
 
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
@@ -283,8 +284,10 @@ function createWindow(): void {
   const preloadPath = preloadCandidates.find((p) => existsSync(p))
 
   const win = new BrowserWindow({
-    width: 1080,
-    height: 720,
+    width: 1360,
+    height: 820,
+    minWidth: 1024,
+    minHeight: 680,
     show: true,
     backgroundColor: '#05070a',
     webPreferences: {
@@ -456,6 +459,37 @@ ipcMain.handle(IPC_LOAD_REPORT, async (_event, args: unknown) => {
     const txt = await fsp.readFile(report_path, { encoding: 'utf8' })
     const report = JSON.parse(txt) as unknown
     return { ok: true, db_path, report_path, report }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: msg }
+  }
+})
+
+ipcMain.handle(IPC_DELETE_REPORT, async (_event, args: unknown) => {
+  try {
+    let providedDbPath: string | null = null
+    if (typeof args === 'string') {
+      providedDbPath = args
+    } else if (isPlainObject(args) && typeof args.db_path === 'string') {
+      providedDbPath = args.db_path
+    }
+
+    let db_path: string
+    if (providedDbPath && providedDbPath.trim().length > 0) {
+      db_path = providedDbPath
+    } else {
+      const computed = await computeDbPath()
+      db_path = computed.db_path
+    }
+
+    const report_path = join(dirname(db_path), 'report.json')
+
+    if (!existsSync(report_path)) {
+      return { ok: true, db_path, report_path, deleted: false }
+    }
+
+    await fsp.unlink(report_path)
+    return { ok: true, db_path, report_path, deleted: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }

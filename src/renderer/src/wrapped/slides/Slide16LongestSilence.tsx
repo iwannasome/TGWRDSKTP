@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatInt, formatSecondsHuman } from '../format'
 import { getLongestSilence, getPeriod } from '../report'
@@ -28,7 +29,11 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
 
           <div className="mt-6 text-[96px] font-bold leading-none">
             <span className="tgwr-gradient-text">
-              {s ? formatSecondsHuman(s.gapSeconds) : '—'}
+              {s ? (
+                <AnimatedNumber value={s.gapSeconds} exporting={exporting} duration={0.9} delay={0.14} format={formatSecondsHuman} />
+              ) : (
+                '—'
+              )}
             </span>
           </div>
 
@@ -48,11 +53,15 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дней тишины</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">{formatInt(s.calendarDays)}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  <AnimatedNumber value={s.calendarDays} exporting={exporting} duration={0.62} delay={0.3} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дольше обычного</div>
-                <div className="mt-2 text-[20px] font-bold text-slate-50">x{formatInt(Math.round(s.gapVsMedianRatio))}</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  x<AnimatedNumber value={Math.round(s.gapVsMedianRatio)} exporting={exporting} duration={0.62} delay={0.34} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">тип паузы</div>

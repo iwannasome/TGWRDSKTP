@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React, { useMemo } from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { clamp, formatDateYYYYMMDD, formatInt } from '../format'
 import { getPeriod, getReceivedMessages, getSentMessages, getTotalMessages } from '../report'
@@ -30,14 +31,18 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Отправлено
             </div>
-            <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">{formatInt(sent)}</div>
+            <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">
+              <AnimatedNumber value={sent} exporting={exporting} duration={0.86} delay={0.14} />
+            </div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Получено
             </div>
-            <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">{formatInt(received)}</div>
+            <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">
+              <AnimatedNumber value={received} exporting={exporting} duration={0.86} delay={0.2} />
+            </div>
           </div>
         </div>
 
@@ -48,14 +53,17 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
                 Баланс в процентах
               </div>
               <div className="mt-2 text-[18px] font-semibold text-slate-100">
-                {sentPct}% отправлено · {100 - sentPct}% получено
+                <AnimatedNumber value={sentPct} exporting={exporting} duration={0.64} delay={0.28} />% отправлено ·{' '}
+                <AnimatedNumber value={100 - sentPct} exporting={exporting} duration={0.64} delay={0.3} />% получено
               </div>
             </div>
             <div className="text-right">
               <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Всего
               </div>
-              <div className="mt-2 text-[18px] font-semibold text-slate-100">{formatInt(total)}</div>
+              <div className="mt-2 text-[18px] font-semibold text-slate-100">
+                <AnimatedNumber value={total} exporting={exporting} duration={0.72} delay={0.32} />
+              </div>
             </div>
           </div>
 
@@ -81,7 +89,9 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
             <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Перекос
             </div>
-            <div className="mt-2 text-[30px] font-bold leading-none text-slate-50">{formatInt(diff)}</div>
+            <div className="mt-2 text-[30px] font-bold leading-none text-slate-50">
+              <AnimatedNumber value={diff} exporting={exporting} duration={0.72} delay={0.36} />
+            </div>
             <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">сообщений разницы</div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
@@ -92,7 +102,7 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
               {formatDateYYYYMMDD(getString(balancedDay ?? {}, 'date', ''))}
             </div>
             <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
-              diff {formatInt(getNumber(balancedDay ?? {}, 'abs_diff', 0))}
+              diff <AnimatedNumber value={getNumber(balancedDay ?? {}, 'abs_diff', 0)} exporting={exporting} duration={0.58} delay={0.42} />
             </div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
@@ -103,7 +113,7 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
               {formatDateYYYYMMDD(getString(oneSidedDay ?? {}, 'date', ''))}
             </div>
             <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
-              diff {formatInt(getNumber(oneSidedDay ?? {}, 'abs_diff', 0))}
+              diff <AnimatedNumber value={getNumber(oneSidedDay ?? {}, 'abs_diff', 0)} exporting={exporting} duration={0.58} delay={0.46} />
             </div>
           </div>
         </div>

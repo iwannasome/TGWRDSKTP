@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatInt, formatMonth } from '../format'
 import { getPeriod, getTotalMessages, getYearLabel } from '../report'
@@ -69,21 +70,44 @@ export default function Slide02TotalMessages({
               transition={{ duration: 0.35, delay: exporting ? 0 : 0.08 }}
               className="mt-5 text-[110px] font-bold leading-none"
             >
-              <span className="tgwr-gradient-text select-none">{formatInt(total)}</span>
+              <AnimatedNumber
+                value={total}
+                exporting={exporting}
+                duration={1.05}
+                delay={0.12}
+                className="tgwr-gradient-text select-none"
+              />
             </motion.div>
 
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-5">
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
+          <motion.div
+            initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: exporting ? 0 : 0.36, delay: exporting ? 0 : 0.24 }}
+            className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
+          >
             <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               В активный день
             </div>
-            <div className="mt-2 text-[34px] font-bold leading-none text-slate-50">{formatInt(Math.round(avgPerDay))}</div>
+            <div className="mt-2 text-[34px] font-bold leading-none text-slate-50">
+              <AnimatedNumber
+                value={Math.round(avgPerDay)}
+                exporting={exporting}
+                duration={0.78}
+                delay={0.34}
+              />
+            </div>
             <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">сообщений в среднем</div>
-          </div>
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
+          </motion.div>
+          <motion.div
+            initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: exporting ? 0 : 0.36, delay: exporting ? 0 : 0.3 }}
+            className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
+          >
             <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Самый тихий месяц
             </div>
@@ -91,9 +115,15 @@ export default function Slide02TotalMessages({
               {formatMonth(getString(quietestMonth ?? {}, 'value', ''))}
             </div>
             <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
-              {formatInt(getNumber(quietestMonth ?? {}, 'count', 0))} сообщений
+              <AnimatedNumber
+                value={getNumber(quietestMonth ?? {}, 'count', 0)}
+                exporting={exporting}
+                duration={0.72}
+                delay={0.4}
+              />{' '}
+              сообщений
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </SlideFrame>

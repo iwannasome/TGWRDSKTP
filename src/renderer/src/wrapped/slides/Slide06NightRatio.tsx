@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatDateYYYYMMDD, formatHour, formatInt, formatPercent01 } from '../format'
 import { getNightRatio, getPeriod, getTotalMessages } from '../report'
@@ -34,7 +35,14 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
               В процентах:
             </div>
             <div className="mt-4 text-[82px] font-bold leading-none">
-              <span className="tgwr-gradient-text">{formatPercent01(night.ratio)}</span>
+              <AnimatedNumber
+                value={night.ratio}
+                exporting={exporting}
+                duration={0.86}
+                delay={0.12}
+                format={formatPercent01}
+                className="tgwr-gradient-text"
+              />
             </div>
             <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
               доля ночных сообщений
@@ -52,10 +60,10 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
               Количество:
             </div>
             <div className="mt-4 text-[76px] font-bold leading-none text-slate-50">
-              {formatInt(night.count)}
+              <AnimatedNumber value={night.count} exporting={exporting} duration={0.86} delay={0.18} />
             </div>
             <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-              из {formatInt(total)} сообщений
+              из <AnimatedNumber value={total} exporting={exporting} duration={0.72} delay={0.28} /> сообщений
             </div>
           </motion.div>
         </div>
@@ -66,13 +74,17 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
               Пиковый ночной час
             </div>
             <div className="mt-2 text-[28px] font-bold text-slate-50">{formatHour(getNumber(peakHour ?? {}, 'hour', 0))}</div>
-            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">{formatInt(getNumber(peakHour ?? {}, 'count', 0))} сообщений</div>
+            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+              <AnimatedNumber value={getNumber(peakHour ?? {}, 'count', 0)} exporting={exporting} duration={0.58} delay={0.34} /> сообщений
+            </div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               После полуночи
             </div>
-            <div className="mt-2 text-[28px] font-bold text-slate-50">{formatInt(postMidnight)}</div>
+            <div className="mt-2 text-[28px] font-bold text-slate-50">
+              <AnimatedNumber value={postMidnight} exporting={exporting} duration={0.68} delay={0.38} />
+            </div>
             <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">00:00-05:59</div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
@@ -82,7 +94,9 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
             <div className="mt-2 text-[17px] font-semibold leading-snug text-slate-100">
               {formatDateYYYYMMDD(getString(peakDate ?? {}, 'date', ''))}
             </div>
-            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">{formatInt(getNumber(peakDate ?? {}, 'count', 0))} сообщений</div>
+            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+              <AnimatedNumber value={getNumber(peakDate ?? {}, 'count', 0)} exporting={exporting} duration={0.58} delay={0.42} /> сообщений
+            </div>
           </div>
           <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">

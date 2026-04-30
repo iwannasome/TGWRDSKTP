@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import React from 'react'
+import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatDateYYYYMMDD, formatInt, formatPercent01 } from '../format'
 import { getLongestPersonStreak, getLongestStreak, getPeriod } from '../report'
@@ -33,7 +34,11 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
           </div>
 
           <div className="mt-4 text-[100px] font-bold leading-none">
-            <span className="tgwr-gradient-text">{streak ? formatInt(streak.days) : '—'}</span>
+            {streak ? (
+              <AnimatedNumber value={streak.days} exporting={exporting} duration={0.9} delay={0.14} className="tgwr-gradient-text" />
+            ) : (
+              <span className="tgwr-gradient-text">—</span>
+            )}
             <span className="ml-3 text-[52px] font-bold text-slate-100">дней</span>
           </div>
 
@@ -48,7 +53,9 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
               </div>
               <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
                 <div className="min-w-0 break-words text-[22px] font-semibold leading-tight text-white">{personStreak.displayName}</div>
-                <div className="text-[22px] font-bold text-white">{formatInt(personStreak.lengthDays)} дней</div>
+                <div className="text-[22px] font-bold text-white">
+                  <AnimatedNumber value={personStreak.lengthDays} exporting={exporting} duration={0.7} delay={0.3} /> дней
+                </div>
               </div>
               {personStreak.start && personStreak.end ? (
                 <div className="mt-2 text-[12px] text-white/60">
@@ -62,15 +69,21 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
             <div className="mt-6 grid grid-cols-5 gap-4">
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">доля периода</div>
-                <div className="mt-2 text-[20px] font-bold text-white">{formatPercent01(percentOfPeriod)}</div>
+                <div className="mt-2 text-[20px] font-bold text-white">
+                  <AnimatedNumber value={percentOfPeriod} exporting={exporting} duration={0.62} delay={0.36} format={formatPercent01} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">общий стрик</div>
-                <div className="mt-2 text-[20px] font-bold text-white">{formatInt(streak.days)}</div>
+                <div className="mt-2 text-[20px] font-bold text-white">
+                  <AnimatedNumber value={streak.days} exporting={exporting} duration={0.62} delay={0.4} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">стрик с человеком</div>
-                <div className="mt-2 text-[20px] font-bold text-white">{formatInt(personStreak?.lengthDays ?? 0)}</div>
+                <div className="mt-2 text-[20px] font-bold text-white">
+                  <AnimatedNumber value={personStreak?.lengthDays ?? 0} exporting={exporting} duration={0.62} delay={0.44} />
+                </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">дата старта</div>
@@ -78,7 +91,9 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">второй стрик</div>
-                <div className="mt-2 text-[20px] font-bold text-white">{formatInt(streak.runnerUpDays)}</div>
+                <div className="mt-2 text-[20px] font-bold text-white">
+                  <AnimatedNumber value={streak.runnerUpDays} exporting={exporting} duration={0.62} delay={0.48} />
+                </div>
               </div>
             </div>
           ) : null}

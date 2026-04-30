@@ -52,7 +52,7 @@ function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: strin
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div className="rounded-[34px] border border-white/10 bg-white/5 p-7">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
       <div className="flex items-baseline justify-between gap-6">
         <div>
           <div className="text-[18px] font-semibold text-slate-100">{title}</div>
@@ -72,15 +72,15 @@ function Table({
   rows: Record<string, unknown>[]
 }): JSX.Element {
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10">
-      <table className="w-full border-collapse">
+    <div className="overflow-x-auto rounded-xl border border-white/10">
+      <table className="w-full min-w-[720px] border-collapse">
         <thead className="bg-black/30">
           <tr>
             {headers.map((h) => (
               <th
                 key={h.key}
                 className={[
-                  'px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.8)]',
+                  'px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.8)]',
                   h.right ? 'text-right' : ''
                 ].join(' ')}
               >
@@ -172,14 +172,14 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <div className="absolute inset-0 overflow-auto px-8 py-8">
-        <div className="mx-auto max-w-[1100px]">
-          <div className="flex flex-wrap items-start justify-between gap-5">
+      <div className="absolute inset-0 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1320px]">
+          <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-white/10 bg-[#05070a]/80 px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
                 Details
               </div>
-              <div className="mt-3 text-[40px] font-bold text-slate-100">Топ-10 таблицы</div>
+              <div className="mt-2 text-[32px] font-bold text-slate-100">Топ-10 таблицы</div>
               <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
                 Без фильтров. Ровно из report.json.
               </div>
@@ -197,7 +197,7 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
             </div>
           </div>
 
-          <div className="mt-8 grid gap-6">
+          <div className="mt-6 grid gap-5 xl:grid-cols-2">
             <Card title="Top 10 · Messages" subtitle="С кем больше всего сообщений">
               {rowsMessages.length === 0 ? (
                 <div className="text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Пусто.</div>
@@ -251,8 +251,8 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
 
             <Card title="Debug" subtitle="Сырые куски отчёта (на случай странностей)">
               <div className="grid gap-3">
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                     self_from_id
                   </div>
                   <div className="mt-2 font-mono text-sm text-slate-100">
@@ -263,8 +263,8 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                     total_messages
                   </div>
                   <div className="mt-2 font-mono text-sm text-slate-100">{formatInt(asNumber(p.total_messages, 0))}</div>

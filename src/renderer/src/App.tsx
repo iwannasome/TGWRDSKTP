@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DetailsView from './wrapped/DetailsView'
 import SlidesView from './wrapped/SlidesView'
 import type { PeriodKey } from './wrapped/report'
@@ -33,6 +33,11 @@ type ReportBuildState = {
   running: boolean
   progress?: ImportProgress
   error?: string
+}
+
+type ExistingReportPrompt = {
+  db_path: string
+  report_path: string
 }
 
 function loadThemeFromStorage(): ThemeId {
@@ -81,6 +86,14 @@ function stageLabel(stage: string): string {
   }
 }
 
+function isScreenshotMode(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('tgwr_screenshot') === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function App(): JSX.Element {
   const [theme, setTheme] = useState<ThemeId>(() => loadThemeFromStorage())
   const [period, setPeriod] = useState<PeriodKey>('year')
@@ -96,15 +109,19 @@ export default function App(): JSX.Element {
   const [exportDir, setExportDir] = useState<string>('')
 
   const [importRunning, setImportRunning] = useState<boolean>(false)
+  const importRunningRef = useRef(false)
   const [importProgress, setImportProgress] = useState<ImportProgress | undefined>(undefined)
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
 
   const [reportBuild, setReportBuild] = useState<ReportBuildState>({ running: false })
+  const reportBuildRunningRef = useRef(false)
 
   const [dbPath, setDbPath] = useState<string | null>(null)
   const [reportPath, setReportPath] = useState<string | null>(null)
   const [report, setReport] = useState<unknown | null>(null)
+  const [existingReportPrompt, setExistingReportPrompt] = useState<ExistingReportPrompt | null>(null)
+  const [existingReportError, setExistingReportError] = useState<string | null>(null)
 
   const [lastEvent, setLastEvent] = useState<unknown | null>(null)
 
@@ -112,6 +129,14 @@ export default function App(): JSX.Element {
     applyTheme(theme)
     localStorage.setItem('tgwr_theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    importRunningRef.current = importRunning
+  }, [importRunning])
+
+  useEffect(() => {
+    reportBuildRunningRef.current = reportBuild.running
+  }, [reportBuild.running])
 
   const togglePeriod = useCallback(() => {
     setPeriod((p) => (p === 'all_time' ? 'year' : 'all_time'))
@@ -183,10 +208,68 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  // Try to load existing report.json on startup.
+  // Ask what to do with an existing report.json on startup.
   useEffect(() => {
-    void loadReport(undefined, true) // true = это запуск, прячем красную ошибку
+    let cancelled = false
+
+    const checkExistingReport = async () => {
+      if (isScreenshotMode()) {
+        void loadReport(undefined, true)
+        return
+      }
+
+      const res = await window.tgwr.loadReport(undefined)
+      if (cancelled) return
+
+      if (typeof res?.db_path === 'string' && res.db_path) {
+        setDbPath(res.db_path)
+      }
+      if (typeof res?.report_path === 'string' && res.report_path) {
+        setReportPath(res.report_path)
+      }
+
+      if (res?.ok && typeof res.db_path === 'string' && typeof res.report_path === 'string') {
+        setExistingReportPrompt({
+          db_path: res.db_path,
+          report_path: res.report_path
+        })
+      }
+    }
+
+    void checkExistingReport()
+
+    return () => {
+      cancelled = true
+    }
   }, [loadReport])
+
+  const onOpenExistingReport = useCallback(() => {
+    const prompt = existingReportPrompt
+    if (!prompt) return
+    setExistingReportError(null)
+    setExistingReportPrompt(null)
+    void loadReport(prompt.db_path)
+  }, [existingReportPrompt, loadReport])
+
+  const onCreateFreshReport = useCallback(async () => {
+    const prompt = existingReportPrompt
+    if (!prompt) return
+
+    setExistingReportError(null)
+    const res = await window.tgwr.deleteReport(prompt.db_path)
+    if (!res.ok) {
+      setExistingReportError(res.error ?? 'Не удалось удалить старый report.json')
+      return
+    }
+
+    setExistingReportPrompt(null)
+    setReport(null)
+    setReportPath(res.report_path)
+    setDbPath(res.db_path)
+    setImportSummary(null)
+    setReportBuild({ running: false })
+    setView('setup')
+  }, [existingReportPrompt])
 
   // Subscribe to worker events
   useEffect(() => {
@@ -280,6 +363,7 @@ export default function App(): JSX.Element {
         }
 
         setImportRunning(false)
+        importRunningRef.current = false
         setImportProgress(undefined)
         setImportError(null)
         setImportSummary(summary)
@@ -289,6 +373,7 @@ export default function App(): JSX.Element {
 
       if (type === 'report_done') {
         setReportBuild({ running: false })
+        reportBuildRunningRef.current = false
         const rp = typeof payload.report_path === 'string' ? payload.report_path : null
         if (rp) setReportPath(rp)
         const doneDbPath = typeof payload.db_path === 'string' ? payload.db_path : (dbPath ?? undefined)
@@ -299,12 +384,14 @@ export default function App(): JSX.Element {
       if (type === 'report_error') {
         const msg = typeof payload.message === 'string' ? payload.message : 'Report error'
         setReportBuild({ running: false, error: msg })
+        reportBuildRunningRef.current = false
         return
       }
 
       if (type === 'import_error') {
         const msg = typeof payload.message === 'string' ? payload.message : 'Import error'
         setImportRunning(false)
+        importRunningRef.current = false
         setImportProgress(undefined)
         setImportError(msg)
         return
@@ -314,12 +401,14 @@ export default function App(): JSX.Element {
         const msg = typeof payload.message === 'string' ? payload.message : 'Worker error'
         if (importRunning) {
           setImportRunning(false)
+          importRunningRef.current = false
           setImportProgress(undefined)
           setImportError(msg)
           return
         }
         if (reportBuild.running) {
           setReportBuild({ running: false, error: msg })
+          reportBuildRunningRef.current = false
           return
         }
         setWorkerError(msg)
@@ -366,7 +455,7 @@ export default function App(): JSX.Element {
     }
   }, [lastPongAt])
 
-  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !!dbPath && !importRunning
+  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !!dbPath && !importRunning && !reportBuild.running
 
   const onPickExportDir = useCallback(async () => {
     const dir = await window.tgwr.pickExportDir()
@@ -375,9 +464,11 @@ export default function App(): JSX.Element {
   }, [])
 
   const onStartImport = useCallback(() => {
+    if (importRunningRef.current || reportBuildRunningRef.current || workerStatus.status !== 'ok') return
     const dir = exportDir.trim()
-    if (!dir) return
+    if (!dir || !dbPath) return
 
+    importRunningRef.current = true
     setImportRunning(true)
     setImportProgress({ stage: 'scan_files', current: 0, total: 1 })
     setImportError(null)
@@ -385,20 +476,36 @@ export default function App(): JSX.Element {
     setReport(null)
     setReportPath(null)
 
-    window.tgwr.sendWorker({
-      cmd: 'import_export',
-      mode: 'desktop',
-      export_dir: dir,
-      db_path: dbPath
-    })
-  }, [dbPath, exportDir])
+    try {
+      window.tgwr.sendWorker({
+        cmd: 'import_export',
+        mode: 'desktop',
+        export_dir: dir,
+        db_path: dbPath
+      })
+    } catch (err) {
+      importRunningRef.current = false
+      setImportRunning(false)
+      setImportProgress(undefined)
+      setImportError(err instanceof Error ? err.message : String(err))
+    }
+  }, [dbPath, exportDir, workerStatus.status])
 
-  const canBuildReport = !!dbPath && !reportBuild.running
+  const canBuildReport = !!dbPath && !reportBuild.running && !importRunning
 
   const onBuildReport = useCallback(() => {
-    if (!dbPath) return
+    if (!dbPath || importRunningRef.current || reportBuildRunningRef.current) return
+    reportBuildRunningRef.current = true
     setReportBuild({ running: true, progress: { stage: 'compute_metrics', current: 0, total: 1 } })
-    window.tgwr.sendWorker({ cmd: 'build_report', db_path: dbPath })
+    try {
+      window.tgwr.sendWorker({ cmd: 'build_report', db_path: dbPath })
+    } catch (err) {
+      reportBuildRunningRef.current = false
+      setReportBuild({
+        running: false,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    }
   }, [dbPath])
 
   const mainContent = useMemo(() => {
@@ -422,39 +529,76 @@ export default function App(): JSX.Element {
     }
 
     return (
-      <div className="relative flex h-full w-full items-start justify-center overflow-auto px-4 py-6 sm:px-6 sm:py-10 xl:items-center">
-        <div className="w-full max-w-[920px] rounded-[36px] border border-white/10 bg-white/5 p-8 shadow-[0_40px_140px_rgba(0,0,0,0.65)]">
-          <div className="flex flex-wrap items-start justify-between gap-6">
+      <div className="relative h-full w-full overflow-auto px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto grid min-h-full w-full max-w-[1360px] gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="flex min-h-[220px] flex-col justify-between rounded-2xl border border-white/10 bg-black/25 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl lg:sticky lg:top-4 lg:h-[calc(100vh-32px)]">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
                 $WAG_TECHNOLOGIE$ v1.0
               </div>
-              <div className="mt-2 text-[32px] font-bold text-slate-100">TGWR</div>
-              <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                ✧ ᴍᴀᴅᴇ ʙʏ IWANNASOME ꜰᴇᴀᴛ. dvunya ꜰᴇᴀᴛ. TeMyCh ✧
+              <div className="mt-3 text-[34px] font-black leading-none text-slate-100">TGWR</div>
+              <div className="mt-3 max-w-[240px] text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.88)]">
+                Локальный desktop-анализатор Telegram Export с генерацией Wrapped.
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Анализатор
-              </div>
-              <div className="mt-1 text-sm font-semibold text-slate-100">
-                {workerStatus.status === 'ok' ? 'Работает' : 'OFFLINE'}
-              </div>
-              <div className="mt-1 max-w-[280px] text-xs text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-                {workerStatus.message}
-              </div>
-              {workerError ? (
-                <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-100">
-                  {workerError}
+              <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                    Анализатор
+                  </div>
+                  <div
+                    className={[
+                      'h-2.5 w-2.5 rounded-full',
+                      workerStatus.status === 'ok' ? 'bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.65)]' : 'bg-red-400'
+                    ].join(' ')}
+                  />
                 </div>
-              ) : null}
+                <div className="mt-2 text-sm font-semibold text-slate-100">
+                  {workerStatus.status === 'ok' ? 'Работает' : 'OFFLINE'}
+                </div>
+                <div className="mt-1 break-words text-xs leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+                  {workerStatus.message}
+                </div>
+                {workerError ? (
+                  <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-100">
+                    {workerError}
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
 
-          <div className="mt-8 grid gap-6">
-            <div className="rounded-[28px] border border-white/10 bg-white/5 p-6">
+            <div className="mt-6 border-t border-white/10 pt-4 text-xs text-[rgba(var(--tgwr-muted-rgb),0.78)]">
+              <div className="font-semibold uppercase tracking-[0.18em]">TG Канал</div>
+              <a
+                href="https://t.me/shizikjke"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block font-bold uppercase tracking-wider text-slate-200 transition hover:text-cyan-300"
+              >
+                IWANNASOME
+              </a>
+            </div>
+          </aside>
+
+          <main className="min-w-0 py-1 lg:py-4">
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 backdrop-blur-xl">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  Desktop workspace
+                </div>
+                <div className="mt-1 text-2xl font-bold text-slate-100">Импорт, генерация и просмотр</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadReport(dbPath ?? undefined)}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+              >
+                Открыть wrapped
+              </button>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
+              <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <div className="text-[16px] font-semibold text-slate-100">Импорт Telegram Export</div>
@@ -462,7 +606,7 @@ export default function App(): JSX.Element {
                     Выбери папку где находится экспорт из Telegram Desktop.
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={onPickExportDir}
@@ -486,11 +630,11 @@ export default function App(): JSX.Element {
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
                 <div className="text-xs font-medium tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                   Путь до папки экспорта
                 </div>
-                <div className="mt-2 break-all font-mono text-xs text-slate-100/90">{exportDir || '—'}</div>
+                <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-xs text-slate-100/90">{exportDir || '—'}</div>
               </div>
 
               {importRunning ? (
@@ -512,39 +656,39 @@ export default function App(): JSX.Element {
               ) : null}
 
               {importError ? (
-                <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
                   {importError}
                 </div>
               ) : null}
 
               {importSummary ? (
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                       Chats
                     </div>
                     <div className="mt-1 text-xl font-bold text-slate-100">{importSummary.chats}</div>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                       Messages
                     </div>
                     <div className="mt-1 text-xl font-bold text-slate-100">{importSummary.messages}</div>
                   </div>
-                  <div className="col-span-2 rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  <div className="col-span-2 rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                       DB path
                     </div>
-                    <div className="mt-2 break-all font-mono text-xs text-slate-100/90">{importSummary.db_path}</div>
+                    <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-xs text-slate-100/90">{importSummary.db_path}</div>
                     <div className="mt-2 text-xs text-[rgba(var(--tgwr-muted-rgb),0.85)]">
                       size: {formatBytes(importSummary.db_size_bytes)}
                     </div>
                   </div>
                 </div>
               ) : null}
-            </div>
+              </section>
 
-            <div className="rounded-[28px] border border-white/10 bg-white/5 p-6">
+              <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <div className="text-[16px] font-semibold text-slate-100">Здесь происходит магия</div>
@@ -586,16 +730,16 @@ export default function App(): JSX.Element {
               ) : null}
 
               {reportBuild.error ? (
-                <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
                   {reportBuild.error}
                 </div>
               ) : null}
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
                 <div className="text-xs font-semibold tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                   Путь до отчёта
                 </div>
-                <div className="mt-2 break-all font-mono text-xs text-slate-100/90">{reportPath || '—'}</div>
+                <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-xs text-slate-100/90">{reportPath || '—'}</div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
@@ -610,33 +754,65 @@ export default function App(): JSX.Element {
                   Открыть wrapped
                 </button>
               </div>
-            </div>
+              </section>
 
-            <details className="rounded-[28px] border border-white/10 bg-white/5 p-6">
+              <details className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 xl:col-span-2">
               <summary className="cursor-pointer select-none text-sm font-semibold text-slate-100">
                 Последние события (для разработчиков)
               </summary>
-              <pre className="mt-4 max-h-[220px] overflow-auto rounded-2xl border border-white/10 bg-black/30 p-4 text-xs text-slate-100/90">
+              <pre className="mt-4 max-h-[220px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs text-slate-100/90">
                 {JSON.stringify(lastEvent, null, 2)}
               </pre>
-            </details>
-          </div>
+              </details>
+            </div>
+          </main>
         </div>
 
-        {/* твой “кредит” / ссылка — теперь это часть одного JSX дерева */}
-        <div className="fixed bottom-8 right-10 z-50 hidden flex-col items-end text-right sm:flex">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.3em] text-[rgba(var(--tgwr-muted-rgb),0.6)]">
-            TG Канал
+        {existingReportPrompt ? (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+            <div className="w-full max-w-[560px] rounded-2xl border border-white/10 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.75)]">
+              <div className="text-xs font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
+                Найден старый отчет
+              </div>
+              <div className="mt-3 text-2xl font-bold text-slate-100">Что открыть при запуске?</div>
+              <div className="mt-3 text-sm leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.9)]">
+                TGWR нашел существующий report.json. Можно продолжить со старым Wrapped или удалить его и собрать новый отчет.
+              </div>
+
+              <div className="mt-5 rounded-xl border border-white/10 bg-black/25 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                  report.json
+                </div>
+                <div className="mt-2 max-h-24 overflow-auto break-all font-mono text-xs text-slate-100/85">
+                  {existingReportPrompt.report_path}
+                </div>
+              </div>
+
+              {existingReportError ? (
+                <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+                  {existingReportError}
+                </div>
+              ) : null}
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={onCreateFreshReport}
+                  className="rounded-full border border-red-400/25 bg-red-500/10 px-5 py-2.5 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
+                >
+                  Создать новый и удалить старый
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenExistingReport}
+                  className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.35)] bg-[rgba(var(--tgwr-accent1-rgb),0.12)] px-5 py-2.5 text-sm font-semibold text-slate-50 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.18)]"
+                >
+                  Открыть старый
+                </button>
+              </div>
+            </div>
           </div>
-          <a
-            href="https://t.me/shizikjke"
-            target="_blank"
-            rel="noreferrer"
-            className="origin-right text-[14px] font-black uppercase tracking-wider text-slate-200 transition-all hover:scale-105 hover:text-cyan-400"
-          >
-            IWANNASOME
-          </a>
-        </div>
+        ) : null}
       </div>
     )
   }, [
@@ -644,6 +820,8 @@ export default function App(): JSX.Element {
     canImport,
     dbPath,
     exportDir,
+    existingReportError,
+    existingReportPrompt,
     importError,
     importProgress,
     importRunning,
@@ -651,6 +829,8 @@ export default function App(): JSX.Element {
     lastEvent,
     loadReport,
     onBuildReport,
+    onCreateFreshReport,
+    onOpenExistingReport,
     onPickExportDir,
     onStartImport,
     period,
