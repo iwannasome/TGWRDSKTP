@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import type { OpenDialogOptions } from 'electron'
 import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
@@ -101,6 +101,17 @@ function emitHost(level: 'info' | 'error', message: string, details?: JsonObject
     ...(details ? { details } : {})
   }
   emitToRenderer(ev)
+}
+
+function openExternalIfAllowed(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false
+    void shell.openExternal(url.toString())
+    return true
+  } catch {
+    return false
+  }
 }
 
 function sendToWorker(cmdObj: unknown): void {
@@ -300,6 +311,25 @@ function createWindow(): void {
 
   win.setMenuBarVisibility(false)
   mainWindow = win
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalIfAllowed(url)
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    const currentUrl = win.webContents.getURL()
+    if (url === currentUrl) return
+
+    try {
+      if (currentUrl && new URL(url).origin === new URL(currentUrl).origin) return
+    } catch {
+      //
+    }
+
+    event.preventDefault()
+    openExternalIfAllowed(url)
+  })
 
   win.webContents.on('did-finish-load', () => {
     flushPendingEvents()

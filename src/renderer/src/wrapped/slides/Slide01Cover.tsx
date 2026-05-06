@@ -62,29 +62,29 @@ export default function Slide01Cover({ report, theme, onThemeChange, exporting }
             transition={{ duration: 0.35, delay: exporting ? 0 : 0.13 }}
             className="mt-10 grid grid-cols-3 gap-4"
           >
-            <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Период
               </div>
               <div className="mt-3 text-[18px] font-semibold leading-snug text-slate-100">
                 {firstDate} - {lastDate}
               </div>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 В анализе
               </div>
               <div className="mt-3 text-[30px] font-bold leading-none text-slate-50">
                 <AnimatedNumber value={chats} exporting={exporting} duration={0.7} delay={0.2} />
               </div>
-              <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">личных чатов</div>
+              <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">личных чатов</div>
             </div>
             <div className="rounded-3xl border border-[rgba(var(--tgwr-accent1-rgb),0.22)] bg-[rgba(var(--tgwr-accent1-rgb),0.08)] px-5 py-5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Локально
               </div>
               <div className="mt-3 text-[18px] font-semibold leading-snug text-slate-100">без выгрузки</div>
-              <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+              <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
                 <AnimatedNumber value={activeDays} exporting={exporting} duration={0.7} delay={0.24} /> активных дней
               </div>
             </div>
@@ -96,7 +96,7 @@ export default function Slide01Cover({ report, theme, onThemeChange, exporting }
             transition={{ duration: 0.35, delay: exporting ? 0 : 0.16 }}
             className="mt-10"
           >
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               {exporting ? 'Активная тема' : 'Тема'}
             </div>
             <div className="mt-3 flex flex-wrap gap-3">
@@ -111,9 +111,9 @@ export default function Slide01Cover({ report, theme, onThemeChange, exporting }
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.22 }}
-          className={`${exporting ? '' : 'tgwr-float'} mt-12 rounded-3xl border border-white/10 bg-white/5 px-8 py-7`}
+          className={`${exporting ? '' : 'tgwr-float'} mt-12 tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-8 py-7`}
         >
-          <div className="text-[13px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.80)]">
+          <div className="text-[14px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.80)]">
             Wrapped
           </div>
           <div className="mt-3 text-[18px] leading-relaxed text-slate-100">

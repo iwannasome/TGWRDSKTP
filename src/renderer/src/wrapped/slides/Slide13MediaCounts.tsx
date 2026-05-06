@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import React from 'react'
 import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
@@ -36,64 +35,52 @@ export default function Slide13MediaCounts({ report, period, exporting }: SlideC
             {ITEMS.map((it, idx) => {
               const value = media[it.key] ?? 0
               return (
-                <motion.div
+                <div
                   key={it.key}
-                  // Замораживаем анимацию для чистого снимка при экспорте
-                  initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  // Убираем каскадную задержку (stagger) при экспорте
-                  transition={{
-                    duration: 0.25,
-                    delay: exporting ? 0 : Math.min(0.25, idx * 0.03)
-                  }}
-                  whileHover={exporting ? undefined : { y: -6, scale: 1.02 }}
-                  whileTap={exporting ? undefined : { scale: 0.985 }}
-                  className="tgwr-hover-card rounded-3xl border border-white/10 bg-white/5 px-7 py-6"
+                  data-tip={`${it.label} · ${formatInt(value)}`}
+                  style={{ animationDelay: exporting ? undefined : `${Math.min(0.25, idx * 0.03)}s` }}
+                  className="tgwr-info-card tgwr-hover-card rounded-3xl border border-white/10 bg-white/5 px-7 py-6"
                 >
                   <div className="flex items-center justify-between">
-                    <motion.div
-                      className="text-[28px]"
-                      whileHover={exporting ? undefined : { scale: 1.14, rotate: 3 }}
-                      transition={{ duration: 0.16 }}
-                    >
+                    <div className="tgwr-pop-icon text-[28px]">
                       {it.icon}
-                    </motion.div>
+                    </div>
                     <div className="text-[18px] font-bold text-slate-50">
                       <AnimatedNumber value={value} exporting={exporting} duration={0.58} delay={0.08 + idx * 0.025} />
                     </div>
                   </div>
-                  <div className="mt-3 text-[13px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  <div className="mt-3 text-[14px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                     {it.label}
                   </div>
-                </motion.div>
+                </div>
               )
             })}
           </div>
 
           <div className="mt-7 grid grid-cols-5 gap-4">
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медиа на 100</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медиа на 100</div>
               <div className="mt-2 text-[20px] font-bold text-slate-50">
                 <AnimatedNumber value={Math.round(getNumber(p, 'media_per_100_messages', 0))} exporting={exporting} duration={0.62} delay={0.34} />
               </div>
-              <div className="mt-1 text-[11px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">на 100 сообщений</div>
+              <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">на 100 сообщений</div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">главный формат</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">главный формат</div>
               <div className="mt-2 text-[18px] font-bold text-slate-50">{LABEL_BY_KEY[topType] ?? '—'}</div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медийный месяц</div>
-              <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">{formatMonth(getString(mediaMonth ?? {}, 'value', ''))}</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">медийный месяц</div>
+              <div className="mt-2 text-[14px] font-semibold leading-snug text-slate-100">{formatMonth(getString(mediaMonth ?? {}, 'value', ''))}</div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля стикеров</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля стикеров</div>
               <div className="mt-2 text-[20px] font-bold text-slate-50">
                 <AnimatedNumber value={getNumber(p, 'sticker_ratio', 0)} exporting={exporting} duration={0.62} delay={0.38} format={formatPercent01} />
               </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">только медиа</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">только медиа</div>
               <div className="mt-2 text-[20px] font-bold text-slate-50">
                 <AnimatedNumber value={getNumber(p, 'media_only_messages', 0)} exporting={exporting} duration={0.62} delay={0.42} />
               </div>

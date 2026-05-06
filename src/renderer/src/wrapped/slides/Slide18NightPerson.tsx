@@ -42,28 +42,28 @@ export default function Slide18NightPerson({ report, period, exporting }: SlideC
 
           {person ? (
             <div className="mt-7 grid grid-cols-5 gap-4">
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучший час</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучший час</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">{formatHour(getNumber(person.nightPeakHour ?? {}, 'hour', 0))}</div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля ночью</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля ночью</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
                   <AnimatedNumber value={person.nightRatio} exporting={exporting} duration={0.62} delay={0.28} format={formatPercent01} />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">после полуночи</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">после полуночи</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
                   <AnimatedNumber value={person.postMidnightMessages} exporting={exporting} duration={0.62} delay={0.32} />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучшая ночь</div>
-                <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">{formatDateYYYYMMDD(getString(person.nightPeakDate ?? {}, 'date', ''))}</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучшая ночь</div>
+                <div className="mt-2 text-[14px] font-semibold leading-snug text-slate-100">{formatDateYYYYMMDD(getString(person.nightPeakDate ?? {}, 'date', ''))}</div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">ночной индекс</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">ночной индекс</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
                   <AnimatedNumber value={person.nightBondScore} exporting={exporting} duration={0.62} delay={0.36} />
                 </div>
@@ -72,7 +72,7 @@ export default function Slide18NightPerson({ report, period, exporting }: SlideC
           ) : null}
 
           {!person && (
-            <div className="mt-8 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+            <div className="mt-8 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
               Пока не определено.
             </div>
           )}

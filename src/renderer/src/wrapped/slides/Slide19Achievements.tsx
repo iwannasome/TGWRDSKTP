@@ -124,7 +124,7 @@ function StatusChip({ earned }: StatusChipProps): JSX.Element {
   return (
     <div
       className={[
-        'inline-flex shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]',
+        'inline-flex shrink-0 rounded-full border px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.18em]',
         earned
           ? 'border-[rgba(var(--tgwr-accent1-rgb),0.32)] bg-[rgba(var(--tgwr-accent1-rgb),0.12)] text-slate-50'
           : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.82)]'
@@ -173,7 +173,7 @@ function GridCard({ item, index, exporting }: GridCardProps): JSX.Element {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="line-clamp-2 break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{item.title}</div>
-              <div className="mt-2 line-clamp-2 break-words text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)] [overflow-wrap:anywhere]">
+              <div className="mt-2 line-clamp-2 break-words text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)] [overflow-wrap:anywhere]">
                 {item.description || 'Достижение за твой уникальный стиль общения.'}
               </div>
             </div>
@@ -181,7 +181,7 @@ function GridCard({ item, index, exporting }: GridCardProps): JSX.Element {
           </div>
 
           <div className="mt-auto flex items-end justify-between pt-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               очки
             </div>
             <div className="text-[26px] font-bold leading-none text-slate-100">
@@ -263,7 +263,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                     <div className="min-w-0">
                       <div className="min-w-0">
                         <div className="flex items-center justify-between gap-4">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
+                          <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
                             Главная ачивка
                           </div>
                           <StatusChip earned={hero.earned} />
@@ -278,7 +278,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
 
                     <div className="mt-auto flex items-end justify-between gap-4 pt-5">
                       <div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                        <div className="text-[12px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                           очки
                         </div>
                         <div className="mt-2 text-[64px] font-bold leading-none">
@@ -286,8 +286,8 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                         </div>
                       </div>
 
-                      <div className="rounded-[22px] border border-white/10 bg-black/15 px-4 py-3 text-right">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                      <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/15 px-4 py-3 text-right">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                           лучший титул
                         </div>
                         <div className="mt-2 text-[16px] font-semibold text-slate-100">Главная ачивка периода</div>
@@ -320,7 +320,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
               >
                 <div className="flex items-end justify-between gap-6">
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
                       Прогресс
                     </div>
                     <div className="mt-2 text-[28px] font-semibold text-slate-100">
@@ -330,7 +330,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                   </div>
 
                   <div className="text-right">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                       завершено
                     </div>
                     <div className="mt-2 text-[28px] font-bold text-slate-100">

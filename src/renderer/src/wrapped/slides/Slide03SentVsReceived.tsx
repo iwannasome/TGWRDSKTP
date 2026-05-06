@@ -27,8 +27,8 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
     <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Ты или тебе?</span>} subtitle="Если я бы не писал, ты бы не писала" >
       <div className="flex h-full flex-col justify-between">
         <div className="mt-8 grid grid-cols-2 gap-8">
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Отправлено
             </div>
             <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">
@@ -36,8 +36,8 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
             </div>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Получено
             </div>
             <div className="mt-3 text-[52px] font-bold leading-none text-slate-50">
@@ -46,10 +46,10 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
           </div>
         </div>
 
-        <div className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-7">
+        <div className="mt-10 tgwr-info-card rounded-3xl border border-white/10 bg-white/5 p-7">
           <div className="flex items-end justify-between gap-6">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Баланс в процентах
               </div>
               <div className="mt-2 text-[18px] font-semibold text-slate-100">
@@ -58,7 +58,7 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
               </div>
             </div>
             <div className="text-right">
-              <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Всего
               </div>
               <div className="mt-2 text-[18px] font-semibold text-slate-100">
@@ -79,40 +79,40 @@ export default function Slide03SentVsReceived({ report, period, exporting }: Sli
             />
           </div>
 
-          <div className="mt-4 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.80)]">
+          <div className="mt-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.80)]">
 
           </div>
         </div>
 
         <div className="mt-6 grid grid-cols-3 gap-5">
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Перекос
             </div>
             <div className="mt-2 text-[30px] font-bold leading-none text-slate-50">
               <AnimatedNumber value={diff} exporting={exporting} duration={0.72} delay={0.36} />
             </div>
-            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">сообщений разницы</div>
+            <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">сообщений разницы</div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Ровный день
             </div>
             <div className="mt-2 text-[18px] font-semibold leading-snug text-slate-100">
               {formatDateYYYYMMDD(getString(balancedDay ?? {}, 'date', ''))}
             </div>
-            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+            <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
               diff <AnimatedNumber value={getNumber(balancedDay ?? {}, 'abs_diff', 0)} exporting={exporting} duration={0.58} delay={0.42} />
             </div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Односторонний
             </div>
             <div className="mt-2 text-[18px] font-semibold leading-snug text-slate-100">
               {formatDateYYYYMMDD(getString(oneSidedDay ?? {}, 'date', ''))}
             </div>
-            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+            <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
               diff <AnimatedNumber value={getNumber(oneSidedDay ?? {}, 'abs_diff', 0)} exporting={exporting} duration={0.58} delay={0.46} />
             </div>
           </div>

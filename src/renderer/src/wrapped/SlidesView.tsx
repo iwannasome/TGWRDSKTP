@@ -264,10 +264,10 @@ export default function SlidesView({
       {/* Screenshot-only HUD. Regular viewing keeps these counters inside the controls rail. */}
       {screenshotMode ? (
         <div className="pointer-events-none absolute left-6 top-6 z-20 flex gap-3">
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/70">
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[13px] font-semibold text-white/70">
             {index + 1} / {slides.length}
           </div>
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white/70">
+          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[13px] font-semibold text-white/70">
             {periodLabel}
           </div>
         </div>
@@ -301,15 +301,15 @@ export default function SlidesView({
       {!captureMode && (
         <div className="fixed bottom-5 left-4 right-4 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl md:bottom-auto md:left-6 md:right-auto md:top-1/2 md:w-[164px] md:-translate-y-1/2 md:flex-col md:items-stretch md:justify-start md:rounded-2xl md:px-4">
 
-          <div className="hidden text-[10px] font-bold uppercase tracking-[0.22em] text-white/40 md:block">
+          <div className="hidden text-[11px] font-bold uppercase tracking-[0.22em] text-white/40 md:block">
             Slide deck
           </div>
 
           <div className="flex items-center justify-center gap-2 md:grid md:grid-cols-2">
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] font-bold text-white/75">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/75">
               {index + 1}/{slides.length}
             </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[11px] font-bold text-white/75">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/75">
               {periodLabel}
             </div>
           </div>
@@ -344,7 +344,7 @@ export default function SlidesView({
             onClick={onOpenDetails}
             whileHover={{ scale: 1.035 }}
             whileTap={{ scale: 0.965 }}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
             Детали
           </motion.button>
@@ -360,7 +360,7 @@ export default function SlidesView({
                 whileHover={{ scale: 1.035 }}
                 whileTap={{ scale: 0.965 }}
                 className={[
-                  'rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-normal transition',
+                  'rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-normal transition',
                   theme === t ? 'bg-white/20 text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                 ].join(' ')}
               >
@@ -377,7 +377,7 @@ export default function SlidesView({
               onClick={() => runExportTask('png')}
               whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(34,211,238,0.18)' }}
               whileTap={{ scale: 0.965 }}
-              className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-500/20"
+              className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-500/20"
             >
               PNG
             </motion.button>
@@ -386,7 +386,7 @@ export default function SlidesView({
               onClick={() => runExportTask('pdf')}
               whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(216,180,254,0.18)' }}
               whileTap={{ scale: 0.965 }}
-              className="rounded-full bg-purple-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-purple-300 transition hover:bg-purple-500/20"
+              className="rounded-full bg-purple-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-purple-300 transition hover:bg-purple-500/20"
             >
               PDF
             </motion.button>
@@ -406,7 +406,7 @@ export default function SlidesView({
       {/* Прогресс экспорта */}
       {exportState && (
         <div className="fixed top-10 left-1/2 -translate-x-1/2 z-[200] bg-black/80 p-4 rounded-2xl border border-white/10 w-80 shadow-2xl backdrop-blur-md">
-          <div className="text-xs font-bold tracking-widest text-white/50 mb-1">{exportState.kind.toUpperCase()} EXPORT</div>
+          <div className="text-[13px] font-bold tracking-widest text-white/50 mb-1">{exportState.kind.toUpperCase()} EXPORT</div>
           <div className="text-sm font-semibold text-white mb-3">
             {exportState.error ?? exportState.message}
           </div>

@@ -31,6 +31,32 @@ function dayPartLabel(part: ReturnType<typeof dayPart>): string {
   }
 }
 
+type HourBar = {
+  hour: number
+  count: number
+  x: number
+  y: number
+  height: number
+  isPeak: boolean
+}
+
+function smoothPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return ''
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
+
+  let path = `M ${points[0].x} ${points[0].y}`
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const current = points[index]
+    const next = points[index + 1]
+    const midX = (current.x + next.x) / 2
+    const midY = (current.y + next.y) / 2
+    path += ` Q ${current.x} ${current.y} ${midX} ${midY}`
+  }
+
+  const last = points[points.length - 1]
+  return `${path} L ${last.x} ${last.y}`
+}
+
 export default function Slide05MostActiveHour({ report, period, exporting }: SlideCommonProps): JSX.Element {
   const p = getPeriod(report, period)
   const periodMetrics = p as Record<string, unknown>
@@ -54,18 +80,31 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
   const chart = useMemo(() => {
     const values = hourlyActivity.map((item) => item.count)
     const maxValue = Math.max(...values, 1)
+    const positiveValues = values.filter((value) => value > 0)
+    const minPositiveValue = positiveValues.length > 0 ? Math.min(...positiveValues) : 0
+    const compressedScale =
+      positiveValues.length > 1 && maxValue > 0 && (maxValue - minPositiveValue) / maxValue < 0.28
     const viewWidth = 1180
-    const viewHeight = 610
-    const chartLeft = 42
-    const chartRight = 42
-    const chartTop = 50
-    const chartBottom = 56
+    const viewHeight = 680
+    const chartLeft = 56
+    const chartRight = 56
+    const chartTop = 72
+    const chartBottom = 70
     const chartWidth = viewWidth - chartLeft - chartRight
     const chartHeight = viewHeight - chartTop - chartBottom
     const slotWidth = chartWidth / 24
-    const barWidth = Math.min(30, Math.max(18, slotWidth - 14))
+    const barWidth = Math.min(30, Math.max(20, slotWidth - 16))
     const baselineY = chartTop + chartHeight
-    const averageY = baselineY - (Math.min(averagePerHour, maxValue) / maxValue) * (chartHeight - 26)
+    const bucketAverage = values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)
+    const valueToRatio = (value: number): number => {
+      if (value <= 0) return 0
+      if (!compressedScale) return Math.min(value, maxValue) / maxValue
+
+      const localSpread = Math.max(1, maxValue - minPositiveValue)
+      const localRatio = Math.max(0, Math.min(1, (value - minPositiveValue) / localSpread))
+      return 0.56 + localRatio * 0.44
+    }
+    const averageY = baselineY - valueToRatio(bucketAverage) * (chartHeight - 26)
 
     return {
       viewWidth,
@@ -80,9 +119,41 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
       barWidth,
       baselineY,
       maxValue,
+      minPositiveValue,
+      compressedScale,
       averageY
     }
-  }, [hourlyActivity, averagePerHour])
+  }, [hourlyActivity])
+
+  const hourBars = useMemo<HourBar[]>(() => {
+    return hourlyActivity.map((item, index) => {
+      const rawRatio = chart.maxValue > 0 ? item.count / chart.maxValue : 0
+      const ratio =
+        item.count <= 0
+          ? 0
+          : chart.compressedScale
+            ? 0.56 +
+              (Math.max(0, item.count - chart.minPositiveValue) / Math.max(1, chart.maxValue - chart.minPositiveValue)) *
+                0.44
+            : rawRatio
+      const height = item.count > 0 ? Math.max(18, ratio * (chart.chartHeight - 26)) : 8
+      const x = chart.chartLeft + chart.slotWidth * index + (chart.slotWidth - chart.barWidth) / 2
+      const y = chart.baselineY - height
+
+      return {
+        hour: item.hour,
+        count: item.count,
+        x,
+        y,
+        height,
+        isPeak: index === peakHour
+      }
+    })
+  }, [chart, hourlyActivity, peakHour])
+
+  const activityLinePath = useMemo(() => {
+    return smoothPath(hourBars.map((bar) => ({ x: bar.x + chart.barWidth / 2, y: bar.y + 8 })))
+  }, [chart.barWidth, hourBars])
 
   const zones = [
     { start: 0, end: 6, label: 'ночь', fill: 'rgba(99,102,241,0.10)' },
@@ -99,29 +170,29 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
       title={<span className="tgwr-gradient-text font-semibold">Час-пик</span>}
       subtitle="Твои сутки как неоновый skyline: где день взлетает выше всего."
     >
-      <div className="grid h-full min-h-0 grid-cols-[390px_minmax(0,1fr)] gap-7">
-        <div className="flex min-h-0 flex-col gap-5">
+      <div className="grid h-full min-h-0 grid-cols-[330px_minmax(0,1fr)] gap-5">
+        <div className="flex min-h-0 flex-col gap-4">
           <motion.div
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.04 }}
-            className="relative min-h-0 flex-1 overflow-hidden rounded-[34px] border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(145deg,rgba(var(--tgwr-accent1-rgb),0.15),rgba(var(--tgwr-card-rgb),0.74)_56%,rgba(var(--tgwr-accent2-rgb),0.14))] p-7 shadow-[0_26px_80px_rgba(0,0,0,0.30)]"
+            className="relative min-h-0 flex-1 overflow-hidden rounded-[32px] border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(145deg,rgba(var(--tgwr-accent1-rgb),0.15),rgba(var(--tgwr-card-rgb),0.74)_56%,rgba(var(--tgwr-accent2-rgb),0.14))] p-6 shadow-[0_26px_80px_rgba(0,0,0,0.30)]"
           >
             <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.20)] blur-[64px]" />
             <div className="relative flex h-full flex-col">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
                 самый активный час
               </div>
-              <div className="mt-5 text-[92px] font-bold leading-none">
+              <div className="mt-5 text-[84px] font-bold leading-none">
                 <span className="tgwr-gradient-text">{formatHour(peakHour)}</span>
               </div>
-              <div className="mt-5 inline-flex w-fit rounded-full border border-white/10 bg-black/20 px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.18em] text-slate-100">
+              <div className="mt-5 inline-flex w-fit rounded-full border border-white/10 bg-black/20 px-4 py-2 text-[14px] font-semibold uppercase tracking-[0.18em] text-slate-100">
                 {dayPartLabel(peakPart)}
               </div>
 
-              <div className="mt-auto grid grid-cols-2 gap-3 pt-7">
-                <div className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+              <div className="mt-auto grid grid-cols-2 gap-3 pt-6">
+                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     в этот час
                   </div>
                   <div className="mt-2 text-[30px] font-bold text-slate-50">
@@ -132,10 +203,10 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
                       delay={0.28}
                     />
                   </div>
-                  <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">сообщений</div>
+                  <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">сообщений</div>
                 </div>
-                <div className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     среднее
                   </div>
                   <div className="mt-2 text-[30px] font-bold text-slate-50">
@@ -146,7 +217,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
                       delay={0.34}
                     />
                   </div>
-                  <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">за час</div>
+                  <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">за час</div>
                 </div>
               </div>
             </div>
@@ -156,9 +227,9 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.1 }}
-            className="rounded-[28px] border border-white/10 bg-white/5 p-5"
+            className="tgwr-info-card rounded-[26px] border border-white/10 bg-white/5 p-4"
           >
-            <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
               период
             </div>
             <div className="mt-3 text-[18px] font-semibold text-slate-100">
@@ -170,7 +241,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
               />{' '}
               сообщений
             </div>
-            <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.84)]">
+            <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.84)]">
               {periodHours > 0 ? `${formatInt(periodHours)} часов в выбранном периоде` : 'почасовой профиль выбранного периода'}
             </div>
           </motion.div>
@@ -180,21 +251,21 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: exporting ? 0 : 0.38, delay: exporting ? 0 : 0.14 }}
-          className="flex min-h-0 flex-col rounded-[38px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.54)] p-7 shadow-[0_20px_80px_rgba(0,0,0,0.28)]"
+          className="flex min-h-0 flex-col rounded-[36px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.54)] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]"
         >
-          <div className="flex items-end justify-between gap-6">
+          <div className="flex items-start justify-between gap-5">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
                 24-hour skyline
               </div>
-              <div className="mt-2 text-[22px] font-semibold text-slate-100">Башни активности за сутки</div>
+              <div className="mt-2 text-[20px] font-semibold leading-tight text-slate-100">Башни активности за сутки</div>
             </div>
-            <div className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-4 py-2 text-[12px] font-semibold text-slate-100">
+            <div className="shrink-0 rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-4 py-2 text-[13px] font-semibold text-slate-100">
               peak · {formatHour(peakHour)}
             </div>
           </div>
 
-          <div className="mt-6 min-h-0 flex-1 rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(var(--tgwr-card-rgb),0.44),rgba(var(--tgwr-card-rgb),0.18))] p-4">
+          <div className="mt-4 min-h-0 flex-1 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(var(--tgwr-card-rgb),0.44),rgba(var(--tgwr-card-rgb),0.18))] p-3">
             <svg
               viewBox={`0 0 ${chart.viewWidth} ${chart.viewHeight}`}
               className="h-full w-full"
@@ -210,6 +281,18 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
                   <stop offset="0%" stopColor="rgba(var(--tgwr-border-rgb),0.82)" />
                   <stop offset="100%" stopColor="rgba(var(--tgwr-border-rgb),0.30)" />
                 </linearGradient>
+                <linearGradient id="tgwr-hour-line" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stopColor="rgba(56,189,248,0.30)" />
+                  <stop offset="52%" stopColor="rgba(var(--tgwr-accent1-rgb),0.86)" />
+                  <stop offset="100%" stopColor="rgba(var(--tgwr-accent2-rgb),0.78)" />
+                </linearGradient>
+                <filter id="tgwr-hour-peak-glow" x="-120%" y="-80%" width="340%" height="260%">
+                  <feGaussianBlur stdDeviation="9" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
               </defs>
 
               {zones.map((zone) => {
@@ -256,98 +339,290 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
                 )
               })}
 
-              <line
-                x1={chart.chartLeft}
-                x2={chart.chartLeft + chart.chartWidth}
-                y1={chart.averageY}
-                y2={chart.averageY}
-                stroke="rgba(var(--tgwr-accent1-rgb),0.44)"
-                strokeWidth="2"
-                strokeDasharray="12 9"
-              />
+              <g>
+                <line
+                  x1={chart.chartLeft}
+                  x2={chart.chartLeft + chart.chartWidth}
+                  y1={chart.averageY}
+                  y2={chart.averageY}
+                  stroke="rgba(var(--tgwr-accent1-rgb),0.30)"
+                  strokeWidth="2"
+                  strokeDasharray="12 9"
+                />
+                <line
+                  x1={chart.chartLeft}
+                  x2={chart.chartLeft + chart.chartWidth}
+                  y1={chart.averageY}
+                  y2={chart.averageY}
+                  stroke="rgba(var(--tgwr-accent1-rgb),0.62)"
+                  strokeWidth="2"
+                  strokeDasharray="12 9"
+                  strokeDashoffset={exporting ? 0 : chart.chartWidth}
+                >
+                  {!exporting ? (
+                    <animate
+                      attributeName="stroke-dashoffset"
+                      from={chart.chartWidth}
+                      to="0"
+                      dur="0.72s"
+                      begin="0.44s"
+                      fill="freeze"
+                      calcMode="spline"
+                      keySplines="0.18 0.86 0.32 1"
+                    />
+                  ) : null}
+                </line>
+                {!exporting ? (
+                  <circle
+                    cx={chart.chartLeft}
+                    cy={chart.averageY}
+                    r="4"
+                    fill="rgba(var(--tgwr-accent1-rgb),0.95)"
+                    opacity="0"
+                  >
+                    <animate attributeName="opacity" values="0;1;0" dur="0.72s" begin="0.44s" fill="freeze" />
+                    <animate
+                      attributeName="cx"
+                      from={chart.chartLeft}
+                      to={chart.chartLeft + chart.chartWidth}
+                      dur="0.72s"
+                      begin="0.44s"
+                      fill="freeze"
+                      calcMode="spline"
+                      keySplines="0.18 0.86 0.32 1"
+                    />
+                  </circle>
+                ) : null}
+              </g>
 
-              {hourlyActivity.map((item, index) => {
-                const ratio = chart.maxValue > 0 ? item.count / chart.maxValue : 0
-                const height = Math.max(18, ratio * (chart.chartHeight - 26))
-                const x = chart.chartLeft + chart.slotWidth * index + (chart.slotWidth - chart.barWidth) / 2
-                const y = chart.baselineY - height
-                const isPeak = index === peakHour
+              {activityLinePath ? (
+                <g pointerEvents="none">
+                  <path
+                    d={activityLinePath}
+                    fill="none"
+                    stroke="rgba(var(--tgwr-accent2-rgb),0.20)"
+                    strokeWidth="18"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    filter="url(#tgwr-hour-peak-glow)"
+                    opacity="0.42"
+                  />
+                  <path
+                    d={activityLinePath}
+                    fill="none"
+                    stroke="url(#tgwr-hour-line)"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    pathLength="1"
+                    strokeDasharray="1"
+                    strokeDashoffset={exporting ? 0 : 1}
+                  >
+                    {!exporting ? (
+                      <animate
+                        attributeName="stroke-dashoffset"
+                        from="1"
+                        to="0"
+                        dur="0.78s"
+                        begin="0.52s"
+                        fill="freeze"
+                        calcMode="spline"
+                        keySplines="0.18 0.86 0.32 1"
+                      />
+                    ) : null}
+                  </path>
+                </g>
+              ) : null}
+
+              {hourBars.map((bar, index) => {
+                const labelWidth = bar.isPeak ? 146 : 132
+                const labelX = Math.max(
+                  chart.chartLeft,
+                  Math.min(chart.chartLeft + chart.chartWidth - labelWidth, bar.x + chart.barWidth / 2 - labelWidth / 2)
+                )
+                const labelY = Math.max(10, bar.y - 58)
+                const delay = 0.18 + index * 0.018
+                const capY = Math.max(chart.chartTop - 10, bar.y + 7)
 
                 return (
-                  <g key={item.hour}>
-                    {isPeak ? (
+                  <g key={bar.hour} className="tgwr-hour-bar-group">
+                    {bar.isPeak ? (
                       <rect
-                        x={x - 12}
+                        x={bar.x - 12}
                         y={chart.chartTop - 34}
                         width={chart.barWidth + 24}
                         height={chart.chartHeight + 44}
                         rx="18"
                         fill="rgba(var(--tgwr-accent2-rgb),0.08)"
                         stroke="rgba(var(--tgwr-accent2-rgb),0.18)"
-                      />
+                        filter="url(#tgwr-hour-peak-glow)"
+                      >
+                        {!exporting ? (
+                          <animate
+                            attributeName="opacity"
+                            values="0.08;0.22;0.08"
+                            dur="2.2s"
+                            begin="0.86s"
+                            repeatCount="indefinite"
+                          />
+                        ) : null}
+                      </rect>
                     ) : null}
-                    <motion.rect
-                      x={x}
-                      y={exporting ? y : chart.baselineY}
+                    {bar.isPeak ? (
+                      <rect
+                        x={bar.x - 7}
+                        y={exporting ? bar.y - 10 : chart.baselineY}
+                        width={chart.barWidth + 14}
+                        height={exporting ? bar.height + 20 : 0}
+                        rx={(chart.barWidth + 14) / 2}
+                        fill="rgba(var(--tgwr-accent2-rgb),0.14)"
+                        filter="url(#tgwr-hour-peak-glow)"
+                      >
+                        {!exporting ? (
+                          <>
+                            <animate
+                              attributeName="y"
+                              from={chart.baselineY}
+                              to={bar.y - 10}
+                              dur="0.52s"
+                              begin={`${delay + 0.08}s`}
+                              fill="freeze"
+                              calcMode="spline"
+                              keySplines="0.18 0.86 0.32 1"
+                            />
+                            <animate
+                              attributeName="height"
+                              from="0"
+                              to={bar.height + 20}
+                              dur="0.52s"
+                              begin={`${delay + 0.08}s`}
+                              fill="freeze"
+                              calcMode="spline"
+                              keySplines="0.18 0.86 0.32 1"
+                            />
+                          </>
+                        ) : null}
+                      </rect>
+                    ) : null}
+                    <rect
+                      className="tgwr-hour-bar"
+                      x={bar.x}
+                      y={exporting ? bar.y : chart.baselineY}
                       width={chart.barWidth}
-                      height={exporting ? height : 0}
+                      height={exporting ? bar.height : 0}
                       rx={chart.barWidth / 2}
-                      fill={isPeak ? 'url(#tgwr-hour-peak)' : 'url(#tgwr-hour-regular)'}
-                      opacity={item.count > 0 ? 1 : 0.38}
-                      animate={{ y, height }}
-                      whileHover={
-                        !exporting
-                          ? {
-                              opacity: 1,
-                              scaleY: 1.045,
-                              filter: 'drop-shadow(0 0 12px rgba(var(--tgwr-accent2-rgb),0.58))'
-                            }
-                          : undefined
-                      }
-                      transition={{
-                        duration: exporting ? 0 : 0.46,
-                        delay: exporting ? 0 : 0.18 + index * 0.018,
-                        ease: [0.18, 0.86, 0.32, 1]
-                      }}
-                      style={{ transformBox: 'fill-box', transformOrigin: 'center bottom' }}
+                      fill={bar.isPeak ? 'url(#tgwr-hour-peak)' : 'url(#tgwr-hour-regular)'}
+                      opacity={bar.count > 0 ? 1 : 0.38}
+                    >
+                      {!exporting ? (
+                        <>
+                          <animate
+                            attributeName="y"
+                            from={chart.baselineY}
+                            to={bar.y}
+                            dur="0.46s"
+                            begin={`${delay}s`}
+                            fill="freeze"
+                            calcMode="spline"
+                            keySplines="0.18 0.86 0.32 1"
+                          />
+                          <animate
+                            attributeName="height"
+                            from="0"
+                            to={bar.height}
+                            dur="0.46s"
+                            begin={`${delay}s`}
+                            fill="freeze"
+                            calcMode="spline"
+                            keySplines="0.18 0.86 0.32 1"
+                          />
+                        </>
+                      ) : null}
+                    </rect>
+                    <ellipse
+                      className="tgwr-hour-bar-cap"
+                      cx={bar.x + chart.barWidth / 2}
+                      cy={exporting ? capY : chart.baselineY}
+                      rx={Math.max(4, chart.barWidth * 0.28)}
+                      ry="3.5"
+                      fill="rgba(255,255,255,0.72)"
+                      opacity={bar.count > 0 ? 0.32 : 0.12}
+                    >
+                      {!exporting ? (
+                        <>
+                          <animate
+                            attributeName="cy"
+                            from={chart.baselineY}
+                            to={capY}
+                            dur="0.46s"
+                            begin={`${delay}s`}
+                            fill="freeze"
+                            calcMode="spline"
+                            keySplines="0.18 0.86 0.32 1"
+                          />
+                          <animate
+                            attributeName="opacity"
+                            from="0"
+                            to={bar.count > 0 ? 0.32 : 0.12}
+                            dur="0.24s"
+                            begin={`${delay + 0.22}s`}
+                            fill="freeze"
+                          />
+                        </>
+                      ) : null}
+                    </ellipse>
+                    <title>{`${formatHour(bar.hour)} · ${formatInt(bar.count)} сообщений`}</title>
+                    <rect
+                      className="tgwr-hour-hit"
+                      x={chart.chartLeft + index * chart.slotWidth}
+                      y={chart.chartTop - 44}
+                      width={chart.slotWidth}
+                      height={chart.chartHeight + 88}
+                      fill="transparent"
+                      pointerEvents="all"
                     />
-                    <title>{`${formatHour(item.hour)} · ${formatInt(item.count)} сообщений`}</title>
                     <text
-                      x={x + chart.barWidth / 2}
+                      x={bar.x + chart.barWidth / 2}
                       y={chart.baselineY + 28}
                       textAnchor="middle"
-                      fontSize={isPeak || index % 3 === 0 ? '13' : '0'}
-                      fontWeight={isPeak ? '900' : '700'}
-                      fill={isPeak ? 'rgba(var(--tgwr-accent1-rgb),0.95)' : 'rgba(var(--tgwr-muted-rgb),0.68)'}
+                      fontSize={bar.isPeak || index % 3 === 0 ? '13' : '0'}
+                      fontWeight={bar.isPeak ? '900' : '700'}
+                      fill={bar.isPeak ? 'rgba(var(--tgwr-accent1-rgb),0.95)' : 'rgba(var(--tgwr-muted-rgb),0.68)'}
                     >
-                      {String(item.hour).padStart(2, '0')}
+                      {String(bar.hour).padStart(2, '0')}
                     </text>
-                    {isPeak ? (
-                      <>
-                        <motion.rect
-                          x={Math.max(chart.chartLeft, Math.min(chart.chartLeft + chart.chartWidth - 118, x + chart.barWidth / 2 - 59))}
-                          y={Math.max(10, y - 48)}
-                          width="118"
-                          height="34"
-                          rx="17"
-                          fill="rgba(var(--tgwr-accent2-rgb),0.14)"
-                          stroke="rgba(var(--tgwr-accent2-rgb),0.28)"
-                          initial={exporting ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: exporting ? 0 : 0.28, delay: exporting ? 0 : 0.72 }}
-                        />
-                        <text
-                          x={Math.max(chart.chartLeft, Math.min(chart.chartLeft + chart.chartWidth - 118, x + chart.barWidth / 2 - 59)) + 59}
-                          y={Math.max(10, y - 26)}
-                          textAnchor="middle"
-                          fontSize="14"
-                          fontWeight="900"
-                          fill="rgba(255,255,255,0.94)"
-                        >
-                          {formatInt(item.count)}
-                        </text>
-                      </>
-                    ) : null}
+                    <g className={`tgwr-hour-hover-label${bar.isPeak ? ' tgwr-hour-hover-label-peak' : ''}`}>
+                      <rect
+                        x={labelX}
+                        y={labelY}
+                        width={labelWidth}
+                        height="42"
+                        rx="21"
+                        fill={bar.isPeak ? 'rgba(var(--tgwr-accent2-rgb),0.18)' : 'rgba(3,7,18,0.78)'}
+                        stroke={bar.isPeak ? 'rgba(var(--tgwr-accent2-rgb),0.34)' : 'rgba(255,255,255,0.15)'}
+                      />
+                      <text
+                        x={labelX + labelWidth / 2}
+                        y={labelY + 16}
+                        textAnchor="middle"
+                        fontSize="10"
+                        fontWeight="900"
+                        letterSpacing="2.4"
+                        fill="rgba(var(--tgwr-muted-rgb),0.80)"
+                      >
+                        {formatHour(bar.hour)}
+                      </text>
+                      <text
+                        x={labelX + labelWidth / 2}
+                        y={labelY + 31}
+                        textAnchor="middle"
+                        fontSize="13"
+                        fontWeight="900"
+                        fill="rgba(255,255,255,0.96)"
+                      >
+                        {formatInt(bar.count)} сообщений
+                      </text>
+                    </g>
                   </g>
                 )
               })}

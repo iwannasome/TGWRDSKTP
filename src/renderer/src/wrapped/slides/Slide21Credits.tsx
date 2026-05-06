@@ -29,7 +29,7 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
           className="flex min-h-0 flex-col justify-between rounded-[34px] border border-white/10 bg-white/5 p-8"
         >
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Создатель
             </div>
 
@@ -55,7 +55,7 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
         >
           <div className="flex items-end justify-between gap-6">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Благодарности
               </div>
               <div className="mt-3 text-[24px] font-semibold text-slate-100">
@@ -70,24 +70,20 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
 
           <div className="mt-6 grid grid-cols-2 gap-4">
             {THANKS.map((name, idx) => (
-              <motion.div
+              <div
                 key={name}
-                initial={exporting ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{
-                  duration: 0.25,
-                  delay: exporting ? 0 : Math.min(0.22, 0.05 + idx * 0.03)
-                }}
-                className="min-w-0 rounded-[24px] border border-white/10 bg-black/20 px-5 py-5"
+                data-tip={`Спасибо · #${idx + 1}`}
+                style={{ animationDelay: exporting ? undefined : `${Math.min(0.22, 0.05 + idx * 0.03)}s` }}
+                className="min-w-0 tgwr-info-card rounded-[24px] border border-white/10 bg-black/20 px-5 py-5"
               >
-                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                   #{idx + 1}
                 </div>
 
                 <div className="mt-2 break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">
                   {name}
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         </motion.div>

@@ -38,8 +38,8 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
           <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{name}</div>
 
           <div className="mt-6 grid grid-cols-3 gap-6">
-            <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Всего сообщений
               </div>
               <div className="mt-2 text-[28px] font-bold text-slate-50">
@@ -47,8 +47,8 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Разница реплик
               </div>
               <div className="mt-2 text-[28px] font-bold text-slate-50">
@@ -56,8 +56,8 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
               </div>
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
-              <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Перекос диалога
               </div>
               <div className="mt-2 text-[28px] font-bold">
@@ -67,36 +67,36 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
           </div>
 
           {arr.length === 0 ? (
-            <div className="mt-8 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+            <div className="mt-8 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
               Пусто: этот рейтинг требует хотя бы 2000 сообщений с человеком и корректного is_out.
             </div>
           ) : (
-            <div className="mt-8 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+            <div className="mt-8 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
               Чем меньше процент — тем ровнее диалог.
             </div>
           )}
 
           <div className="mt-6 grid grid-cols-4 gap-4">
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">близко к 50/50</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">близко к 50/50</div>
               <div className="mt-2 text-[24px] font-bold text-slate-50">
                 <AnimatedNumber value={Math.round(symmetry)} exporting={exporting} duration={0.62} delay={0.34} />%
               </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">разница реплик</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">разница реплик</div>
               <div className="mt-2 text-[24px] font-bold text-slate-50">
                 <AnimatedNumber value={diff} exporting={exporting} duration={0.62} delay={0.38} />
               </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">минимум сообщений</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">минимум сообщений</div>
               <div className="mt-2 text-[24px] font-bold text-slate-50">
                 <AnimatedNumber value={minimum} exporting={exporting} duration={0.62} delay={0.42} />
               </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">активных дней</div>
+            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">активных дней</div>
               <div className="mt-2 text-[24px] font-bold text-slate-50">
                 <AnimatedNumber value={activeDays} exporting={exporting} duration={0.62} delay={0.46} />
               </div>

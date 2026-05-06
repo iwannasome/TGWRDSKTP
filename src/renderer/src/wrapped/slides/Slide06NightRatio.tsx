@@ -31,7 +31,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
             transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
             className="rounded-[40px] border border-white/10 bg-white/5 p-9"
           >
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               В процентах:
             </div>
             <div className="mt-4 text-[82px] font-bold leading-none">
@@ -56,7 +56,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
             transition={{ duration: 0.35, delay: exporting ? 0 : 0.12 }}
             className="rounded-[40px] border border-white/10 bg-white/5 p-9"
           >
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Количество:
             </div>
             <div className="mt-4 text-[76px] font-bold leading-none text-slate-50">
@@ -69,41 +69,41 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
         </div>
 
         <div className="mt-6 grid grid-cols-4 gap-4">
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Пиковый ночной час
             </div>
             <div className="mt-2 text-[28px] font-bold text-slate-50">{formatHour(getNumber(peakHour ?? {}, 'hour', 0))}</div>
-            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+            <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
               <AnimatedNumber value={getNumber(peakHour ?? {}, 'count', 0)} exporting={exporting} duration={0.58} delay={0.34} /> сообщений
             </div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               После полуночи
             </div>
             <div className="mt-2 text-[28px] font-bold text-slate-50">
               <AnimatedNumber value={postMidnight} exporting={exporting} duration={0.68} delay={0.38} />
             </div>
-            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">00:00-05:59</div>
+            <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">00:00-05:59</div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Самая ночная дата
             </div>
             <div className="mt-2 text-[17px] font-semibold leading-snug text-slate-100">
               {formatDateYYYYMMDD(getString(peakDate ?? {}, 'date', ''))}
             </div>
-            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+            <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
               <AnimatedNumber value={getNumber(peakDate ?? {}, 'count', 0)} exporting={exporting} duration={0.58} delay={0.42} /> сообщений
             </div>
           </div>
-          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Последний поздний час
             </div>
             <div className="mt-2 text-[28px] font-bold text-slate-50">{formatHour(getNumber(sleepBoundary ?? {}, 'hour', 0))}</div>
-            <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">последний активный</div>
+            <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">последний активный</div>
           </div>
         </div>
       </div>

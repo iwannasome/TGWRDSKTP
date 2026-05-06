@@ -16,8 +16,8 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
       title={<span className="tgwr-gradient-text font-semibold">Самые длинные сообщения</span>}
       subtitle="Топ-5 твоих самых массивных сообщений — красиво и по делу"
     >
-      <div className="flex h-full flex-col justify-center">
-        <div className="flex h-full flex-col gap-4">
+      <div className="flex h-full min-h-0 flex-col justify-center">
+        <div className="flex h-full min-h-0 flex-col gap-3.5">
           {topMessages.length === 0 ? (
             <motion.div
               initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
@@ -38,10 +38,13 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.30, delay: exporting ? 0 : Math.min(0.22, 0.04 + idx * 0.03) }}
                 className={[
-                  'overflow-hidden rounded-[36px] border px-7 py-6',
+                  'group flex min-h-[104px] flex-col overflow-hidden rounded-[36px] border px-7 py-5',
+                  exporting
+                    ? 'flex-1'
+                    : 'flex-1 transition-[flex,transform,border-color,background-color,box-shadow] duration-300 ease-out will-change-transform hover:flex-[2.65] hover:-translate-y-1',
                   idx === 0
-                    ? 'border-[rgba(var(--tgwr-accent1-rgb),0.28)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] shadow-[0_0_32px_rgba(var(--tgwr-accent1-rgb),0.10)]'
-                    : 'border-white/10 bg-white/5'
+                    ? 'border-[rgba(var(--tgwr-accent1-rgb),0.28)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] shadow-[0_0_32px_rgba(var(--tgwr-accent1-rgb),0.10)] hover:border-[rgba(var(--tgwr-accent1-rgb),0.46)] hover:shadow-[0_18px_60px_rgba(var(--tgwr-accent1-rgb),0.16)]'
+                    : 'border-white/10 bg-white/5 hover:border-[rgba(var(--tgwr-accent2-rgb),0.30)] hover:bg-white/[0.075] hover:shadow-[0_18px_54px_rgba(0,0,0,0.28)]'
                 ].join(' ')}
               >
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-5">
@@ -57,26 +60,33 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
 
                     <div className="min-w-0">
                       <div className="line-clamp-2 break-words text-[19px] font-semibold leading-tight text-slate-100">{msg.name}</div>
-                      <div className="mt-2 text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                      <div className="mt-2 text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                         Сообщение #{idx + 1}
                       </div>
                     </div>
                   </div>
 
-                  <div className="w-[104px] shrink-0 rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-right">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                  <div className="w-[104px] shrink-0 tgwr-info-card rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-right">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                       Length
                     </div>
                     <div className="mt-1 text-[22px] font-bold leading-none text-slate-50">
                       <AnimatedNumber value={msg.length} exporting={exporting} duration={0.58} delay={0.12 + idx * 0.03} />
                     </div>
-                    <div className="text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">chars</div>
+                    <div className="text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">chars</div>
                   </div>
                 </div>
 
-                <div className="mt-5 rounded-[28px] border border-white/10 bg-black/20 px-5 py-4">
-                  <div className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-[rgba(255,255,255,0.94)]">
-                    {ellipsize(msg.snippet, 180)}
+                <div
+                  className={[
+                    'min-h-0 rounded-[28px] border border-white/10 bg-black/20 px-5 transition-[margin,max-height,opacity,padding] duration-300 ease-out',
+                    exporting
+                      ? 'mt-4 max-h-[112px] overflow-hidden py-4 opacity-100'
+                      : 'mt-0 max-h-0 overflow-hidden py-0 opacity-0 group-hover:mt-4 group-hover:max-h-[300px] group-hover:overflow-y-auto group-hover:py-4 group-hover:opacity-100'
+                  ].join(' ')}
+                >
+                  <div className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-[rgba(255,255,255,0.94)] [overflow-wrap:anywhere]">
+                    {exporting ? ellipsize(msg.snippet, 220) : msg.snippet}
                   </div>
                 </div>
               </motion.div>

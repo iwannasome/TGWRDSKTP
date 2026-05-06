@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 import { formatInt, formatPercent01 } from './format'
 import { getPeriod, getTop10, getYearLabel, type PeriodKey } from './report'
-import { asNumber, asRecord, asString, getNumber, getString } from './safe'
+import { asString, getNumber, getString } from './safe'
 
 function formatTs(ts: number): string {
   if (!Number.isFinite(ts) || ts <= 0) return '—'
@@ -56,7 +56,7 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: string;
       <div className="flex items-baseline justify-between gap-6">
         <div>
           <div className="text-[18px] font-semibold text-slate-100">{title}</div>
-          {subtitle ? <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">{subtitle}</div> : null}
+          {subtitle ? <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">{subtitle}</div> : null}
         </div>
       </div>
       <div className="mt-5">{children}</div>
@@ -80,7 +80,7 @@ function Table({
               <th
                 key={h.key}
                 className={[
-                  'px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.8)]',
+                  'px-4 py-3 text-left text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.8)]',
                   h.right ? 'text-right' : ''
                 ].join(' ')}
               >
@@ -176,7 +176,7 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
         <div className="mx-auto max-w-[1320px]">
           <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-white/10 bg-[#05070a]/80 px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
                 Details
               </div>
               <div className="mt-2 text-[32px] font-bold text-slate-100">Топ-10 таблицы</div>
@@ -249,31 +249,9 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
               )}
             </Card>
 
-            <Card title="Debug" subtitle="Сырые куски отчёта (на случай странностей)">
-              <div className="grid gap-3">
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                    self_from_id
-                  </div>
-                  <div className="mt-2 font-mono text-sm text-slate-100">
-                    {(() => {
-                      const meta = asRecord((report as Record<string, unknown> | null)?.meta) ?? {}
-                      return asString(meta.self_from_id, '—') || '—'
-                    })()}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                    total_messages
-                  </div>
-                  <div className="mt-2 font-mono text-sm text-slate-100">{formatInt(asNumber(p.total_messages, 0))}</div>
-                </div>
-              </div>
-            </Card>
           </div>
 
-          <div className="mt-10 pb-8 text-center text-xs text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+          <div className="mt-10 pb-8 text-center text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
             TGWR · local only
           </div>
         </div>

@@ -7,6 +7,10 @@
   "license": "MIT",
   "main": "dist/main/index.js",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",

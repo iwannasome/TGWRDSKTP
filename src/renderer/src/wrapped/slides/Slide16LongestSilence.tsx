@@ -43,29 +43,29 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
 
           {s ? (
             <div className="mt-7 grid grid-cols-5 gap-4">
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">начало</div>
-                <div className="mt-2 text-[12px] font-semibold leading-snug text-slate-100">{s.fromDatetime || '—'}</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">начало</div>
+                <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">{s.fromDatetime || '—'}</div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">конец</div>
-                <div className="mt-2 text-[12px] font-semibold leading-snug text-slate-100">{s.toDatetime || '—'}</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">конец</div>
+                <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">{s.toDatetime || '—'}</div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дней тишины</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дней тишины</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
                   <AnimatedNumber value={s.calendarDays} exporting={exporting} duration={0.62} delay={0.3} />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дольше обычного</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дольше обычного</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
                   x<AnimatedNumber value={Math.round(s.gapVsMedianRatio)} exporting={exporting} duration={0.62} delay={0.34} />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">тип паузы</div>
-                <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">тип паузы</div>
+                <div className="mt-2 text-[14px] font-semibold leading-snug text-slate-100">
                   {s.calendarDays >= 30 ? 'исчезновение' : s.calendarDays >= 7 ? 'отпуск' : 'пауза'}
                 </div>
               </div>
@@ -73,7 +73,7 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
           ) : null}
 
           {!s && (
-            <div className="mt-8 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+            <div className="mt-8 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
               Нужно минимум два сообщения в чате.
             </div>
           )}

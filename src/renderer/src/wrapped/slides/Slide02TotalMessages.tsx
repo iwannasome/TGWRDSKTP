@@ -60,7 +60,7 @@ export default function Slide02TotalMessages({
           </div>
 
           <div className="mt-10">
-            <div className="select-none text-[13px] font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="select-none text-[14px] font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Всего сообщений · {periodLabel}
             </div>
 
@@ -87,9 +87,9 @@ export default function Slide02TotalMessages({
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.36, delay: exporting ? 0 : 0.24 }}
-            className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
+            className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
           >
-            <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               В активный день
             </div>
             <div className="mt-2 text-[34px] font-bold leading-none text-slate-50">
@@ -100,21 +100,21 @@ export default function Slide02TotalMessages({
                 delay={0.34}
               />
             </div>
-            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">сообщений в среднем</div>
+            <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">сообщений в среднем</div>
           </motion.div>
           <motion.div
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.36, delay: exporting ? 0 : 0.3 }}
-            className="rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
+            className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
           >
-            <div className="text-xs font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="text-[13px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Самый тихий месяц
             </div>
             <div className="mt-2 text-[18px] font-semibold leading-snug text-slate-100">
               {formatMonth(getString(quietestMonth ?? {}, 'value', ''))}
             </div>
-            <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+            <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
               <AnimatedNumber
                 value={getNumber(quietestMonth ?? {}, 'count', 0)}
                 exporting={exporting}

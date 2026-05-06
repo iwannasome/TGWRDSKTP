@@ -29,7 +29,7 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
-          <div className="text-[13px] font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+          <div className="text-[14px] font-semibold uppercase tracking-[0.42em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
             Самая длинная серия
           </div>
 
@@ -48,7 +48,7 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
 
           {personStreak ? (
             <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
-              <div className="text-[11px] uppercase tracking-[0.22em] text-white/50">
+              <div className="text-[12px] uppercase tracking-[0.22em] text-white/50">
                 Самый длинный стрик с человеком
               </div>
               <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
@@ -58,7 +58,7 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
                 </div>
               </div>
               {personStreak.start && personStreak.end ? (
-                <div className="mt-2 text-[12px] text-white/60">
+                <div className="mt-2 text-[13px] text-white/60">
                   {`${formatDateYYYYMMDD(personStreak.start)} → ${formatDateYYYYMMDD(personStreak.end)}`}
                 </div>
               ) : null}
@@ -67,30 +67,30 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
 
           {streak ? (
             <div className="mt-6 grid grid-cols-5 gap-4">
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">доля периода</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">доля периода</div>
                 <div className="mt-2 text-[20px] font-bold text-white">
                   <AnimatedNumber value={percentOfPeriod} exporting={exporting} duration={0.62} delay={0.36} format={formatPercent01} />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">общий стрик</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">общий стрик</div>
                 <div className="mt-2 text-[20px] font-bold text-white">
                   <AnimatedNumber value={streak.days} exporting={exporting} duration={0.62} delay={0.4} />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">стрик с человеком</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">стрик с человеком</div>
                 <div className="mt-2 text-[20px] font-bold text-white">
                   <AnimatedNumber value={personStreak?.lengthDays ?? 0} exporting={exporting} duration={0.62} delay={0.44} />
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">дата старта</div>
-                <div className="mt-2 text-[13px] font-semibold leading-snug text-white">{formatDateYYYYMMDD(streak.start)}</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">дата старта</div>
+                <div className="mt-2 text-[14px] font-semibold leading-snug text-white">{formatDateYYYYMMDD(streak.start)}</div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">второй стрик</div>
+              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">второй стрик</div>
                 <div className="mt-2 text-[20px] font-bold text-white">
                   <AnimatedNumber value={streak.runnerUpDays} exporting={exporting} duration={0.62} delay={0.48} />
                 </div>
@@ -99,7 +99,7 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
           ) : null}
 
           {!streak && (
-            <div className="mt-8 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+            <div className="mt-8 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
               Нужны корректные timestamp’ы сообщений.
             </div>
           )}

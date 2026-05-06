@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import React, { useMemo } from 'react'
 import SlideFrame from '../SlideFrame'
 import { clamp } from '../format'
@@ -41,24 +40,17 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
               </div>
             ) : (
               words.map((w, idx) => (
-                <motion.span
+                <span
                   key={`${w.word}-${idx}`}
-                  // На экспорте отключаем анимацию влета, чтобы не поймать пустой кадр
-                  initial={exporting ? { opacity: 0.92, y: 0 } : { opacity: 0, y: 8 }}
-                  animate={{ opacity: 0.92, y: 0 }}
-                  // Убираем ступенчатую задержку (stagger) для мгновенного рендера в файл
-                  transition={{
-                    duration: 0.25,
-                    delay: exporting ? 0 : Math.min(0.22, idx * 0.01)
-                  }}
+                  data-tip={`${w.word} · ${w.weight}`}
                   style={{
                     fontSize: `${sizeFor(w.weight)}px`,
                     lineHeight: 1,
                     letterSpacing: '0',
-                    transform: `translateZ(0)`
+                    animationDelay: exporting ? undefined : `${Math.min(0.22, idx * 0.01)}s`
                   }}
                   className={[
-                    'select-none font-semibold',
+                    'tgwr-word-token select-none font-semibold',
                     idx % 5 === 0
                       ? 'text-[rgba(var(--tgwr-accent1-rgb),0.95)]'
                       : idx % 7 === 0
@@ -67,7 +59,7 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
                   ].join(' ')}
                 >
                   {w.word}
-                </motion.span>
+                </span>
               ))
             )}
           </div>

@@ -154,7 +154,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
           >
             <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.18)] blur-[58px]" />
             <div className="relative flex h-full flex-col">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
                 максимум за месяц
               </div>
               <div className="mt-5 text-[86px] font-bold leading-none">
@@ -170,8 +170,8 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                 {month ? formatMonth(month.value) : 'Нет данных'}
               </div>
               <div className="mt-auto grid grid-cols-2 gap-3 pt-6">
-                <div className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     активных дней
                   </div>
                   <div className="mt-2 text-[28px] font-bold text-slate-50">
@@ -183,14 +183,14 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                     />
                   </div>
                 </div>
-                <div className="rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     пик дня
                   </div>
                   <div className="mt-2 text-[28px] font-bold text-slate-50">
                     {peakDay?.value ? formatDateYYYYMMDD(peakDay.value).slice(0, 5) : '—'}
                   </div>
-                  <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+                  <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
                     {peakDay ? (
                       <>
                         <AnimatedNumber
@@ -214,13 +214,13 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.1 }}
-            className="rounded-[28px] border border-white/10 bg-white/5 p-5"
+            className="tgwr-info-card rounded-[28px] border border-white/10 bg-white/5 p-5"
           >
-            <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
               интенсивность
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">low</span>
+              <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">low</span>
               {legend.map((level) => (
                 <div
                   key={level}
@@ -228,7 +228,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                   style={{ background: heatFill(level) }}
                 />
               ))}
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">high</span>
+              <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">high</span>
             </div>
           </motion.div>
         </div>
@@ -241,12 +241,9 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
         >
           <div className="flex items-end justify-between gap-6">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
-                calendar poster
-              </div>
-              <div className="mt-2 text-[22px] font-semibold text-slate-100">12 месяцев активности</div>
+              <div className="text-[22px] font-semibold text-slate-100">12 месяцев активности</div>
             </div>
-            <div className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-4 py-2 text-[12px] font-semibold text-slate-100">
+            <div className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-4 py-2 text-[13px] font-semibold text-slate-100">
               подсветка · {month ? formatMonth(month.value) : '—'}
             </div>
           </div>
@@ -264,7 +261,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                       : 'border-white/10 bg-black/[0.12]'
                   ].join(' ')}
                 >
-                  <div className="text-[12px] font-bold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
+                  <div className="text-[13px] font-bold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
                     {row.label}
                   </div>
                   <div className="grid min-w-0 grid-cols-[repeat(31,minmax(0,1fr))] gap-1.5">
@@ -276,37 +273,23 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                           key={dayIndex}
                           className="group relative aspect-square"
                         >
-                          <motion.div
+                          <div
                             className={[
-                              'h-full w-full rounded-[5px] border border-white/[0.04]',
-                              day && !exporting ? 'cursor-default' : ''
+                              'tgwr-heat-cell h-full w-full rounded-[5px] border border-white/[0.04]',
+                              day ? 'cursor-default' : 'opacity-0',
+                              day && !exporting ? 'tgwr-heat-cell-animate' : ''
                             ].join(' ')}
-                            initial={exporting ? { opacity: day ? 1 : 0, scale: 1 } : { opacity: 0, scale: 0.72 }}
-                            animate={{ opacity: day ? 1 : 0, scale: 1 }}
-                            whileHover={
-                              day && !exporting
-                                ? {
-                                    scale: 1.82,
-                                    boxShadow: '0 0 18px rgba(var(--tgwr-accent2-rgb),0.48)',
-                                    borderColor: 'rgba(255,255,255,0.30)'
-                                  }
-                                : undefined
-                            }
-                            transition={{
-                              duration: exporting ? 0 : 0.22,
-                              delay: exporting ? 0 : 0.18 + row.month * 0.018 + dayIndex * 0.004
-                            }}
                             style={{
                               background: day ? heatFill(level) : 'transparent',
-                              transformOrigin: 'center'
+                              animationDelay: day && !exporting ? `${0.18 + row.month * 0.018 + dayIndex * 0.004}s` : undefined
                             }}
                           />
                           {day && !exporting ? (
                             <div className="tgwr-mini-tooltip">
-                              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
+                              <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/55">
                                 {formatDateYYYYMMDD(day.date)}
                               </div>
-                              <div className="mt-1 text-[13px] font-bold text-slate-50">
+                              <div className="mt-1 text-[14px] font-bold text-slate-50">
                                 {formatInt(day.count)} сообщений
                               </div>
                             </div>
@@ -321,14 +304,14 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                       className="mt-1 h-1 overflow-hidden rounded-full bg-white/10"
                       aria-hidden="true"
                     >
-                      <motion.div
-                        className="h-full rounded-full bg-[linear-gradient(90deg,rgba(var(--tgwr-accent1-rgb),0.80),rgba(var(--tgwr-accent2-rgb),0.84))]"
-                        initial={exporting ? { width: `${Math.max(4, (row.total / maxMonthTotal) * 100)}%` } : { width: 0 }}
-                        animate={{ width: `${Math.max(4, (row.total / maxMonthTotal) * 100)}%` }}
-                        transition={{
-                          duration: exporting ? 0 : 0.42,
-                          delay: exporting ? 0 : 0.24 + row.month * 0.025,
-                          ease: [0.18, 0.86, 0.32, 1]
+                      <div
+                        className={[
+                          'tgwr-month-total-bar h-full rounded-full bg-[linear-gradient(90deg,rgba(var(--tgwr-accent1-rgb),0.80),rgba(var(--tgwr-accent2-rgb),0.84))]',
+                          exporting ? '' : 'tgwr-month-total-bar-animate'
+                        ].join(' ')}
+                        style={{
+                          width: `${Math.max(4, (row.total / maxMonthTotal) * 100)}%`,
+                          animationDelay: exporting ? undefined : `${0.24 + row.month * 0.025}s`
                         }}
                       />
                     </div>
