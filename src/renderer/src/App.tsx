@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DetailsView from './wrapped/DetailsView'
+import PeopleView from './wrapped/PeopleView'
 import SlidesView from './wrapped/SlidesView'
 import type { PeriodKey } from './wrapped/report'
 import type { ThemeId } from './wrapped/slideTypes'
@@ -97,7 +98,7 @@ function isScreenshotMode(): boolean {
 export default function App(): JSX.Element {
   const [theme, setTheme] = useState<ThemeId>(() => loadThemeFromStorage())
   const [period, setPeriod] = useState<PeriodKey>('year')
-  const [view, setView] = useState<'setup' | 'slides' | 'details'>('setup')
+  const [view, setView] = useState<'setup' | 'slides' | 'details' | 'people'>('setup')
 
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus>({
     status: 'fail',
@@ -530,6 +531,7 @@ export default function App(): JSX.Element {
           period={period}
           onPeriodToggle={togglePeriod}
           onOpenDetails={() => setView('details')}
+          onOpenPeople={() => setView('people')}
           theme={theme}
           onThemeChange={setTheme}
         />
@@ -538,7 +540,25 @@ export default function App(): JSX.Element {
 
     if (report && view === 'details') {
       return (
-        <DetailsView report={report} period={period} onPeriodToggle={togglePeriod} onClose={() => setView('slides')} />
+        <DetailsView
+          report={report}
+          period={period}
+          onPeriodToggle={togglePeriod}
+          onClose={() => setView('slides')}
+          onOpenPeople={() => setView('people')}
+        />
+      )
+    }
+
+    if (report && view === 'people') {
+      return (
+        <PeopleView
+          report={report}
+          period={period}
+          onPeriodToggle={togglePeriod}
+          onClose={() => setView('slides')}
+          onOpenDetails={() => setView('details')}
+        />
       )
     }
 

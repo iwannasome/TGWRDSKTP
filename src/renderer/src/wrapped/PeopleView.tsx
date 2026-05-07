@@ -1,0 +1,421 @@
+import React, { useEffect, useMemo, useState } from 'react'
+import {
+  clamp,
+  ellipsize,
+  formatDateYYYYMMDD,
+  formatHour,
+  formatInt,
+  formatMonth,
+  formatPercent01,
+  formatSecondsHuman
+} from './format'
+import {
+  getPeopleAnalytics,
+  getYearLabel,
+  type PersonAnalytics,
+  type PersonPeriodAnalytics,
+  type PeriodKey
+} from './report'
+
+type Props = {
+  report: unknown
+  period: PeriodKey
+  onClose: () => void
+  onOpenDetails: () => void
+  onPeriodToggle: () => void
+}
+
+const mediaLabels: Record<string, string> = {
+  photo: 'Фото',
+  video: 'Видео',
+  voice: 'Voice',
+  sticker: 'Стикеры',
+  gif: 'GIF',
+  file: 'Файлы',
+  other: 'Другое'
+}
+
+function periodData(person: PersonAnalytics, period: PeriodKey): PersonPeriodAnalytics | null {
+  return person.periods[period] ?? person.periods.all_time ?? person.periods.year ?? null
+}
+
+function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: string; onToggle: () => void }): JSX.Element {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+      <button
+        type="button"
+        onClick={period === 'all_time' ? undefined : onToggle}
+        className={[
+          'rounded-full px-4 py-2 text-sm font-semibold transition',
+          period === 'all_time'
+            ? 'bg-white/10 text-slate-50'
+            : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
+        ].join(' ')}
+      >
+        All-time
+      </button>
+      <button
+        type="button"
+        onClick={period === 'year' ? undefined : onToggle}
+        className={[
+          'rounded-full px-4 py-2 text-sm font-semibold transition',
+          period === 'year'
+            ? 'bg-white/10 text-slate-50'
+            : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
+        ].join(' ')}
+      >
+        {year}
+      </button>
+    </div>
+  )
+}
+
+function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }): JSX.Element {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_16px_55px_rgba(0,0,0,0.24)]">
+      <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+        {label}
+      </div>
+      <div className="mt-2 break-words text-[24px] font-bold leading-tight text-slate-100">{value}</div>
+      {hint ? <div className="mt-1 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.82)]">{hint}</div> : null}
+    </div>
+  )
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+      <div className="text-[18px] font-semibold text-slate-100">{title}</div>
+      <div className="mt-5">{children}</div>
+    </section>
+  )
+}
+
+function EmptyBlock({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+      {children}
+    </div>
+  )
+}
+
+export default function PeopleView({ report, period, onClose, onOpenDetails, onPeriodToggle }: Props): JSX.Element {
+  const year = getYearLabel(report)
+  const people = useMemo(() => getPeopleAnalytics(report), [report])
+  const [query, setQuery] = useState('')
+  const [selectedPeer, setSelectedPeer] = useState('')
+
+  const visiblePeople = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return people
+      .filter((person) => {
+        if (!q) return true
+        return `${person.displayName} ${person.peerFromId}`.toLowerCase().includes(q)
+      })
+      .sort((a, b) => {
+        const aData = periodData(a, period)
+        const bData = periodData(b, period)
+        return (bData?.totalMessages ?? 0) - (aData?.totalMessages ?? 0)
+      })
+  }, [people, period, query])
+
+  useEffect(() => {
+    if (visiblePeople.length === 0) {
+      setSelectedPeer('')
+      return
+    }
+    if (!visiblePeople.some((person) => person.peerFromId === selectedPeer)) {
+      setSelectedPeer(visiblePeople[0].peerFromId)
+    }
+  }, [selectedPeer, visiblePeople])
+
+  const selectedPerson = visiblePeople.find((person) => person.peerFromId === selectedPeer) ?? visiblePeople[0] ?? null
+  const selected = selectedPerson ? periodData(selectedPerson, period) : null
+
+  const monthBars = useMemo(() => {
+    if (!selected) return []
+    return selected.monthActivity.slice(-12)
+  }, [selected])
+
+  const maxMonth = Math.max(1, ...monthBars.map((item) => item.count))
+  const maxHour = Math.max(1, ...(selected?.hourlyActivity ?? []).map((item) => item.count))
+  const balanceSent = selected ? clamp(selected.sentRatio * 100, 0, 100) : 0
+  const balanceReceived = selected ? clamp(selected.receivedRatio * 100, 0, 100) : 0
+  const mediaEntries = selected
+    ? Object.entries(selected.mediaCounts).filter(([, count]) => count > 0)
+    : []
+  const maxMedia = Math.max(1, ...mediaEntries.map(([, count]) => count))
+
+  return (
+    <div className="relative h-full w-full overflow-hidden">
+      <div className="absolute inset-0 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1440px]">
+          <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-white/10 bg-[#05070a]/80 px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+            <div>
+              <div className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
+                People analytics
+              </div>
+              <div className="mt-2 text-[32px] font-bold text-slate-100">Аналитика по человеку</div>
+              <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
+                {formatInt(people.length)} диалогов в отчете
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <PeriodTabs period={period} year={year} onToggle={onPeriodToggle} />
+              <button
+                type="button"
+                onClick={onOpenDetails}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+              >
+                Таблицы
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+              >
+                Назад
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <aside className="min-h-0 rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_20px_70px_rgba(0,0,0,0.28)] xl:sticky xl:top-[116px] xl:max-h-[calc(100vh-140px)]">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Поиск"
+                className="w-full rounded-full border border-white/10 bg-black/25 px-4 py-2.5 text-sm font-semibold text-slate-100 outline-none transition placeholder:text-[rgba(var(--tgwr-muted-rgb),0.55)] focus:border-[rgba(var(--tgwr-accent1-rgb),0.45)]"
+              />
+
+              <div className="mt-4 max-h-[calc(100vh-220px)] space-y-2 overflow-auto pr-1">
+                {visiblePeople.length === 0 ? (
+                  <EmptyBlock>Ничего не найдено.</EmptyBlock>
+                ) : (
+                  visiblePeople.map((person, idx) => {
+                    const p = periodData(person, period)
+                    const active = person.peerFromId === selectedPerson?.peerFromId
+                    return (
+                      <button
+                        key={person.peerFromId || idx}
+                        type="button"
+                        onClick={() => setSelectedPeer(person.peerFromId)}
+                        className={[
+                          'w-full rounded-xl border p-3 text-left transition',
+                          active
+                            ? 'border-[rgba(var(--tgwr-accent1-rgb),0.34)] bg-[rgba(var(--tgwr-accent1-rgb),0.12)]'
+                            : 'border-white/10 bg-black/16 hover:bg-white/[0.06]'
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold text-slate-100">{person.displayName || person.peerFromId}</div>
+                            <div className="mt-1 truncate font-mono text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.64)]">
+                              {person.peerFromId || '—'}
+                            </div>
+                          </div>
+                          <div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[12px] font-bold text-slate-200">
+                            #{idx + 1}
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+                          <span>{formatInt(p?.totalMessages ?? 0)}</span>
+                          <span>{p ? formatPercent01(p.sentRatio) : '—'} sent</span>
+                        </div>
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </aside>
+
+            <main className="min-w-0">
+              {!selected ? (
+                <EmptyBlock>В отчете нет данных по людям.</EmptyBlock>
+              ) : (
+                <div className="grid gap-5">
+                  <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+                    <div className="flex flex-wrap items-start justify-between gap-5">
+                      <div className="min-w-0">
+                        <div className="break-words text-[30px] font-bold leading-tight text-slate-100">
+                          {selected.displayName}
+                        </div>
+                        <div className="mt-2 break-all font-mono text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
+                          {selected.peerFromId}
+                        </div>
+                      </div>
+                      <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100">
+                        {period === 'year' ? year : 'All-time'}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <MetricCard label="Сообщения" value={formatInt(selected.totalMessages)} hint={`${formatInt(selected.activeDays)} активных дней`} />
+                      <MetricCard label="Ты / собеседник" value={`${formatPercent01(selected.sentRatio)} / ${formatPercent01(selected.receivedRatio)}`} hint={`${formatInt(selected.sentMessages)} / ${formatInt(selected.receivedMessages)}`} />
+                      <MetricCard label="Ответы" value={formatSecondsHuman(selected.yourMedianReplySeconds)} hint={`${formatInt(selected.yourReplySamples)} замеров твоих ответов`} />
+                      <MetricCard label="Период" value={formatInt(selected.timeSpanDays || selected.activeDays)} hint={`${formatDateYYYYMMDD(selected.firstDate)} — ${formatDateYYYYMMDD(selected.lastDate)}`} />
+                    </div>
+
+                    <div className="mt-5 overflow-hidden rounded-xl border border-white/10 bg-black/25">
+                      <div className="flex h-3 w-full">
+                        <div className="bg-[rgba(var(--tgwr-accent1-rgb),0.82)]" style={{ width: `${balanceSent}%` }} />
+                        <div className="bg-[rgba(var(--tgwr-accent2-rgb),0.72)]" style={{ width: `${balanceReceived}%` }} />
+                      </div>
+                      <div className="flex flex-wrap justify-between gap-3 px-4 py-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+                        <span>sent · {formatInt(selected.sentMessages)}</span>
+                        <span>recv · {formatInt(selected.receivedMessages)}</span>
+                        <span>diff · {formatInt(selected.mutualityAbsDiff)}</span>
+                      </div>
+                    </div>
+                  </section>
+
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <Panel title="Динамика по месяцам">
+                      {monthBars.length === 0 ? (
+                        <EmptyBlock>Нет помесячной детализации.</EmptyBlock>
+                      ) : (
+                        <div className="flex h-60 items-end gap-2">
+                          {monthBars.map((item) => (
+                            <div key={item.value} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                              <div className="w-full rounded-t-lg bg-[linear-gradient(180deg,rgba(var(--tgwr-accent1-rgb),0.78),rgba(var(--tgwr-accent2-rgb),0.42))]" style={{ height: `${Math.max(8, (item.count / maxMonth) * 190)}px` }} />
+                              <div className="max-w-full truncate text-[12px] font-semibold text-[rgba(var(--tgwr-muted-rgb),0.74)]">
+                                {formatMonth(item.value).split(' ')[0].slice(0, 3)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Panel>
+
+                    <Panel title="Активность по часам">
+                      <div className="grid grid-cols-6 gap-2 sm:grid-cols-8 lg:grid-cols-12">
+                        {selected.hourlyActivity.map((item) => {
+                          const opacity = clamp(item.count / maxHour, 0.08, 1)
+                          return (
+                            <div
+                              key={item.hour}
+                              className="rounded-xl border border-white/10 p-2 text-center"
+                              style={{ background: `rgba(var(--tgwr-accent1-rgb),${0.08 + opacity * 0.36})` }}
+                            >
+                              <div className="text-[12px] font-bold text-slate-100">{String(item.hour).padStart(2, '0')}</div>
+                              <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">{formatInt(item.count)}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="mt-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.88)]">
+                        Пик: {selected.peakHour ? `${formatHour(selected.peakHour.hour)} · ${formatInt(selected.peakHour.count)}` : '—'}
+                      </div>
+                    </Panel>
+                  </div>
+
+                  <div className="grid gap-5 xl:grid-cols-3">
+                    <Panel title="Инициатива">
+                      <div className="grid gap-3">
+                        <MetricCard label="Дней начато тобой" value={formatInt(selected.daysStartedByYou)} />
+                        <MetricCard label="Дней начато им/ей" value={formatInt(selected.daysStartedByThem)} />
+                        <MetricCard label="Твоя доля" value={formatPercent01(selected.youInitiatedRatio)} hint={`${formatInt(selected.initiatedDays)} дней с первым сообщением`} />
+                      </div>
+                    </Panel>
+
+                    <Panel title="Ответы">
+                      <div className="grid gap-3">
+                        <MetricCard label="Ты отвечаешь" value={formatSecondsHuman(selected.yourMedianReplySeconds)} hint={`${formatInt(selected.yourReplySamples)} samples`} />
+                        <MetricCard label="Тебе отвечают" value={formatSecondsHuman(selected.theirMedianReplySeconds)} hint={`${formatInt(selected.theirReplySamples)} samples`} />
+                        <MetricCard label="Ночь" value={formatPercent01(selected.nightRatio)} hint={`${formatInt(selected.nightMessages)} сообщений 00:00—05:59`} />
+                      </div>
+                    </Panel>
+
+                    <Panel title="Медиа">
+                      {mediaEntries.length === 0 ? (
+                        <EmptyBlock>Медиа не найдено.</EmptyBlock>
+                      ) : (
+                        <div className="space-y-3">
+                          {mediaEntries.map(([key, count]) => (
+                            <div key={key}>
+                              <div className="flex items-center justify-between gap-3 text-[13px] text-slate-100">
+                                <span>{mediaLabels[key] ?? key}</span>
+                                <span className="tabular-nums">{formatInt(count)}</span>
+                              </div>
+                              <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/5">
+                                <div className="h-full rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.66)]" style={{ width: `${Math.max(5, (count / maxMedia) * 100)}%` }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Panel>
+                  </div>
+
+                  <div className="grid gap-5 xl:grid-cols-2">
+                    <Panel title="Слова и эмодзи">
+                      <div className="grid gap-5 lg:grid-cols-2">
+                        <div>
+                          <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                            Words
+                          </div>
+                          {selected.topWords.length === 0 ? (
+                            <EmptyBlock>Нет слов.</EmptyBlock>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {selected.topWords.slice(0, 16).map((item) => (
+                                <span key={item.word} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[13px] font-semibold text-slate-100">
+                                  {item.word} · {formatInt(item.count)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                            Emoji
+                          </div>
+                          {selected.topEmojis.length === 0 ? (
+                            <EmptyBlock>Нет эмодзи.</EmptyBlock>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {selected.topEmojis.slice(0, 16).map((item) => (
+                                <span key={item.emoji} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[18px] font-semibold text-slate-100">
+                                  {item.emoji} <span className="text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.8)]">{formatInt(item.count)}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </Panel>
+
+                    <Panel title="Самые длинные сообщения">
+                      {selected.topLongestMessages.length === 0 ? (
+                        <EmptyBlock>Длинные текстовые сообщения не найдены.</EmptyBlock>
+                      ) : (
+                        <div className="space-y-3">
+                          {selected.topLongestMessages.map((item, idx) => (
+                            <div key={`${item.dateTs}-${idx}`} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+                                <span>{item.direction === 'out' ? 'Ты' : item.direction === 'in' ? 'Собеседник' : 'Сообщение'}</span>
+                                <span>{formatInt(item.lengthChars)} chars</span>
+                              </div>
+                              <div className="mt-2 break-words text-[14px] leading-relaxed text-slate-100/90">
+                                {ellipsize(item.snippet, 220)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Panel>
+                  </div>
+
+                  <div className="pb-8 text-center text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                    TGWR · local only
+                  </div>
+                </div>
+              )}
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -62,6 +62,7 @@ type SlidesViewProps = {
   period: PeriodKey
   onPeriodToggle: () => void
   onOpenDetails: () => void
+  onOpenPeople: () => void
   theme: ThemeId
   onThemeChange: (t: ThemeId) => void
 }
@@ -122,7 +123,7 @@ async function capturePngBytes(node: HTMLElement): Promise<Uint8Array> {
 }
 
 export default function SlidesView({
-  report, period, onPeriodToggle, onOpenDetails, theme, onThemeChange
+  report, period, onPeriodToggle, onOpenDetails, onOpenPeople, theme, onThemeChange
 }: SlidesViewProps): JSX.Element {
   const parsed = useMemo(() => asReport(report), [report])
   const year = getYearLabel(report)
@@ -347,6 +348,16 @@ export default function SlidesView({
             className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
             Детали
+          </motion.button>
+
+          <motion.button
+            type="button"
+            onClick={onOpenPeople}
+            whileHover={{ scale: 1.035 }}
+            whileTap={{ scale: 0.965 }}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
+          >
+            Люди
           </motion.button>
 
           <div className="h-4 w-[1px] bg-white/20 md:h-[1px] md:w-full" />

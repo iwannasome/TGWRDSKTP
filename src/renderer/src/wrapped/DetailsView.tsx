@@ -16,6 +16,7 @@ type Props = {
   report: unknown
   period: PeriodKey
   onClose: () => void
+  onOpenPeople: () => void
   onPeriodToggle: () => void
 }
 
@@ -111,7 +112,7 @@ function Table({
   )
 }
 
-export default function DetailsView({ report, period, onClose, onPeriodToggle }: Props): JSX.Element {
+export default function DetailsView({ report, period, onClose, onOpenPeople, onPeriodToggle }: Props): JSX.Element {
   const year = getYearLabel(report)
   const p = getPeriod(report, period)
 
@@ -187,6 +188,13 @@ export default function DetailsView({ report, period, onClose, onPeriodToggle }:
 
             <div className="flex items-center gap-3">
               <PeriodTabs period={period} year={year} onToggle={onPeriodToggle} />
+              <button
+                type="button"
+                onClick={onOpenPeople}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+              >
+                Люди
+              </button>
               <button
                 type="button"
                 onClick={onClose}

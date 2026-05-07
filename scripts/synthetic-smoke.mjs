@@ -228,7 +228,12 @@ function assertReport(report) {
     ['reply_thresholds', year?.who_you_reply_fastest?.minimum_messages_required === 2500 && year?.who_you_ignore_most?.minimum_messages_required === 3000],
     ['emoji_metrics', typeof year?.messages_with_emoji_count === 'number' && typeof year?.emoji_streak_max_messages === 'number'],
     ['media_insights', Boolean(year?.top_media_type?.type && year?.most_media_month?.value)],
-    ['day_night_person_details', Boolean(year?.day_person?.day_peak_hour && year?.night_person?.night_peak_hour)]
+    ['day_night_person_details', Boolean(year?.day_person?.day_peak_hour && year?.night_person?.night_peak_hour)],
+    ['people_analytics', report?.people_analytics?.length >= 2],
+    ['people_analytics_year', Boolean(report?.people_analytics?.[0]?.periods?.year?.month_activity?.length)],
+    ['people_analytics_hours', report?.people_analytics?.[0]?.periods?.year?.hourly_activity?.length === 24],
+    ['people_analytics_words', report?.people_analytics?.[0]?.periods?.year?.top_words?.length > 0],
+    ['people_analytics_bounded', report?.people_analytics?.length <= 50]
   ]
 
   const failed = required.filter(([, ok]) => !ok).map(([name]) => name)
@@ -247,6 +252,7 @@ function makeEmptyReport(baseReport) {
   }
   report.achievements = []
   report.top_people = []
+  report.people_analytics = []
 
   for (const periodKey of ['all_time', 'year']) {
     report.periods[periodKey] = {
@@ -474,8 +480,59 @@ function renderHarnessHtml(report, assets, slideIndex) {
         };
         tick();
       }
+      function findButtonByText(text) {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        return buttons.find((button) => (button.textContent || '').trim() === text) || null;
+      }
+      function runPeopleViewCheck() {
+        const deadline = Date.now() + 7000;
+        let openedExisting = false;
+        let clickedPeople = false;
+        const tick = () => {
+          const root = document.querySelector('[data-tgwr-view]');
+          const view = root && root.getAttribute('data-tgwr-view');
+
+          if (!openedExisting) {
+            const openOld = findButtonByText('Открыть старый');
+            if (openOld) {
+              openedExisting = true;
+              openOld.click();
+              setTimeout(tick, 80);
+              return;
+            }
+          }
+
+          if (view === 'slides' && !clickedPeople) {
+            const peopleButton = findButtonByText('Люди');
+            if (peopleButton) {
+              clickedPeople = true;
+              peopleButton.click();
+              setTimeout(tick, 80);
+              return;
+            }
+          }
+
+          if (view === 'people' && document.body.textContent.includes('Аналитика по человеку')) {
+            document.body.setAttribute('data-people-check', 'ok');
+            return;
+          }
+
+          if (Date.now() > deadline) {
+            document.body.setAttribute('data-people-check', 'fail:' + view);
+            showHarnessError('People view check failed. Current view: ' + view + ', clickedPeople=' + clickedPeople);
+            return;
+          }
+
+          setTimeout(tick, 80);
+        };
+        tick();
+      }
       function waitForSlidesReady() {
         const deadline = Date.now() + 7000;
+        if (new URLSearchParams(window.location.search).get('tgwr_people_check') === '1') {
+          runPeopleViewCheck();
+          return;
+        }
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
           if (root && root.getAttribute('data-tgwr-view') === 'slides') {
@@ -657,6 +714,62 @@ async function runNavigationStress(report) {
   }
 }
 
+async function runPeopleViewSmoke(report) {
+  const chrome = findChrome()
+  if (!chrome) {
+    console.log('people_view=skipped chrome_not_found')
+    return
+  }
+
+  const harness = await startHarnessServer(report)
+  try {
+    const pageUrl = `${harness.origin}/?tgwr_people_check=1`
+    const res = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--virtual-time-budget=12000',
+      '--dump-dom',
+      pageUrl
+    ], 30_000)
+
+    if (res.code !== 0) {
+      const reason = res.stderr || res.stdout
+      throw new Error(`Chrome people view check failed: ${reason}`)
+    }
+    if (!res.stdout.includes('data-people-check="ok"') || !res.stdout.includes('data-tgwr-view="people"')) {
+      throw new Error('People view smoke did not reach people analytics')
+    }
+    if (!res.stdout.includes('Аналитика по человеку')) {
+      throw new Error('People view smoke did not render the analytics heading')
+    }
+
+    const screenshotPath = join(screenshotsDir, 'people-view.png')
+    const shot = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      '--window-size=1360,900',
+      '--virtual-time-budget=12000',
+      `--screenshot=${screenshotPath}`,
+      pageUrl
+    ], 30_000)
+
+    if (shot.code !== 0) {
+      const reason = shot.stderr || shot.stdout
+      throw new Error(`Chrome people view screenshot failed: ${reason}`)
+    }
+
+    const info = await stat(screenshotPath)
+    if (info.size < 25_000) throw new Error(`People view screenshot looks too small: ${screenshotPath} (${info.size} bytes)`)
+
+    console.log(`people_view=ok screenshot=${screenshotPath} bytes=${info.size}`)
+  } finally {
+    await new Promise((resolvePromise) => harness.server.close(resolvePromise))
+  }
+}
+
 async function main() {
   if (!existsSync(join(root, 'dist/renderer/index.html'))) {
     throw new Error('dist/renderer/index.html not found. Run npm run build first.')
@@ -679,6 +792,7 @@ async function main() {
     ...(await runScreenshots(makeExtremeReport(report), { label: 'extreme', targets: [1, 7, 10, 13, 18] }))
   ]
   await runNavigationStress(report)
+  await runPeopleViewSmoke(report)
 
   console.log(`synthetic_export=${exportDir}`)
   console.log(`db=${dbPath}`)

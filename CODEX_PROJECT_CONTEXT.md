@@ -13,7 +13,7 @@ Main user flow:
 3. Electron starts a Python worker and sends an import command.
 4. Worker scans/parses chats, writes a local SQLite database, computes metrics, and writes `report.json`.
 5. React renderer loads the report and displays a slide-based Wrapped experience.
-6. User can switch period/theme, inspect details tables, and export slides as PNG or PDF.
+6. User can switch period/theme, inspect details tables or people analytics, and export slides as PNG or PDF.
 
 The README says the current app targets personal/private chats and skips group chats for personal stats.
 
@@ -75,7 +75,7 @@ The app has three runtime layers:
    - Normalizes IPC responses for the renderer.
 
 3. React renderer:
-   - Shows setup/import state, slides view, and details view.
+   - Shows setup/import state, slides view, details view, and people analytics view.
    - Sends worker commands through `window.tgwr.sendWorker`.
    - Receives worker/main events through `window.tgwr.onWorkerEvent`.
    - Exports slide DOM to PNG/PDF using renderer libraries and asks main to write files.
@@ -167,7 +167,7 @@ Top-level app state in `App.tsx`:
 
 - Theme: `neon`, `cyber`, or `midnight`, persisted in `localStorage` as `tgwr_theme`.
 - Period: `year` or `all_time`.
-- View: `setup`, `slides`, or `details`.
+- View: `setup`, `slides`, `details`, or `people`.
 - Worker status and last worker event.
 - Import progress/summary/error.
 - Report build progress/error.
@@ -189,6 +189,7 @@ Core files:
 
 - `SlidesView.tsx`: slide navigator, keyboard/wheel navigation, export PNG/PDF.
 - `DetailsView.tsx`: details tables for top people metrics.
+- `PeopleView.tsx`: searchable per-person analytics dashboard.
 - `SlideFrame.tsx`: shared slide frame/layout wrapper.
 - `AnimatedNumber.tsx`: animated numeric display component.
 - `report.ts`: safe report selectors and normalization helpers.
@@ -519,11 +520,11 @@ Checks that passed repeatedly during this session:
 - `npm run test:synthetic`
 - `TGWR_SMOKE_ALL_SLIDES=1 npm run test:synthetic`
 
-Known packaging blocker discovered:
+Packaging note:
 
-- `npm run pack` / electron-builder directory packaging fails because electron-builder's npm dependency collector receives no JSON from an npm command.
-- The issue was reproducible around `spawn('npm', args, { shell: true })` producing empty stdout in this environment.
-- Treat this as a release blocker until packaging is debugged. Do not assume the app is fully releasable just because typecheck/build/synthetic pass.
+- An older session saw `npm run pack` fail in this environment around electron-builder dependency collection.
+- As of the defense-prep commits on 2026-05-07, `npm run pack` passes and creates `release/linux-unpacked`.
+- Still rerun `npm run pack` after any packaging, dependency, worker, or renderer contract change.
 
 ### Working With Current Dirty Tree
 
@@ -564,6 +565,44 @@ Rules of thumb:
 - When changing worker output, update synthetic smoke assertions for important behavior.
 - When changing slide registration, check both interactive navigation and export.
 - Avoid editing generated `dist/` or `release/` unless the task is explicitly about generated artifacts.
+
+## Codex Change Log
+
+### 2026-05-07 - Completed: detailed analytics by person
+
+User request: add a careful, non-breaking "analytics by specific person" feature and keep logging project changes here.
+
+Implemented direction:
+
+- Worker adds a new `people_analytics` report block while preserving existing `periods`, `top_people`, and slide-facing metrics.
+- Renderer adds a separate `people` view instead of changing the wrapped slides themselves.
+- `report.ts` normalizes new detailed person analytics and falls back to existing `top_people` so old `report.json` files still open.
+- `SlidesView.tsx` gets a new `Люди` navigation button next to `Детали`.
+- `DetailsView.tsx` also links to `Люди`.
+- `App.tsx` extends view switching with `people`.
+- New UI file: `src/renderer/src/wrapped/PeopleView.tsx`.
+- Synthetic smoke now validates `people_analytics`, clicks through to the people screen, and captures a people-view screenshot.
+
+Files changed so far in this feature:
+
+- `worker/tgwr_worker.py`: adds `PERSON_ANALYTICS_LIMIT`, `_person_period_analytics`, `_people_analytics`, and writes `people_analytics` into `report.json`.
+- `src/renderer/src/wrapped/report.ts`: adds `PersonAnalytics` types and `getPeopleAnalytics` normalization helpers.
+- `src/renderer/src/wrapped/PeopleView.tsx`: new dashboard-style person analytics screen.
+- `src/renderer/src/wrapped/SlidesView.tsx`: adds `onOpenPeople` prop and `Люди` button.
+- `src/renderer/src/wrapped/DetailsView.tsx`: adds `onOpenPeople` prop and `Люди` button.
+- `src/renderer/src/App.tsx`: imports `PeopleView` and adds `people` route state.
+- `scripts/synthetic-smoke.mjs`: asserts new people analytics fields and verifies people screen DOM/screenshot rendering.
+- `CODEX_PROJECT_CONTEXT.md`: this changelog entry.
+
+Validation completed during implementation:
+
+- `npm run typecheck` passed.
+- `python3 -m py_compile worker/tgwr_worker.py` passed.
+- `node --check scripts/synthetic-smoke.mjs` passed.
+- `TGWR_SMOKE_ALL_SLIDES=1 npm run test:synthetic` passed, including `people_view=ok`.
+- `npm run pack` passed.
+- `npm audit` passed with 0 vulnerabilities.
+- Targeted review of generated synthetic `report.json` confirmed `people_analytics` is present, bounded, and contains months, 24 hourly buckets, words, and emojis.
 
 ## Current Git State When This File Was Added
 

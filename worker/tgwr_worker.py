@@ -333,6 +333,7 @@ def dedupe_existing_messages_by_msg_id(conn: sqlite3.Connection) -> int:
 
 MSK_OFFSET_SECONDS = 3 * 60 * 60
 BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
+PERSON_ANALYTICS_LIMIT = 50
 
 
 
@@ -2704,6 +2705,257 @@ def _peer_activity_insights(conn: sqlite3.Connection, start_ts: int, end_ts: int
     }
 
 
+def _person_period_analytics(
+    conn: sqlite3.Connection,
+    start_ts: int,
+    end_ts: int,
+    peer_id: str,
+    base_stats: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if not base_stats:
+        return None
+
+    total = int(base_stats.get("total_messages", 0) or 0)
+    if total <= 0:
+        return None
+
+    sent = int(base_stats.get("sent_messages", 0) or 0)
+    received = int(base_stats.get("received_messages", 0) or 0)
+    night_messages = int(base_stats.get("night_messages", 0) or 0)
+    day_messages = int(base_stats.get("day_messages", 0) or 0)
+
+    base, p = _period_where_clause(start_ts, end_ts)
+    q = (
+        "SELECT m.chat_pk, m.date_ts, m.is_out, m.text, m.sticker_emoji, m.media_type, m.msg_id, c.name "
+        "FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
+        "ORDER BY m.chat_pk, m.date_ts;"
+    )
+
+    month_counter: Counter[str] = Counter()
+    hourly_counts = [0] * 24
+    media_counts: Dict[str, int] = {
+        "photo": 0,
+        "video": 0,
+        "voice": 0,
+        "sticker": 0,
+        "gif": 0,
+        "file": 0,
+        "other": 0,
+    }
+    word_counter: Counter[str] = Counter()
+    emoji_counter: Counter[str] = Counter()
+    top_longest: List[Dict[str, Any]] = []
+    first_by_day: Dict[str, Tuple[int, int]] = {}
+    your_reply_seconds: List[int] = []
+    their_reply_seconds: List[int] = []
+
+    total_words = 0
+    messages_with_emoji = 0
+    display_name = str(base_stats.get("display_name") or "")
+    last_chat_pk: Optional[int] = None
+    last_ts: Optional[int] = None
+    last_is_out: Optional[int] = None
+    msk = _moscow_tzinfo()
+
+    def push_longest(item: Dict[str, Any]) -> None:
+        top_longest.append(item)
+        top_longest.sort(
+            key=lambda x: (
+                int(x.get("length_chars", 0) or 0),
+                int(x.get("date_ts", 0) or 0),
+            ),
+            reverse=True,
+        )
+        if len(top_longest) > 3:
+            del top_longest[3:]
+
+    fetch = conn.execute(q, (peer_id,) + p)
+    while True:
+        if _CANCEL_EVENT.is_set():
+            raise CancelledError()
+        rows = fetch.fetchmany(2000)
+        if not rows:
+            break
+
+        for row in rows:
+            if _CANCEL_EVENT.is_set():
+                raise CancelledError()
+
+            chat_pk = int(row[0])
+            ts = int(row[1] or 0)
+            is_out = int(row[2] or 0)
+            text = row[3] if isinstance(row[3], str) else ""
+            sticker_emoji = row[4] if isinstance(row[4], str) else None
+            media_type = row[5] if isinstance(row[5], str) else None
+            msg_id = row[6] if row[6] is not None else None
+            chat_name = row[7] if isinstance(row[7], str) else None
+
+            if chat_name and not display_name:
+                display_name = chat_name
+
+            if ts > 0:
+                try:
+                    dt = datetime.fromtimestamp(ts, tz=msk)
+                    month_counter[dt.strftime("%Y-%m")] += 1
+                    if 0 <= dt.hour <= 23:
+                        hourly_counts[dt.hour] += 1
+                    day_key = dt.strftime("%Y-%m-%d")
+                    prev_first = first_by_day.get(day_key)
+                    if prev_first is None or ts < prev_first[0]:
+                        first_by_day[day_key] = (ts, is_out)
+                except Exception:
+                    pass
+
+            if last_chat_pk is None or chat_pk != last_chat_pk:
+                last_chat_pk = chat_pk
+                last_ts = ts if ts > 0 else None
+                last_is_out = is_out
+            else:
+                if last_ts is not None and ts > last_ts and last_is_out is not None and is_out != last_is_out:
+                    delta = int(ts - last_ts)
+                    if last_is_out == 0 and is_out == 1:
+                        your_reply_seconds.append(delta)
+                    elif last_is_out == 1 and is_out == 0:
+                        their_reply_seconds.append(delta)
+                last_ts = ts if ts > 0 else last_ts
+                last_is_out = is_out
+
+            bucket = _normalize_media_bucket(media_type)
+            if bucket:
+                media_counts[bucket] = int(media_counts.get(bucket, 0) or 0) + 1
+
+            cleaned = clean_text_for_stats(text)
+            had_emoji = False
+            if cleaned:
+                length = len(cleaned)
+                if length > 0:
+                    push_longest(
+                        {
+                            "length_chars": int(length),
+                            "snippet": (cleaned[:220] + "…") if len(cleaned) > 220 else cleaned,
+                            "direction": "out" if is_out == 1 else "in",
+                            "msg_id": str(msg_id) if msg_id is not None else None,
+                            "date_ts": ts if ts > 0 else None,
+                        }
+                    )
+
+                tokens = tokenize_words(cleaned)
+                if tokens:
+                    word_counter.update(tokens)
+                    total_words += len(tokens)
+
+                emojis = extract_emojis(cleaned)
+                if emojis:
+                    emoji_counter.update(emojis)
+                    had_emoji = True
+
+            if sticker_emoji:
+                emoji_counter.update([sticker_emoji])
+                had_emoji = True
+
+            if had_emoji:
+                messages_with_emoji += 1
+
+    month_activity = [{"value": k, "count": int(v)} for k, v in sorted(month_counter.items())]
+    peak_month = max(month_activity, key=lambda x: (int(x["count"]), str(x["value"]))) if month_activity else None
+    hourly_activity = [{"hour": h, "count": int(hourly_counts[h])} for h in range(24)]
+    peak_hour = max(hourly_activity, key=lambda x: (int(x["count"]), -int(x["hour"]))) if hourly_activity else None
+
+    days_started_by_you = sum(1 for _, is_out in first_by_day.values() if int(is_out) == 1)
+    days_started_by_them = sum(1 for _, is_out in first_by_day.values() if int(is_out) == 0)
+    initiated_days = days_started_by_you + days_started_by_them
+
+    return {
+        "peer_from_id": peer_id,
+        "display_name": display_name,
+        "total_messages": total,
+        "sent_messages": sent,
+        "received_messages": received,
+        "sent_ratio": float(_safe_div(sent, total)),
+        "received_ratio": float(_safe_div(received, total)),
+        "mutuality_abs_diff": int(abs(sent - received)),
+        "mutuality_imbalance_ratio": float(_safe_div(abs(sent - received), total)),
+        "first_ts": int(base_stats.get("first_ts", 0) or 0) or None,
+        "last_ts": int(base_stats.get("last_ts", 0) or 0) or None,
+        "first_date": _ts_to_msk_date(int(base_stats.get("first_ts", 0) or 0)),
+        "last_date": _ts_to_msk_date(int(base_stats.get("last_ts", 0) or 0)),
+        "time_span_days": int(base_stats.get("time_span_days", 0) or 0),
+        "active_days": int(base_stats.get("active_days", 0) or 0),
+        "messages_per_active_day": float(_safe_div(total, int(base_stats.get("active_days", 0) or 0))),
+        "night_messages": night_messages,
+        "day_messages": day_messages,
+        "night_ratio": float(_safe_div(night_messages, total)),
+        "day_ratio": float(_safe_div(day_messages, total)),
+        "month_activity": month_activity,
+        "peak_month": peak_month,
+        "hourly_activity": hourly_activity,
+        "peak_hour": peak_hour,
+        "media_counts": media_counts,
+        "media_total": int(sum(media_counts.values())),
+        "top_words": [{"word": w, "count": int(c)} for w, c in word_counter.most_common(20)],
+        "top_emojis": [{"emoji": e, "count": int(c)} for e, c in emoji_counter.most_common(20)],
+        "total_words": int(total_words),
+        "unique_words": int(len(word_counter)),
+        "total_emojis": int(sum(emoji_counter.values())),
+        "messages_with_emoji_count": int(messages_with_emoji),
+        "top_longest_messages": top_longest,
+        "longest_message": top_longest[0] if top_longest else None,
+        "days_started_by_you": int(days_started_by_you),
+        "days_started_by_them": int(days_started_by_them),
+        "initiated_days": int(initiated_days),
+        "you_initiated_ratio": float(_safe_div(days_started_by_you, initiated_days)),
+        "your_median_reply_seconds": int(_median_int(your_reply_seconds)),
+        "their_median_reply_seconds": int(_median_int(their_reply_seconds)),
+        "your_reply_samples": int(len(your_reply_seconds)),
+        "their_reply_samples": int(len(their_reply_seconds)),
+        "median_reply_time_to_others_seconds": int(base_stats.get("median_reply_time_to_others_seconds", 0) or 0),
+        "reply_samples": int(base_stats.get("reply_samples", 0) or 0),
+    }
+
+
+def _people_analytics(
+    conn: sqlite3.Connection,
+    people_all: Dict[str, Dict[str, Any]],
+    people_year: Dict[str, Dict[str, Any]],
+    year_start_ts: int,
+    year_end_ts: int,
+) -> List[Dict[str, Any]]:
+    peers = sorted(
+        set(people_all.keys()) | set(people_year.keys()),
+        key=lambda peer: (
+            int((people_all.get(peer) or {}).get("total_messages", 0) or 0),
+            int((people_year.get(peer) or {}).get("total_messages", 0) or 0),
+            str((people_all.get(peer) or people_year.get(peer) or {}).get("display_name") or peer),
+        ),
+        reverse=True,
+    )[:PERSON_ANALYTICS_LIMIT]
+
+    out: List[Dict[str, Any]] = []
+    for peer_id in peers:
+        if _CANCEL_EVENT.is_set():
+            raise CancelledError()
+        if peer_id in BANNED_PEER_IDS:
+            continue
+
+        pa = people_all.get(peer_id)
+        py = people_year.get(peer_id)
+        display_name = str((py or pa or {}).get("display_name") or peer_id)
+        periods = {
+            "all_time": _person_period_analytics(conn, 0, 2**62, peer_id, pa),
+            "year": _person_period_analytics(conn, year_start_ts, year_end_ts, peer_id, py),
+        }
+        out.append(
+            {
+                "peer_from_id": peer_id,
+                "display_name": display_name,
+                "periods": periods,
+            }
+        )
+
+    return out
+
+
 def _top_10_people_by_messages(people: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     items: List[Tuple[int, Dict[str, Any]]] = []
 
@@ -3192,7 +3444,10 @@ def do_build_report(db_path: str) -> None:
             key=lambda x: int(((x.get("periods") or {}).get("all_time") or {}).get("total_messages", 0) or 0), reverse=True
         )
 
-        progress("compute_metrics", 82, "achievements", "")
+        progress("compute_metrics", 82, "people_analytics", "")
+        people_analytics = _people_analytics(conn, people_all, people_year, year_start_ts, year_end_ts)
+
+        progress("compute_metrics", 88, "achievements", "")
         achievements = _achievements(metrics_all)
 
         report: Dict[str, Any] = {
@@ -3206,10 +3461,11 @@ def do_build_report(db_path: str) -> None:
                 "year": metrics_year,
             },
             "top_people": top_people_list,
+            "people_analytics": people_analytics,
             "achievements": achievements,
         }
 
-        progress("compute_metrics", 90, "slides_data", "")
+        progress("compute_metrics", 92, "slides_data", "")
         report["slides_data"] = _slides_data(report)
 
         progress("compute_metrics", 96, "write_report", "")

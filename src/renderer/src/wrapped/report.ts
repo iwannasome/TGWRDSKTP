@@ -4,6 +4,65 @@ export type PeriodKey = 'all_time' | 'year'
 export type UnknownReport = unknown
 export type DailyActivityPoint = { date: string; count: number }
 export type HourlyActivityPoint = { hour: number; count: number }
+export type PersonCountItem = { value: string; count: number }
+export type PersonWordItem = { word: string; count: number }
+export type PersonEmojiItem = { emoji: string; count: number }
+export type PersonLongestMessage = {
+  lengthChars: number
+  snippet: string
+  direction: 'out' | 'in' | ''
+  dateTs: number
+}
+export type PersonPeriodAnalytics = {
+  peerFromId: string
+  displayName: string
+  totalMessages: number
+  sentMessages: number
+  receivedMessages: number
+  sentRatio: number
+  receivedRatio: number
+  mutualityAbsDiff: number
+  mutualityImbalanceRatio: number
+  firstTs: number
+  lastTs: number
+  firstDate: string
+  lastDate: string
+  timeSpanDays: number
+  activeDays: number
+  messagesPerActiveDay: number
+  nightMessages: number
+  dayMessages: number
+  nightRatio: number
+  dayRatio: number
+  monthActivity: PersonCountItem[]
+  peakMonth: PersonCountItem | null
+  hourlyActivity: HourlyActivityPoint[]
+  peakHour: HourlyActivityPoint | null
+  mediaCounts: Record<string, number>
+  mediaTotal: number
+  topWords: PersonWordItem[]
+  topEmojis: PersonEmojiItem[]
+  totalWords: number
+  uniqueWords: number
+  totalEmojis: number
+  messagesWithEmojiCount: number
+  topLongestMessages: PersonLongestMessage[]
+  daysStartedByYou: number
+  daysStartedByThem: number
+  initiatedDays: number
+  youInitiatedRatio: number
+  yourMedianReplySeconds: number
+  theirMedianReplySeconds: number
+  yourReplySamples: number
+  theirReplySamples: number
+  medianReplyTimeToOthersSeconds: number
+  replySamples: number
+}
+export type PersonAnalytics = {
+  peerFromId: string
+  displayName: string
+  periods: Partial<Record<PeriodKey, PersonPeriodAnalytics>>
+}
 
 export function asReport(data: unknown): Record<string, unknown> | null {
   return asRecord(data)
@@ -147,6 +206,206 @@ export function getPersonName(item: Record<string, unknown> | null): string {
 export function getPersonId(item: Record<string, unknown> | null): string {
   if (!item) return ''
   return getString(item, 'peer_from_id', '')
+}
+
+function getDateFromTs(ts: number): string {
+  if (!Number.isFinite(ts) || ts <= 0) return ''
+  try {
+    return new Date(ts * 1000).toISOString().slice(0, 10)
+  } catch {
+    return ''
+  }
+}
+
+function getPersonCountItems(obj: Record<string, unknown>, key: string, valueKey: string): PersonCountItem[] {
+  const out: PersonCountItem[] = []
+  for (const item of getArray(obj, key)) {
+    const rec = asRecord(item)
+    if (!rec) continue
+    const value = getString(rec, valueKey, '')
+    const count = getNumber(rec, 'count', 0)
+    if (!value || count <= 0) continue
+    out.push({ value, count })
+  }
+  return out
+}
+
+function getHourlyItems(obj: Record<string, unknown>): HourlyActivityPoint[] {
+  const arr = getArray(obj, 'hourly_activity')
+  const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, count: 0 }))
+
+  for (let i = 0; i < arr.length; i += 1) {
+    const rec = asRecord(arr[i])
+    if (!rec) continue
+    const hour = getNumber(rec, 'hour', i)
+    const count = getNumber(rec, 'count', 0)
+    if (hour >= 0 && hour < 24) byHour[hour] = { hour, count }
+  }
+
+  return byHour
+}
+
+function getPeakHour(obj: Record<string, unknown>, hourly: HourlyActivityPoint[]): HourlyActivityPoint | null {
+  const peak = getRecord(obj, 'peak_hour')
+  if (peak) {
+    return { hour: getNumber(peak, 'hour', 0), count: getNumber(peak, 'count', 0) }
+  }
+
+  const best = hourly.reduce<HourlyActivityPoint | null>((acc, item) => {
+    if (!acc || item.count > acc.count) return item
+    return acc
+  }, null)
+
+  return best && best.count > 0 ? best : null
+}
+
+function getPersonMediaCounts(obj: Record<string, unknown>): Record<string, number> {
+  const media = getRecord(obj, 'media_counts')
+  const keys = ['photo', 'video', 'voice', 'sticker', 'gif', 'file', 'other']
+  return Object.fromEntries(keys.map((key) => [key, getNumber(media ?? {}, key, 0)]))
+}
+
+function normalizePersonPeriod(
+  obj: Record<string, unknown> | null,
+  fallbackPeerFromId: string,
+  fallbackDisplayName: string
+): PersonPeriodAnalytics | null {
+  if (!obj) return null
+
+  const peerFromId = getString(obj, 'peer_from_id', fallbackPeerFromId) || fallbackPeerFromId
+  const displayName = getString(obj, 'display_name', fallbackDisplayName) || fallbackDisplayName || peerFromId
+  const totalMessages = getNumber(obj, 'total_messages', 0)
+  const sentMessages = getNumber(obj, 'sent_messages', 0)
+  const receivedMessages = getNumber(obj, 'received_messages', 0)
+  if (totalMessages <= 0 && sentMessages <= 0 && receivedMessages <= 0) return null
+
+  const firstTs = getNumber(obj, 'first_ts', 0)
+  const lastTs = getNumber(obj, 'last_ts', 0)
+  const monthActivity = getPersonCountItems(obj, 'month_activity', 'value')
+  const peakMonthObj = getRecord(obj, 'peak_month')
+  const peakMonth = peakMonthObj
+    ? { value: getString(peakMonthObj, 'value', ''), count: getNumber(peakMonthObj, 'count', 0) }
+    : monthActivity.reduce<PersonCountItem | null>((acc, item) => (!acc || item.count > acc.count ? item : acc), null)
+  const hourlyActivity = getHourlyItems(obj)
+  const mediaCounts = getPersonMediaCounts(obj)
+  const mediaTotal = getNumber(obj, 'media_total', Object.values(mediaCounts).reduce((sum, value) => sum + value, 0))
+
+  const topWords = getArray(obj, 'top_words')
+    .map((item) => {
+      const rec = asRecord(item)
+      if (!rec) return null
+      const word = getString(rec, 'word', '')
+      const count = getNumber(rec, 'count', 0)
+      return word && count > 0 ? { word, count } : null
+    })
+    .filter((item): item is PersonWordItem => Boolean(item))
+
+  const topEmojis = getArray(obj, 'top_emojis')
+    .map((item) => {
+      const rec = asRecord(item)
+      if (!rec) return null
+      const emoji = getString(rec, 'emoji', '')
+      const count = getNumber(rec, 'count', 0)
+      return emoji && count > 0 ? { emoji, count } : null
+    })
+    .filter((item): item is PersonEmojiItem => Boolean(item))
+
+  const topLongestMessages = getArray(obj, 'top_longest_messages')
+    .map((item) => {
+      const rec = asRecord(item)
+      if (!rec) return null
+      const direction = getString(rec, 'direction', '')
+      return {
+        lengthChars: getNumber(rec, 'length_chars', 0),
+        snippet: getString(rec, 'snippet', ''),
+        direction: direction === 'out' || direction === 'in' ? direction : '',
+        dateTs: getNumber(rec, 'date_ts', 0)
+      }
+    })
+    .filter((item): item is PersonLongestMessage => item !== null && (item.lengthChars > 0 || item.snippet.length > 0))
+
+  return {
+    peerFromId,
+    displayName,
+    totalMessages,
+    sentMessages,
+    receivedMessages,
+    sentRatio: getNumber(obj, 'sent_ratio', totalMessages > 0 ? sentMessages / totalMessages : 0),
+    receivedRatio: getNumber(obj, 'received_ratio', totalMessages > 0 ? receivedMessages / totalMessages : 0),
+    mutualityAbsDiff: getNumber(obj, 'mutuality_abs_diff', Math.abs(sentMessages - receivedMessages)),
+    mutualityImbalanceRatio: getNumber(obj, 'mutuality_imbalance_ratio', totalMessages > 0 ? Math.abs(sentMessages - receivedMessages) / totalMessages : 0),
+    firstTs,
+    lastTs,
+    firstDate: getString(obj, 'first_date', '') || getDateFromTs(firstTs),
+    lastDate: getString(obj, 'last_date', '') || getDateFromTs(lastTs),
+    timeSpanDays: getNumber(obj, 'time_span_days', 0),
+    activeDays: getNumber(obj, 'active_days', 0),
+    messagesPerActiveDay: getNumber(obj, 'messages_per_active_day', 0),
+    nightMessages: getNumber(obj, 'night_messages', 0),
+    dayMessages: getNumber(obj, 'day_messages', 0),
+    nightRatio: getNumber(obj, 'night_ratio', totalMessages > 0 ? getNumber(obj, 'night_messages', 0) / totalMessages : 0),
+    dayRatio: getNumber(obj, 'day_ratio', totalMessages > 0 ? getNumber(obj, 'day_messages', 0) / totalMessages : 0),
+    monthActivity,
+    peakMonth: peakMonth && peakMonth.value ? peakMonth : null,
+    hourlyActivity,
+    peakHour: getPeakHour(obj, hourlyActivity),
+    mediaCounts,
+    mediaTotal,
+    topWords,
+    topEmojis,
+    totalWords: getNumber(obj, 'total_words', 0),
+    uniqueWords: getNumber(obj, 'unique_words', 0),
+    totalEmojis: getNumber(obj, 'total_emojis', 0),
+    messagesWithEmojiCount: getNumber(obj, 'messages_with_emoji_count', 0),
+    topLongestMessages,
+    daysStartedByYou: getNumber(obj, 'days_started_by_you', 0),
+    daysStartedByThem: getNumber(obj, 'days_started_by_them', 0),
+    initiatedDays: getNumber(obj, 'initiated_days', 0),
+    youInitiatedRatio: getNumber(obj, 'you_initiated_ratio', 0),
+    yourMedianReplySeconds: getNumber(obj, 'your_median_reply_seconds', getNumber(obj, 'median_reply_time_to_others_seconds', 0)),
+    theirMedianReplySeconds: getNumber(obj, 'their_median_reply_seconds', 0),
+    yourReplySamples: getNumber(obj, 'your_reply_samples', getNumber(obj, 'reply_samples', 0)),
+    theirReplySamples: getNumber(obj, 'their_reply_samples', 0),
+    medianReplyTimeToOthersSeconds: getNumber(obj, 'median_reply_time_to_others_seconds', 0),
+    replySamples: getNumber(obj, 'reply_samples', 0)
+  }
+}
+
+export function getPeopleAnalytics(report: unknown): PersonAnalytics[] {
+  if (!isRecord(report)) return []
+
+  const detailed = Array.isArray(report.people_analytics) ? report.people_analytics : []
+  const fallback = Array.isArray(report.top_people) ? report.top_people : []
+  const source = detailed.length > 0 ? detailed : fallback
+
+  const out: PersonAnalytics[] = []
+  for (const item of source) {
+    const rec = asRecord(item)
+    if (!rec) continue
+
+    const peerFromId = getString(rec, 'peer_from_id', '')
+    const displayName = getString(rec, 'display_name', '') || peerFromId
+    const periodsRaw = getRecord(rec, 'periods')
+    const allTime = normalizePersonPeriod(getRecord(periodsRaw ?? {}, 'all_time'), peerFromId, displayName)
+    const year = normalizePersonPeriod(getRecord(periodsRaw ?? {}, 'year'), peerFromId, displayName)
+
+    if (!allTime && !year) continue
+    out.push({
+      peerFromId,
+      displayName,
+      periods: {
+        all_time: allTime ?? undefined,
+        year: year ?? undefined
+      }
+    })
+  }
+
+  out.sort((a, b) => {
+    const aTotal = a.periods.all_time?.totalMessages ?? a.periods.year?.totalMessages ?? 0
+    const bTotal = b.periods.all_time?.totalMessages ?? b.periods.year?.totalMessages ?? 0
+    return bTotal - aTotal
+  })
+  return out
 }
 
 export function getReplyChampion(
