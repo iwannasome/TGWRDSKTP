@@ -59,7 +59,7 @@ export default function Slide14LongestMessage({ report, period, exporting }: Sli
                     </div>
 
                     <div className="min-w-0">
-                      <div className="line-clamp-2 break-words text-[19px] font-semibold leading-tight text-slate-100">{msg.name}</div>
+                      <div className="line-clamp-2 break-words text-[19px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{msg.name}</div>
                       <div className="mt-2 text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                         Сообщение #{idx + 1}
                       </div>

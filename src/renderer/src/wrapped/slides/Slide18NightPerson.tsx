@@ -24,7 +24,7 @@ export default function Slide18NightPerson({ report, period, exporting }: SlideC
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
-          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{person?.name ?? '—'}</div>
+          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{person?.name ?? '—'}</div>
 
           <div className="mt-6 text-[92px] font-bold leading-none">
             <span className="tgwr-gradient-text">

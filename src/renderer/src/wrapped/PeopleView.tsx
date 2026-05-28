@@ -41,7 +41,7 @@ function periodData(person: PersonAnalytics, period: PeriodKey): PersonPeriodAna
 
 function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: string; onToggle: () => void }): JSX.Element {
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
       <button
         type="button"
         onClick={period === 'all_time' ? undefined : onToggle}
@@ -72,20 +72,20 @@ function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: strin
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_16px_55px_rgba(0,0,0,0.24)]">
-      <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_16px_55px_rgba(0,0,0,0.24)]">
+      <div className="break-words text-[13px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)] [overflow-wrap:anywhere]">
         {label}
       </div>
-      <div className="mt-2 break-words text-[24px] font-bold leading-tight text-slate-100">{value}</div>
-      {hint ? <div className="mt-1 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.82)]">{hint}</div> : null}
+      <div className="mt-2 break-words text-[24px] font-bold leading-tight text-slate-100 [overflow-wrap:anywhere]">{value}</div>
+      {hint ? <div className="mt-1 break-words text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.82)] [overflow-wrap:anywhere]">{hint}</div> : null}
     </div>
   )
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
-      <div className="text-[18px] font-semibold text-slate-100">{title}</div>
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+      <div className="break-words text-[18px] font-semibold text-slate-100 [overflow-wrap:anywhere]">{title}</div>
       <div className="mt-5">{children}</div>
     </section>
   )
@@ -93,7 +93,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function EmptyBlock({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
+    <div className="break-words rounded-xl border border-white/10 bg-black/20 p-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)] [overflow-wrap:anywhere]">
       {children}
     </div>
   )
@@ -155,7 +155,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
               <div className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
                 People analytics
               </div>
-              <div className="mt-2 text-[32px] font-bold text-slate-100">Аналитика по человеку</div>
+              <div className="mt-2 text-[28px] font-bold leading-tight text-slate-100 sm:text-[32px]">Аналитика по человеку</div>
               <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
                 {formatInt(people.length)} диалогов в отчете
               </div>
@@ -220,8 +220,8 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                           </div>
                         </div>
                         <div className="mt-3 flex items-center justify-between gap-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
-                          <span>{formatInt(p?.totalMessages ?? 0)}</span>
-                          <span>{p ? formatPercent01(p.sentRatio) : '—'} sent</span>
+                          <span className="min-w-0 truncate tabular-nums">{formatInt(p?.totalMessages ?? 0)}</span>
+                          <span className="shrink-0 tabular-nums">{p ? formatPercent01(p.sentRatio) : '—'} sent</span>
                         </div>
                       </button>
                     )
@@ -238,7 +238,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                   <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
                     <div className="flex flex-wrap items-start justify-between gap-5">
                       <div className="min-w-0">
-                        <div className="break-words text-[30px] font-bold leading-tight text-slate-100">
+                        <div className="break-words text-[30px] font-bold leading-tight text-slate-100 [overflow-wrap:anywhere]">
                           {selected.displayName}
                         </div>
                         <div className="mt-2 break-all font-mono text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
@@ -263,9 +263,9 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                         <div className="bg-[rgba(var(--tgwr-accent2-rgb),0.72)]" style={{ width: `${balanceReceived}%` }} />
                       </div>
                       <div className="flex flex-wrap justify-between gap-3 px-4 py-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
-                        <span>sent · {formatInt(selected.sentMessages)}</span>
-                        <span>recv · {formatInt(selected.receivedMessages)}</span>
-                        <span>diff · {formatInt(selected.mutualityAbsDiff)}</span>
+                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">sent · {formatInt(selected.sentMessages)}</span>
+                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">recv · {formatInt(selected.receivedMessages)}</span>
+                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">diff · {formatInt(selected.mutualityAbsDiff)}</span>
                       </div>
                     </div>
                   </section>
@@ -289,22 +289,22 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                     </Panel>
 
                     <Panel title="Активность по часам">
-                      <div className="grid grid-cols-6 gap-2 sm:grid-cols-8 lg:grid-cols-12">
+                      <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
                         {selected.hourlyActivity.map((item) => {
                           const opacity = clamp(item.count / maxHour, 0.08, 1)
                           return (
                             <div
                               key={item.hour}
-                              className="rounded-xl border border-white/10 p-2 text-center"
+                              className="min-h-[56px] min-w-0 rounded-xl border border-white/10 px-2 py-2 text-center"
                               style={{ background: `rgba(var(--tgwr-accent1-rgb),${0.08 + opacity * 0.36})` }}
                             >
-                              <div className="text-[12px] font-bold text-slate-100">{String(item.hour).padStart(2, '0')}</div>
-                              <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">{formatInt(item.count)}</div>
+                              <div className="text-[12px] font-bold leading-none text-slate-100">{String(item.hour).padStart(2, '0')}</div>
+                              <div className="mt-2 truncate text-[12px] leading-none text-[rgba(var(--tgwr-muted-rgb),0.78)] tabular-nums">{formatInt(item.count)}</div>
                             </div>
                           )
                         })}
                       </div>
-                      <div className="mt-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.88)]">
+                      <div className="mt-4 break-words text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.88)] [overflow-wrap:anywhere]">
                         Пик: {selected.peakHour ? `${formatHour(selected.peakHour.hour)} · ${formatInt(selected.peakHour.count)}` : '—'}
                       </div>
                     </Panel>
@@ -360,7 +360,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                           ) : (
                             <div className="flex flex-wrap gap-2">
                               {selected.topWords.slice(0, 16).map((item) => (
-                                <span key={item.word} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[13px] font-semibold text-slate-100">
+                                <span key={item.word} className="max-w-full break-words rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[13px] font-semibold text-slate-100 [overflow-wrap:anywhere]">
                                   {item.word} · {formatInt(item.count)}
                                 </span>
                               ))}
@@ -376,7 +376,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                           ) : (
                             <div className="flex flex-wrap gap-2">
                               {selected.topEmojis.slice(0, 16).map((item) => (
-                                <span key={item.emoji} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[18px] font-semibold text-slate-100">
+                                <span key={item.emoji} className="max-w-full break-words rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[18px] font-semibold text-slate-100 [overflow-wrap:anywhere]">
                                   {item.emoji} <span className="text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.8)]">{formatInt(item.count)}</span>
                                 </span>
                               ))}
@@ -397,7 +397,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                                 <span>{item.direction === 'out' ? 'Ты' : item.direction === 'in' ? 'Собеседник' : 'Сообщение'}</span>
                                 <span>{formatInt(item.lengthChars)} chars</span>
                               </div>
-                              <div className="mt-2 break-words text-[14px] leading-relaxed text-slate-100/90">
+                              <div className="mt-2 break-words text-[14px] leading-relaxed text-slate-100/90 [overflow-wrap:anywhere]">
                                 {ellipsize(item.snippet, 220)}
                               </div>
                             </div>

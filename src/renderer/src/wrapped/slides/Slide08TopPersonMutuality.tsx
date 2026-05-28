@@ -35,7 +35,7 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
-          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{name}</div>
+          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{name}</div>
 
           <div className="mt-6 grid grid-cols-3 gap-6">
             <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5">

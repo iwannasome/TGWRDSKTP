@@ -22,7 +22,7 @@ type Props = {
 
 function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: string; onToggle: () => void }): JSX.Element {
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
       <button
         type="button"
         onClick={period === 'all_time' ? undefined : onToggle}
@@ -53,11 +53,11 @@ function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: strin
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
       <div className="flex items-baseline justify-between gap-6">
-        <div>
-          <div className="text-[18px] font-semibold text-slate-100">{title}</div>
-          {subtitle ? <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">{subtitle}</div> : null}
+        <div className="min-w-0">
+          <div className="break-words text-[18px] font-semibold text-slate-100 [overflow-wrap:anywhere]">{title}</div>
+          {subtitle ? <div className="mt-1 break-words text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)] [overflow-wrap:anywhere]">{subtitle}</div> : null}
         </div>
       </div>
       <div className="mt-5">{children}</div>
@@ -81,8 +81,8 @@ function Table({
               <th
                 key={h.key}
                 className={[
-                  'px-4 py-3 text-left text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.8)]',
-                  h.right ? 'text-right' : ''
+                  'px-4 py-3 text-left text-[13px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.8)]',
+                  h.right ? 'whitespace-nowrap text-right' : 'break-words [overflow-wrap:anywhere]'
                 ].join(' ')}
               >
                 {h.title}
@@ -98,7 +98,7 @@ function Table({
                   key={h.key}
                   className={[
                     'px-4 py-3 text-sm text-slate-100/90',
-                    h.right ? 'text-right tabular-nums' : ''
+                    h.right ? 'whitespace-nowrap text-right tabular-nums' : 'break-words [overflow-wrap:anywhere]'
                   ].join(' ')}
                 >
                   {asString((r as Record<string, unknown>)[h.key], '—')}
@@ -180,13 +180,13 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
               <div className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
                 Details
               </div>
-              <div className="mt-2 text-[32px] font-bold text-slate-100">Топ-10 таблицы</div>
+              <div className="mt-2 text-[28px] font-bold leading-tight text-slate-100 sm:text-[32px]">Топ-10 таблицы</div>
               <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
                 Без фильтров. Ровно из report.json.
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               <PeriodTabs period={period} year={year} onToggle={onPeriodToggle} />
               <button
                 type="button"

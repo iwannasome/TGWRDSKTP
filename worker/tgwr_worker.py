@@ -90,6 +90,24 @@ def parse_date_to_unix_seconds(date_value: Any) -> int:
         return int(dt.timestamp())
 
 
+def parse_message_timestamp(msg: Dict[str, Any]) -> int:
+    """
+    Prefer Telegram's numeric date_unixtime when present.
+    The human-readable date field can be shifted by export locale/timezone quirks.
+    """
+    du = msg.get("date_unixtime")
+    if isinstance(du, int):
+        return int(du)
+    if isinstance(du, str):
+        s = du.strip()
+        if s.isdigit():
+            try:
+                return int(s)
+            except Exception:
+                pass
+    return parse_date_to_unix_seconds(msg.get("date"))
+
+
 def parse_html_title_datetime_to_unix_seconds(title_value: Optional[str]) -> int:
     """
     Telegram HTML export date usually stored in:
@@ -281,10 +299,10 @@ def recreate_db(db_path: str) -> sqlite3.Connection:
 
 
 def create_indexes(conn: sqlite3.Connection) -> None:
-    conn.execute("CREATE INDEX idx_messages_chat_date ON messages(chat_pk, date_ts);")
-    conn.execute("CREATE INDEX idx_messages_from_date ON messages(from_id, date_ts);")
-    conn.execute("CREATE INDEX idx_messages_chat_out_date ON messages(chat_pk, is_out, date_ts);")
-    conn.execute("CREATE INDEX idx_chats_peer ON chats(peer_from_id);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_date ON messages(chat_pk, date_ts);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_from_date ON messages(from_id, date_ts);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_out_date ON messages(chat_pk, is_out, date_ts);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chats_peer ON chats(peer_from_id);")
     ensure_messages_unique_index(conn)
 
 def ensure_messages_unique_index(conn: sqlite3.Connection) -> None:
@@ -333,6 +351,7 @@ def dedupe_existing_messages_by_msg_id(conn: sqlite3.Connection) -> int:
 
 MSK_OFFSET_SECONDS = 3 * 60 * 60
 BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
+MAX_INFERRED_REPLY_SECONDS = 7 * 24 * 60 * 60
 PERSON_ANALYTICS_LIMIT = 50
 
 
@@ -448,6 +467,76 @@ def compute_self_from_id(conn: sqlite3.Connection) -> Optional[str]:
         return None
 
 
+def canonical_self_from_id(value: Any) -> Optional[str]:
+    fid = normalize_from_id(value)
+    if not fid:
+        return None
+    s = fid.strip()
+    if not s:
+        return None
+    if s == "__self__":
+        return s
+    if s.isdigit():
+        return f"user{s}"
+    if s.startswith("user") and s[4:].isdigit():
+        return s
+    return s
+
+
+def self_from_id_candidates(self_from_id: Optional[str], include_html_self: bool = True) -> List[str]:
+    out: List[str] = []
+
+    def add(value: Optional[str]) -> None:
+        if value and value not in out:
+            out.append(value)
+
+    canonical = canonical_self_from_id(self_from_id)
+    add(canonical)
+    numeric = extract_numeric_id(canonical)
+    if numeric is not None:
+        add(str(numeric))
+        add(f"user{numeric}")
+    if include_html_self and canonical:
+        add("__self__")
+    return out
+
+
+def _count_messages_from_self_candidates(conn: sqlite3.Connection, self_from_id: Optional[str]) -> int:
+    candidates = self_from_id_candidates(self_from_id)
+    if not candidates:
+        return 0
+    placeholders = ",".join("?" for _ in candidates)
+    row = conn.execute(
+        f"SELECT COUNT(*) FROM messages WHERE from_id IN ({placeholders});",
+        tuple(candidates),
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def resolve_self_from_id(conn: sqlite3.Connection, preferred_self_from_id: Optional[str]) -> Optional[str]:
+    preferred = canonical_self_from_id(preferred_self_from_id)
+    if preferred and _count_messages_from_self_candidates(conn, preferred) > 0:
+        return preferred
+    return canonical_self_from_id(compute_self_from_id(conn))
+
+
+def extract_self_from_export(result_json_files: List[str]) -> Optional[str]:
+    for result_path in sorted(result_json_files, key=lambda p: (len(p), p)):
+        if _CANCEL_EVENT.is_set():
+            raise CancelledError()
+        data = load_json_safely(result_path)
+        if not isinstance(data, dict):
+            continue
+        personal = data.get("personal_information")
+        if not isinstance(personal, dict):
+            continue
+        for key in ("user_id", "id"):
+            candidate = canonical_self_from_id(personal.get(key))
+            if candidate:
+                return candidate
+    return None
+
+
 def apply_direction_updates(conn: sqlite3.Connection, self_from_id: Optional[str]) -> None:
     """Fill messages.is_out and chats.peer_from_id. Best-effort."""
     ensure_schema(conn)
@@ -457,18 +546,22 @@ def apply_direction_updates(conn: sqlite3.Connection, self_from_id: Optional[str
         pass
 
     try:
-        if not self_from_id:
+        self_candidates = self_from_id_candidates(self_from_id)
+
+        if not self_candidates:
             conn.execute("UPDATE messages SET is_out = 0;")
             conn.execute("UPDATE chats SET peer_from_id = NULL;")
             meta_set(conn, "self_from_id", "")
         else:
-            meta_set(conn, "self_from_id", self_from_id)
+            canonical_self = canonical_self_from_id(self_from_id) or self_candidates[0]
+            placeholders = ",".join("?" for _ in self_candidates)
+            meta_set(conn, "self_from_id", canonical_self)
             conn.execute(
-                "UPDATE messages SET is_out = CASE WHEN from_id = ? OR from_id = '__self__' THEN 1 ELSE 0 END;",
-                (self_from_id,),
+                f"UPDATE messages SET is_out = CASE WHEN from_id IN ({placeholders}) THEN 1 ELSE 0 END;",
+                tuple(self_candidates),
             )
             conn.execute(
-                """
+                f"""
                 UPDATE chats
                 SET peer_from_id = (
                   SELECT m.from_id
@@ -476,14 +569,13 @@ def apply_direction_updates(conn: sqlite3.Connection, self_from_id: Optional[str
                   WHERE m.chat_pk = chats.chat_pk
                     AND m.from_id IS NOT NULL
                     AND TRIM(m.from_id) != ''
-                    AND m.from_id != ?
+                    AND m.from_id NOT IN ({placeholders})
                   GROUP BY m.from_id
                   ORDER BY COUNT(*) DESC
                   LIMIT 1
-                )
-                WHERE peer_from_id IS NULL OR TRIM(peer_from_id) = '';
+                );
                 """,
-                (self_from_id,),
+                tuple(self_candidates),
             )
 
         try:
@@ -836,6 +928,32 @@ def parse_html_message_block(block_html: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def html_looks_like_group_chat(files: List[str], sample_limit: int = 300) -> bool:
+    incoming_from_ids = set()
+    sampled = 0
+
+    for fp in files:
+        if _CANCEL_EVENT.is_set():
+            raise CancelledError()
+        for block in iter_html_message_blocks(fp):
+            if _CANCEL_EVENT.is_set():
+                raise CancelledError()
+            msg = parse_html_message_block(block)
+            if msg is None:
+                continue
+            sampled += 1
+            if int(msg.get("is_service", 0) or 0) == 0:
+                fid = msg.get("from_id")
+                if isinstance(fid, str) and fid.strip() and fid != "__self__":
+                    incoming_from_ids.add(fid.strip())
+                    if len(incoming_from_ids) > 1:
+                        return True
+            if sampled >= sample_limit:
+                return False
+
+    return False
+
+
 def build_candidates(
     export_dir: str, json_files: List[str], result_json_files: List[str], html_files: List[str]
 ) -> Tuple[List[ChatCandidate], int]:
@@ -974,6 +1092,10 @@ def build_candidates(
             skipped += 1
             continue
 
+        if html_looks_like_group_chat(files):
+            skipped += 1
+            continue
+
         try:
             rel_dir = os.path.relpath(chat_dir, export_dir)
         except Exception:
@@ -995,15 +1117,35 @@ def build_candidates(
     return candidates, skipped
 
 
+def _candidate_identity_key(cand: ChatCandidate) -> Optional[str]:
+    if cand.source not in ("json", "result"):
+        return None
+    prefix = f"{cand.source}:"
+    if not cand.export_chat_id.startswith(prefix):
+        return None
+    raw_id = cand.export_chat_id[len(prefix) :].strip()
+    if not raw_id or raw_id.startswith("idx"):
+        return None
+    if raw_id.lstrip("-").isdigit():
+        return f"telegram_chat_id:{raw_id}"
+    return None
+
+
 def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandidate], int]:
     candidates_sorted = sorted(candidates, key=lambda c: (-c.priority, normalize_name(c.name), c.export_chat_id))
     accepted: List[ChatCandidate] = []
     accepted_by_key: Dict[Tuple[str, str], List[ChatCandidate]] = {}
+    accepted_by_identity: Dict[str, ChatCandidate] = {}
     skipped_dupes = 0
 
     for cand in candidates_sorted:
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
+
+        identity_key = _candidate_identity_key(cand)
+        if identity_key and identity_key in accepted_by_identity:
+            skipped_dupes += 1
+            continue
 
         nname = normalize_name(cand.name)
         canonical_type = "personal_chat" if cand.type == "unknown_html" else cand.type
@@ -1018,6 +1160,8 @@ def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandida
         if dup_found is None:
             accepted.append(cand)
             accepted_by_key.setdefault(key, []).append(cand)
+            if identity_key:
+                accepted_by_identity[identity_key] = cand
             continue
 
         keep = dup_found
@@ -1043,8 +1187,14 @@ def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandida
         lst = accepted_by_key.get(key, [])
         if drop in lst:
             lst.remove(drop)
+        drop_identity_key = _candidate_identity_key(drop)
+        if drop_identity_key and accepted_by_identity.get(drop_identity_key) is drop:
+            accepted_by_identity.pop(drop_identity_key, None)
         accepted.append(keep)
         accepted_by_key.setdefault(key, []).append(keep)
+        keep_identity_key = _candidate_identity_key(keep)
+        if keep_identity_key:
+            accepted_by_identity[keep_identity_key] = keep
 
     return accepted, skipped_dupes
 
@@ -1119,16 +1269,7 @@ def insert_json_messages_from_file(
             msg_id_value = msg.get("id")
             msg_id = str(msg_id_value) if msg_id_value is not None else None
 
-            date_ts = parse_date_to_unix_seconds(msg.get("date"))
-            if date_ts == 0:
-                du = msg.get("date_unixtime")
-                if isinstance(du, int):
-                    date_ts = int(du)
-                elif isinstance(du, str) and du.isdigit():
-                    try:
-                        date_ts = int(du)
-                    except Exception:
-                        date_ts = 0
+            date_ts = parse_message_timestamp(msg)
 
             from_id = normalize_from_id(msg.get("from_id"))
             _ = extract_numeric_id(from_id)
@@ -1260,16 +1401,7 @@ def insert_result_chat_messages(
             msg_id_value = msg.get("id")
             msg_id = str(msg_id_value) if msg_id_value is not None else None
 
-            date_ts = parse_date_to_unix_seconds(msg.get("date"))
-            if date_ts == 0:
-                du = msg.get("date_unixtime")
-                if isinstance(du, int):
-                    date_ts = int(du)
-                elif isinstance(du, str) and du.isdigit():
-                    try:
-                        date_ts = int(du)
-                    except Exception:
-                        date_ts = 0
+            date_ts = parse_message_timestamp(msg)
 
             from_id = normalize_from_id(msg.get("from_id"))
             _ = extract_numeric_id(from_id)
@@ -1470,6 +1602,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
     json_files, result_files, html_files = scan_export_dir(export_dir)
 
     progress("scan_files", 3, "", "")
+    preferred_self_from_id = extract_self_from_export(result_files)
     candidates, skipped_chats = build_candidates(export_dir, json_files, result_files, html_files)
     progress("scan_files", 5, "", "")
 
@@ -1578,7 +1711,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         progress("index_db", 90, "", "")
         try:
             ensure_schema(conn)
-            self_from_id = compute_self_from_id(conn)
+            self_from_id = resolve_self_from_id(conn, preferred_self_from_id)
             apply_direction_updates(conn, self_from_id)
         except CancelledError:
             raise
@@ -1800,6 +1933,23 @@ def _period_where_clause(start_ts: int, end_ts: int) -> Tuple[str, Tuple[Any, ..
     return "date_ts >= ? AND date_ts < ?", (int(start_ts), int(end_ts))
 
 
+def infer_report_year(conn: sqlite3.Connection) -> Optional[int]:
+    try:
+        row = conn.execute(
+            f"SELECT CAST(strftime('%Y', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS y, COUNT(*) AS cnt "
+            "FROM messages "
+            "WHERE is_service = 0 AND date_ts > 0 "
+            "GROUP BY y "
+            "ORDER BY y DESC "
+            "LIMIT 1;"
+        ).fetchone()
+        if row is None or row[0] is None:
+            return None
+        return int(row[0])
+    except Exception:
+        return None
+
+
 def _count_messages(conn: sqlite3.Connection, start_ts: int, end_ts: int, where_extra: str = "", params_extra: Tuple[Any, ...] = ()) -> int:
     base, p = _period_where_clause(start_ts, end_ts)
     sql = f"SELECT COUNT(*) FROM messages WHERE {base} {where_extra};"
@@ -1983,6 +2133,27 @@ def _period_span(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[s
     }
 
 
+def _bounded_month_keys(start_ts: int, end_ts: int) -> List[str]:
+    if start_ts <= 0 or end_ts <= start_ts or (end_ts - start_ts) > 370 * 86400 * 2:
+        return []
+    try:
+        msk = _moscow_tzinfo()
+        cur = datetime.fromtimestamp(start_ts, tz=msk).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last = datetime.fromtimestamp(max(start_ts, end_ts - 1), tz=msk).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        keys: List[str] = []
+        while cur <= last:
+            keys.append(cur.strftime("%Y-%m"))
+            if cur.month == 12:
+                cur = cur.replace(year=cur.year + 1, month=1)
+            else:
+                cur = cur.replace(month=cur.month + 1)
+        return keys
+    except Exception:
+        return []
+
+
 def _month_activity_extremes(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
     base, p = _period_where_clause(start_ts, end_ts)
     rows = list(
@@ -1992,9 +2163,13 @@ def _month_activity_extremes(conn: sqlite3.Connection, start_ts: int, end_ts: in
             p,
         )
     )
-    months = [{"value": r[0], "count": int(r[1] or 0)} for r in rows if isinstance(r[0], str)]
-    non_zero = [m for m in months if int(m["count"]) > 0]
-    quietest = min(non_zero, key=lambda x: (int(x["count"]), str(x["value"]))) if non_zero else None
+    counts = {r[0]: int(r[1] or 0) for r in rows if isinstance(r[0], str)}
+    bounded_keys = _bounded_month_keys(start_ts, end_ts)
+    if bounded_keys:
+        months = [{"value": key, "count": int(counts.get(key, 0))} for key in bounded_keys]
+    else:
+        months = [{"value": key, "count": int(cnt)} for key, cnt in sorted(counts.items())]
+    quietest = min(months, key=lambda x: (int(x["count"]), str(x["value"]))) if months else None
     return {"months": months, "quietest_month": quietest}
 
 
@@ -2123,10 +2298,10 @@ def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
 
 def _compute_reply_times(conn: sqlite3.Connection, year_start_ts: int, year_end_ts: int) -> Dict[str, Any]:
     q = (
-        "SELECT m.chat_pk, m.date_ts, m.is_out, c.peer_from_id "
+        "SELECT m.msg_pk, m.chat_pk, m.msg_id, m.date_ts, m.is_out, m.reply_to_msg_id, c.peer_from_id "
         "FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
         "WHERE m.is_service = 0 AND c.peer_from_id IS NOT NULL "
-        "ORDER BY m.chat_pk, m.date_ts;"
+        "ORDER BY m.chat_pk, m.date_ts, m.msg_pk;"
     )
     global_all: List[int] = []
     global_year: List[int] = []
@@ -2135,51 +2310,65 @@ def _compute_reply_times(conn: sqlite3.Connection, year_start_ts: int, year_end_
 
     last_chat_pk: Optional[int] = None
     last_in_all: Optional[int] = None
-    last_in_year: Optional[int] = None
-    last_peer: Optional[str] = None
+    messages_by_id: Dict[str, Tuple[int, int]] = {}
+
+    def add_reply_delta(peer_id: str, ts: int, delta: int) -> None:
+        if delta <= 0:
+            return
+        global_all.append(delta)
+        per_peer_all[peer_id].append(delta)
+        if year_start_ts <= ts < year_end_ts:
+            global_year.append(delta)
+            per_peer_year[peer_id].append(delta)
 
     for row in conn.execute(q):
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
 
-        chat_pk = int(row[0])
-        ts = int(row[1] or 0)
-        is_out = int(row[2] or 0)
-        peer = row[3]
+        chat_pk = int(row[1])
+        msg_id = row[2]
+        ts = int(row[3] or 0)
+        is_out = int(row[4] or 0)
+        reply_to_msg_id = row[5]
+        peer = row[6]
         peer_id = peer if isinstance(peer, str) else None
 
         if last_chat_pk is None or chat_pk != last_chat_pk:
             last_chat_pk = chat_pk
             last_in_all = None
-            last_in_year = None
-            last_peer = peer_id
-        else:
-            last_peer = peer_id
+            messages_by_id.clear()
 
         if ts <= 0 or not peer_id:
             continue
         if peer_id in BANNED_PEER_IDS:
+            if msg_id is not None and ts > 0:
+                messages_by_id[str(msg_id)] = (ts, is_out)
             continue
 
         if is_out == 0:
             last_in_all = ts
-            if year_start_ts <= ts < year_end_ts:
-                last_in_year = ts
-            else:
-                last_in_year = None
+            if msg_id is not None:
+                messages_by_id[str(msg_id)] = (ts, is_out)
             continue
 
-        if last_in_all is not None and ts > last_in_all:
+        explicit_reply_used = False
+        if reply_to_msg_id is not None:
+            reply_target = messages_by_id.get(str(reply_to_msg_id))
+            if reply_target is not None:
+                replied_ts, replied_is_out = reply_target
+                if replied_ts > 0 and replied_is_out == 0 and ts > replied_ts:
+                    add_reply_delta(peer_id, ts, int(ts - replied_ts))
+                    explicit_reply_used = True
+                    last_in_all = None
+
+        if not explicit_reply_used and last_in_all is not None and ts > last_in_all:
             d = ts - last_in_all
-            global_all.append(d)
-            per_peer_all[peer_id].append(d)
+            if d <= MAX_INFERRED_REPLY_SECONDS:
+                add_reply_delta(peer_id, ts, int(d))
             last_in_all = None
 
-        if year_start_ts <= ts < year_end_ts and last_in_year is not None and ts > last_in_year:
-            d2 = ts - last_in_year
-            global_year.append(d2)
-            per_peer_year[peer_id].append(d2)
-            last_in_year = None
+        if msg_id is not None:
+            messages_by_id[str(msg_id)] = (ts, is_out)
 
     per_peer_all_med: Dict[str, int] = {k: _median_int(v) for k, v in per_peer_all.items() if v}
     per_peer_year_med: Dict[str, int] = {k: _median_int(v) for k, v in per_peer_year.items() if v}
@@ -2615,6 +2804,27 @@ def _pick_person_by_metric(people: Dict[str, Dict[str, Any]], key: str, reverse:
     return lst[0] if lst else None
 
 
+def _pick_person_by_time_profile(people: Dict[str, Dict[str, Any]], count_key: str) -> Optional[Dict[str, Any]]:
+    candidates: List[Tuple[float, int, int, Dict[str, Any]]] = []
+    for person in people.values():
+        total = int(person.get("total_messages", 0) or 0)
+        count = int(person.get(count_key, 0) or 0)
+        if total < 20 or count <= 0:
+            continue
+        ratio = float(_safe_div(count, total))
+        score = float(count) * ratio
+        enriched = dict(person)
+        enriched["selection_ratio"] = ratio
+        enriched["selection_score"] = score
+        candidates.append((score, count, total, enriched))
+
+    if not candidates:
+        return _pick_person_by_metric(people, count_key, reverse=True)
+
+    candidates.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
+    return candidates[0][3]
+
+
 def _peer_activity_insights(conn: sqlite3.Connection, start_ts: int, end_ts: int, peer_id: Optional[str]) -> Dict[str, Any]:
     if not peer_id:
         return {}
@@ -2726,10 +2936,10 @@ def _person_period_analytics(
 
     base, p = _period_where_clause(start_ts, end_ts)
     q = (
-        "SELECT m.chat_pk, m.date_ts, m.is_out, m.text, m.sticker_emoji, m.media_type, m.msg_id, c.name "
+        "SELECT m.chat_pk, m.date_ts, m.is_out, m.text, m.sticker_emoji, m.media_type, m.msg_id, m.reply_to_msg_id, c.name "
         "FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
         f"WHERE c.peer_from_id = ? AND m.is_service = 0 AND {base} "
-        "ORDER BY m.chat_pk, m.date_ts;"
+        "ORDER BY m.chat_pk, m.date_ts, m.msg_pk;"
     )
 
     month_counter: Counter[str] = Counter()
@@ -2756,6 +2966,7 @@ def _person_period_analytics(
     last_chat_pk: Optional[int] = None
     last_ts: Optional[int] = None
     last_is_out: Optional[int] = None
+    messages_by_id: Dict[Tuple[int, str], Tuple[int, int]] = {}
     msk = _moscow_tzinfo()
 
     def push_longest(item: Dict[str, Any]) -> None:
@@ -2789,7 +3000,8 @@ def _person_period_analytics(
             sticker_emoji = row[4] if isinstance(row[4], str) else None
             media_type = row[5] if isinstance(row[5], str) else None
             msg_id = row[6] if row[6] is not None else None
-            chat_name = row[7] if isinstance(row[7], str) else None
+            reply_to_msg_id = row[7] if row[7] is not None else None
+            chat_name = row[8] if isinstance(row[8], str) else None
 
             if chat_name and not display_name:
                 display_name = chat_name
@@ -2807,19 +3019,43 @@ def _person_period_analytics(
                 except Exception:
                     pass
 
+            explicit_reply_used = False
             if last_chat_pk is None or chat_pk != last_chat_pk:
                 last_chat_pk = chat_pk
-                last_ts = ts if ts > 0 else None
-                last_is_out = is_out
+                last_ts = None
+                last_is_out = None
+                messages_by_id.clear()
             else:
-                if last_ts is not None and ts > last_ts and last_is_out is not None and is_out != last_is_out:
+                reply_key = (chat_pk, str(reply_to_msg_id)) if reply_to_msg_id is not None else None
+                reply_target = messages_by_id.get(reply_key) if reply_key is not None else None
+                if reply_target is not None:
+                    target_ts, target_is_out = reply_target
+                    if target_ts > 0 and ts > target_ts and target_is_out != is_out:
+                        delta = int(ts - target_ts)
+                        if target_is_out == 0 and is_out == 1:
+                            your_reply_seconds.append(delta)
+                        elif target_is_out == 1 and is_out == 0:
+                            their_reply_seconds.append(delta)
+                        explicit_reply_used = True
+
+                if (
+                    not explicit_reply_used
+                    and last_ts is not None
+                    and ts > last_ts
+                    and last_is_out is not None
+                    and is_out != last_is_out
+                ):
                     delta = int(ts - last_ts)
-                    if last_is_out == 0 and is_out == 1:
-                        your_reply_seconds.append(delta)
-                    elif last_is_out == 1 and is_out == 0:
-                        their_reply_seconds.append(delta)
-                last_ts = ts if ts > 0 else last_ts
-                last_is_out = is_out
+                    if delta <= MAX_INFERRED_REPLY_SECONDS:
+                        if last_is_out == 0 and is_out == 1:
+                            your_reply_seconds.append(delta)
+                        elif last_is_out == 1 and is_out == 0:
+                            their_reply_seconds.append(delta)
+
+            if msg_id is not None and ts > 0:
+                messages_by_id[(chat_pk, str(msg_id))] = (ts, is_out)
+            last_ts = ts if ts > 0 else last_ts
+            last_is_out = is_out
 
             bucket = _normalize_media_bucket(media_type)
             if bucket:
@@ -3257,8 +3493,8 @@ def _compute_period_metrics(
             "delta_vs_qualified_median_seconds": int(slowest_med - qualified_median_3000),
         }
 
-    day_person = _pick_person_by_metric(people, "day_messages", reverse=True)
-    night_person = _pick_person_by_metric(people, "night_messages", reverse=True)
+    day_person = _pick_person_by_time_profile(people, "day_messages")
+    night_person = _pick_person_by_time_profile(people, "night_messages")
 
     row_0608 = conn.execute(
         f"SELECT COUNT(*) FROM messages WHERE is_service = 0 AND date_ts >= ? AND date_ts < ? AND CAST(strftime('%H', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 6 AND 8;",
@@ -3372,6 +3608,7 @@ def do_build_report(db_path: str) -> None:
             )
 
         ensure_messages_unique_index(conn)
+        create_indexes(conn)
 
         self_from_id = meta_get(conn, "self_from_id")
         if isinstance(self_from_id, str):
@@ -3379,15 +3616,18 @@ def do_build_report(db_path: str) -> None:
         else:
             self_from_id = None
 
-        if not self_from_id:
-            progress("compute_metrics", 3, "direction", "")
-            self_from_id = compute_self_from_id(conn)
-            apply_direction_updates(conn, self_from_id)
+        progress("compute_metrics", 3, "direction", "")
+        self_from_id = resolve_self_from_id(conn, self_from_id)
+        apply_direction_updates(conn, self_from_id)
 
         progress("compute_metrics", 6, "period_bounds", "")
         msk = _moscow_tzinfo()
-        now_msk = datetime.now(msk)
-        year_used = int(now_msk.year - 1)
+        inferred_year = infer_report_year(conn)
+        if inferred_year is None:
+            now_msk = datetime.now(msk)
+            year_used = int(now_msk.year - 1)
+        else:
+            year_used = int(inferred_year)
         year_start = datetime(year_used, 1, 1, tzinfo=msk)
         year_end = datetime(year_used + 1, 1, 1, tzinfo=msk)
         year_start_ts = int(year_start.timestamp())

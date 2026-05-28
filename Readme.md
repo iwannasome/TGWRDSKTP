@@ -44,6 +44,53 @@ TGWR работает с официальным бэкапом Telegram Desktop.
 
 Так как под капотом работает связка `Electron (Node.js) + React` и `Python`, запуск немного отличается в зависимости от твоей операционной системы. 
 
+### 🐳 Docker (Windows / macOS / Linux)
+
+Этот способ удобен для проверки проекта на любом компьютере, где установлен Docker: приложение запускается внутри контейнера, а окно Electron открывается через браузер с помощью noVNC.
+
+1. Склонируй репозиторий и перейди в папку проекта:
+```bash
+git clone <ссылка_на_репозиторий>
+cd tgwr
+```
+
+2. Запусти через Docker Compose:
+```bash
+docker compose up --build
+```
+
+Если Docker пишет, что команды `docker compose` нет, используй старый вариант:
+```bash
+docker-compose up --build
+```
+
+3. Открой в браузере:
+```text
+http://localhost:6080/vnc.html?autoconnect=1&resize=scale
+```
+
+Папка `out/docker-data` на компьютере видна внутри приложения как `/data` — туда удобно положить экспорт Telegram. Папка `out/docker-output` видна как `/output` — туда можно сохранять PNG/PDF. Папка `out/` уже игнорируется git.
+
+Если нужно запустить без Compose, собери образ вручную:
+```bash
+docker build -t tgwr-docker:local .
+```
+
+Windows CMD:
+```bash
+docker run --rm -p 6080:6080 -v "%cd%/out/docker-data:/data" -v "%cd%/out/docker-output:/output" tgwr-docker:local
+```
+
+Windows PowerShell:
+```powershell
+docker run --rm -p 6080:6080 -v "${PWD}/out/docker-data:/data" -v "${PWD}/out/docker-output:/output" tgwr-docker:local
+```
+
+macOS/Linux:
+```bash
+docker run --rm -p 6080:6080 -v "$PWD/out/docker-data:/data" -v "$PWD/out/docker-output:/output" tgwr-docker:local
+```
+
 ### 🪟 Windows
 1. Склонируй репозиторий и перейди в папку проекта:
 ```bash

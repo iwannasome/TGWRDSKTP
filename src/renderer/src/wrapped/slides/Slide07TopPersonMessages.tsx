@@ -35,7 +35,7 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
           className="rounded-[44px] border border-white/10 bg-white/5 p-10"
         >
-          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100">{name}</div>
+          <div className="break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{name}</div>
 
           <div className="mt-5 text-[92px] font-bold leading-none">
             <AnimatedNumber value={total} exporting={exporting} duration={0.92} delay={0.14} className="tgwr-gradient-text" />

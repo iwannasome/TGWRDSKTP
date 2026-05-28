@@ -19,10 +19,12 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
     return { minW: min, maxW: max }
   }, [words])
 
-  const sizeFor = (weight: number): number => {
+  const sizeFor = (word: string, weight: number): number => {
     if (maxW <= minW) return 30
     const t = (weight - minW) / (maxW - minW)
-    return clamp(18 + t * 54, 18, 72)
+    const base = clamp(18 + t * 54, 18, 72)
+    const compactCap = word.length > 44 ? 40 : word.length > 28 ? 50 : 72
+    return Math.min(base, compactCap)
   }
 
   return (
@@ -32,7 +34,7 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
       subtitle="Мы говорим и пишем тысячи слов в день. А что насчет взглянуть на самые популярные?"
     >
       <div className="flex h-full flex-col justify-center">
-        <div className="rounded-[44px] border border-white/10 bg-white/5 p-10">
+        <div className="overflow-hidden rounded-[44px] border border-white/10 bg-white/5 p-10">
           <div className="flex flex-wrap items-center justify-start gap-x-6 gap-y-4">
             {words.length === 0 ? (
               <div className="text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
@@ -44,13 +46,15 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
                   key={`${w.word}-${idx}`}
                   data-tip={`${w.word} · ${w.weight}`}
                   style={{
-                    fontSize: `${sizeFor(w.weight)}px`,
+                    fontSize: `${sizeFor(w.word, w.weight)}px`,
                     lineHeight: 1,
                     letterSpacing: '0',
-                    animationDelay: exporting ? undefined : `${Math.min(0.22, idx * 0.01)}s`
+                    animationDelay: exporting ? undefined : `${Math.min(0.22, idx * 0.01)}s`,
+                    maxWidth: '100%',
+                    wordBreak: 'break-word'
                   }}
                   className={[
-                    'tgwr-word-token select-none font-semibold',
+                    'tgwr-word-token max-w-full select-none whitespace-normal break-words font-semibold text-left [overflow-wrap:anywhere]',
                     idx % 5 === 0
                       ? 'text-[rgba(var(--tgwr-accent1-rgb),0.95)]'
                       : idx % 7 === 0

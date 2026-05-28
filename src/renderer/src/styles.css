@@ -222,6 +222,8 @@ body::before {
 
 .tgwr-info-card {
   position: relative;
+  min-width: 0;
+  overflow-wrap: anywhere;
   animation: tgwr-card-soft-in 260ms ease-out both;
   transition:
     border-color 160ms ease,
@@ -285,6 +287,8 @@ body::before {
 .tgwr-word-token {
   position: relative;
   display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   animation: tgwr-token-in 250ms ease-out both;
   transition:
     color 140ms ease,

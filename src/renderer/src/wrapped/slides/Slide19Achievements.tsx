@@ -227,6 +227,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
   }, [rawAchievements])
 
   const heroBadgeSrc = hero ? resolveBadgeSrc(hero) : null
+  const hasSideCards = visibleCards.length > 0
 
   return (
     <SlideFrame
@@ -241,7 +242,12 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
             Пока нет достижений для показа.
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)] gap-5">
+          <div
+            className={[
+              'grid min-h-0 flex-1 gap-5',
+              hasSideCards ? 'grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]' : 'grid-cols-1'
+            ].join(' ')}
+          >
             <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_116px] gap-5">
               <motion.div
                 initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
@@ -350,16 +356,18 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
               </motion.div>
             </div>
 
-            <div className="grid min-h-0 grid-cols-1 grid-rows-4 gap-4">
-              {visibleCards.map((item, idx) => (
-                <GridCard
-                  key={`${item.id}-${idx}`}
-                  item={item}
-                  index={idx}
-                  exporting={exporting}
-                />
-              ))}
-            </div>
+            {hasSideCards ? (
+              <div className="grid min-h-0 grid-cols-1 grid-rows-4 gap-4">
+                {visibleCards.map((item, idx) => (
+                  <GridCard
+                    key={`${item.id}-${idx}`}
+                    item={item}
+                    index={idx}
+                    exporting={exporting}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
       </div>

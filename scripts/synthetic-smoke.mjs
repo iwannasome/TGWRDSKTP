@@ -53,6 +53,7 @@ function makeMessages({ peerId, peerName, startMs, count }) {
       text: makeText(i, peerName)
     }
 
+    if (i === 1) msg.date = '2030-01-01T00:00:00'
     if (i > 0 && outgoing) msg.reply_to_message_id = i
     if (i % 37 === 0) msg.media_type = 'photo'
     if (i % 53 === 0) msg.sticker_emoji = '🔥'
@@ -119,6 +120,11 @@ async function generateExport() {
 
   const result = {
     about: 'Synthetic TGWR fixture. No real Telegram data.',
+    personal_information: {
+      user_id: 100000000,
+      first_name: 'Synthetic',
+      last_name: 'Self'
+    },
     chats: { list: chats }
   }
 
@@ -215,6 +221,8 @@ function assertReport(report) {
   const year = report?.periods?.year
   const required = [
     ['all_time.total_messages', allTime?.total_messages > 4500],
+    ['meta.self_from_id', report?.meta?.self_from_id === selfId],
+    ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
     ['top_10_people_by_mutuality', year?.top_10_people_by_mutuality?.length >= 2],
@@ -222,7 +230,7 @@ function assertReport(report) {
     ['word_cloud', Object.keys(allTime?.word_cloud ?? {}).length > 0],
     ['achievements', report?.achievements?.length > 0],
     ['period_span', Boolean(allTime?.period_span?.first_date && allTime?.period_span?.last_date)],
-    ['quietest_month', Boolean(year?.quietest_month?.value)],
+    ['quietest_month', Boolean(year?.quietest_month?.value) && year?.quietest_month?.count === 0],
     ['direction_extremes', Boolean(year?.most_balanced_day?.date && year?.most_one_sided_day?.date)],
     ['night_insights', Boolean(year?.night_peak_hour && year?.most_night_date)],
     ['reply_thresholds', year?.who_you_reply_fastest?.minimum_messages_required === 2500 && year?.who_you_ignore_most?.minimum_messages_required === 3000],

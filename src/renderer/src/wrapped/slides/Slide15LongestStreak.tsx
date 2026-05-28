@@ -52,7 +52,7 @@ export default function Slide15LongestStreak({ report, period, exporting }: Slid
                 Самый длинный стрик с человеком
               </div>
               <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
-                <div className="min-w-0 break-words text-[22px] font-semibold leading-tight text-white">{personStreak.displayName}</div>
+                <div className="min-w-0 break-words text-[22px] font-semibold leading-tight text-white [overflow-wrap:anywhere]">{personStreak.displayName}</div>
                 <div className="text-[22px] font-bold text-white">
                   <AnimatedNumber value={personStreak.lengthDays} exporting={exporting} duration={0.7} delay={0.3} /> дней
                 </div>
