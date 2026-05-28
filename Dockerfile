@@ -44,8 +44,11 @@ RUN npm ci
 COPY . .
 
 RUN chmod +x docker/entrypoint.sh \
-  && mkdir -p /data /output /home/node/.cache /home/node/.config \
-  && chown -R node:node /app /data /output /home/node/.cache /home/node/.config
+  && mkdir -p /data /output /home/node/.cache /home/node/.config /tmp/.X11-unix \
+  && chown -R node:node /app /data /output /home/node/.cache /home/node/.config \
+  && chmod 1777 /tmp/.X11-unix \
+  && chown root:root /app/node_modules/electron/dist/chrome-sandbox \
+  && chmod 4755 /app/node_modules/electron/dist/chrome-sandbox
 
 USER node
 
