@@ -19,12 +19,12 @@
     "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
     "verify": "npm run typecheck && npm run test:synthetic && npm run pack",
 
-    "pack": "npm run build && electron-builder --dir",
-    "dist:win": "npm run build && electron-builder --win nsis",
-    "dist:win:portable": "npm run build && electron-builder --win portable",
-    "dist:mac": "npm run build && electron-builder --mac dmg",
-    "dist:linux": "npm run build && electron-builder --linux AppImage",
-    "dist:current": "npm run build && electron-builder"
+    "pack": "npm run build && node scripts/electron-builder-safe.mjs --dir",
+    "dist:win": "npm run build && node scripts/electron-builder-safe.mjs --win nsis",
+    "dist:win:portable": "npm run build && node scripts/electron-builder-safe.mjs --win portable",
+    "dist:mac": "npm run build && node scripts/electron-builder-safe.mjs --mac dmg",
+    "dist:linux": "npm run build && node scripts/electron-builder-safe.mjs --linux AppImage",
+    "dist:current": "npm run build && node scripts/electron-builder-safe.mjs"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",
@@ -63,7 +63,9 @@
         "from": "worker",
         "to": "worker",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
         ]
       }
     ],

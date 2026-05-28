@@ -264,7 +264,12 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                 <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.18)] blur-[56px]" />
                 <div className="pointer-events-none absolute -left-10 bottom-0 h-36 w-36 rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.14)] blur-[40px]" />
 
-                <div className="relative grid h-full grid-cols-[minmax(0,1fr)_240px] gap-6">
+                <div
+                  className={[
+                    'relative grid h-full',
+                    hasSideCards ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_240px] gap-6'
+                  ].join(' ')}
+                >
                   <div className="flex min-w-0 flex-col">
                     <div className="min-w-0">
                       <div className="min-w-0">
@@ -282,8 +287,8 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                       {hero.description || 'Главный титул, который лучше всего описывает твой стиль общения.'}
                     </div>
 
-                    <div className="mt-auto flex items-end justify-between gap-4 pt-5">
-                      <div>
+                    <div className="mt-auto flex flex-wrap items-end justify-between gap-4 pt-5">
+                      <div className="min-w-[112px]">
                         <div className="text-[12px] font-semibold uppercase tracking-[0.34em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                           очки
                         </div>
@@ -292,7 +297,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                         </div>
                       </div>
 
-                      <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/15 px-4 py-3 text-right">
+                      <div className="tgwr-info-card min-w-[190px] flex-1 shrink-0 rounded-[22px] border border-white/10 bg-black/15 px-4 py-3 text-right">
                         <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                           лучший титул
                         </div>
@@ -301,8 +306,14 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                     </div>
                   </div>
 
+                  {!hasSideCards ? (
                   <div className="flex min-w-0 items-center justify-center">
-                    <div className="relative flex h-[230px] w-[230px] items-center justify-center rounded-[34px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.44)] p-7 backdrop-blur-sm">
+                    <div
+                      className={[
+                        'relative flex items-center justify-center rounded-[34px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.44)] p-7 backdrop-blur-sm',
+                        'h-[230px] w-[230px]'
+                      ].join(' ')}
+                    >
                       <div className="pointer-events-none absolute inset-0 rounded-[34px] bg-[radial-gradient(circle_at_center,rgba(var(--tgwr-accent1-rgb),0.16),transparent_65%)]" />
                       {heroBadgeSrc ? (
                         <img
@@ -315,6 +326,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                       )}
                     </div>
                   </div>
+                  ) : null}
                 </div>
               </motion.div>
 
