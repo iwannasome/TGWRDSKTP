@@ -65,6 +65,48 @@ function makeMessages({ peerId, peerName, startMs, count }) {
   return messages
 }
 
+function makeSegmentedMessages({ peerId, peerName, segments }) {
+  const messages = []
+  let nextId = 1
+
+  for (const segment of segments) {
+    const {
+      startMs,
+      count,
+      stepMinutes = 37,
+      textPrefix = 'conversation insight fixture',
+      mediaType = null,
+      mediaEvery = 0,
+      stickerEvery = 0,
+      outgoingOffset = 0
+    } = segment
+
+    for (let i = 0; i < count; i += 1) {
+      const id = nextId
+      const tsMs = startMs + i * stepMinutes * 60_000
+      const outgoing = (id + outgoingOffset) % 2 === 0
+      const msg = {
+        id,
+        type: 'message',
+        date: new Date(tsMs).toISOString().replace('.000Z', ''),
+        date_unixtime: String(Math.floor(tsMs / 1000)),
+        from: outgoing ? 'Synthetic Self' : peerName,
+        from_id: outgoing ? selfId : peerId,
+        text: `${textPrefix} ${peerName} #${id}`
+      }
+
+      if (id > 1 && outgoing) msg.reply_to_message_id = id - 1
+      if (mediaType && (!mediaEvery || id % mediaEvery === 0)) msg.media_type = mediaType
+      if (stickerEvery && id % stickerEvery === 0) msg.sticker_emoji = '✨'
+
+      messages.push(msg)
+      nextId += 1
+    }
+  }
+
+  return messages
+}
+
 async function generateExport() {
   await rm(workDir, { recursive: true, force: true })
   await mkdir(exportDir, { recursive: true })
@@ -103,6 +145,150 @@ async function generateExport() {
         peerName: 'Короткий чат',
         startMs: Date.UTC(2024, 10, 10, 7, 15, 0),
         count: 180
+      })
+    },
+    {
+      id: 300001,
+      type: 'personal_chat',
+      name: 'Стабильный диалог',
+      messages: makeSegmentedMessages({
+        peerId: 'user300001',
+        peerName: 'Стабильный диалог',
+        segments: Array.from({ length: 12 }, (_, month) => ({
+          startMs: Date.UTC(2025, month, 5, 10, 0, 0),
+          count: 40,
+          stepMinutes: 180,
+          textPrefix: 'ровный стабильный контакт'
+        }))
+      })
+    },
+    {
+      id: 300002,
+      type: 'personal_chat',
+      name: 'Реальный камбэк',
+      messages: makeSegmentedMessages({
+        peerId: 'user300002',
+        peerName: 'Реальный камбэк',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 0, 8, 11, 0, 0),
+            count: 260,
+            stepMinutes: 48,
+            textPrefix: 'активность до большой паузы'
+          },
+          {
+            startMs: Date.UTC(2025, 9, 3, 18, 0, 0),
+            count: 340,
+            stepMinutes: 42,
+            textPrefix: 'общение вернулось после большой паузы'
+          }
+        ]
+      })
+    },
+    {
+      id: 300003,
+      type: 'personal_chat',
+      name: 'Ложный маленький камбэк',
+      messages: makeSegmentedMessages({
+        peerId: 'user300003',
+        peerName: 'Ложный маленький камбэк',
+        segments: [
+          {
+            startMs: Date.UTC(2022, 0, 10, 12, 0, 0),
+            count: 2,
+            stepMinutes: 60,
+            textPrefix: 'слишком мало до паузы'
+          },
+          {
+            startMs: Date.UTC(2024, 10, 10, 12, 0, 0),
+            count: 4,
+            stepMinutes: 60,
+            textPrefix: 'слишком мало после паузы'
+          }
+        ]
+      })
+    },
+    {
+      id: 300004,
+      type: 'personal_chat',
+      name: 'Диалог который стал ближе',
+      messages: makeSegmentedMessages({
+        peerId: 'user300004',
+        peerName: 'Диалог который стал ближе',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 2, 1, 9, 0, 0),
+            count: 60,
+            stepMinutes: 240,
+            textPrefix: 'тихое начало года'
+          },
+          {
+            startMs: Date.UTC(2025, 10, 1, 9, 0, 0),
+            count: 520,
+            stepMinutes: 35,
+            textPrefix: 'вторая половина стала заметно активнее'
+          }
+        ]
+      })
+    },
+    {
+      id: 300005,
+      type: 'personal_chat',
+      name: 'Диалог который затих',
+      messages: makeSegmentedMessages({
+        peerId: 'user300005',
+        peerName: 'Диалог который затих',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 1, 1, 9, 0, 0),
+            count: 520,
+            stepMinutes: 35,
+            textPrefix: 'очень активное начало года'
+          },
+          {
+            startMs: Date.UTC(2025, 11, 1, 9, 0, 0),
+            count: 60,
+            stepMinutes: 240,
+            textPrefix: 'к концу года стало тише'
+          }
+        ]
+      })
+    },
+    {
+      id: 300006,
+      type: 'personal_chat',
+      name: 'Медиа связь',
+      messages: makeSegmentedMessages({
+        peerId: 'user300006',
+        peerName: 'Медиа связь',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 4, 1, 14, 0, 0),
+            count: 420,
+            stepMinutes: 45,
+            textPrefix: 'много медиа в переписке',
+            mediaType: 'photo',
+            mediaEvery: 1,
+            stickerEvery: 5
+          }
+        ]
+      })
+    },
+    {
+      id: 300007,
+      type: 'personal_chat',
+      name: 'Старый all time диалог',
+      messages: makeSegmentedMessages({
+        peerId: 'user300007',
+        peerName: 'Старый all time диалог',
+        segments: [
+          {
+            startMs: Date.UTC(2021, 5, 1, 12, 0, 0),
+            count: 700,
+            stepMinutes: 80,
+            textPrefix: 'история до выбранного года'
+          }
+        ]
       })
     },
     {
@@ -216,6 +402,25 @@ async function runWorkerSmoke() {
   }
 }
 
+const INSIGHT_KEYS = [
+  'main_person',
+  'stable_dialog',
+  'comeback',
+  'closer_dialog',
+  'faded_dialog',
+  'night_companion',
+  'day_anchor',
+  'alive_dialog',
+  'longest_live_session',
+  'reply_rhythm',
+  'mutual_dialog',
+  'contact_initiator',
+  'silence_restarter',
+  'media_bond'
+]
+
+const ALLOWED_CONFIDENCE = new Set(['exact', 'behavioral', 'heuristic'])
+
 function assertReport(report) {
   const allTime = report?.periods?.all_time
   const year = report?.periods?.year
@@ -291,10 +496,54 @@ function assertReport(report) {
     return checks
   }
 
+  const assertInsightContract = (label, period) => {
+    const insights = period?.conversation_insights
+    const checks = [[`${label}.conversation_insights_shape`, insights && typeof insights === 'object' && !Array.isArray(insights)]]
+    if (!insights || typeof insights !== 'object' || Array.isArray(insights)) return checks
+
+    for (const key of INSIGHT_KEYS) {
+      const insight = insights[key]
+      const hasInsight = insight && typeof insight === 'object' && !Array.isArray(insight)
+      checks.push([`${label}.insight.${key}.shape`, hasInsight])
+      if (!hasInsight) continue
+
+      const winner = insight.winner
+      const winnerOk =
+        winner === null ||
+        (winner &&
+          typeof winner === 'object' &&
+          !Array.isArray(winner) &&
+          typeof winner.peer_from_id === 'string' &&
+          typeof winner.display_name === 'string')
+
+      checks.push([`${label}.insight.${key}.kind`, insight.kind === key])
+      checks.push([`${label}.insight.${key}.confidence`, ALLOWED_CONFIDENCE.has(insight.confidence)])
+      checks.push([`${label}.insight.${key}.evidence`, insight.evidence && typeof insight.evidence === 'object' && !Array.isArray(insight.evidence)])
+      checks.push([`${label}.insight.${key}.candidates`, Array.isArray(insight.candidates)])
+      checks.push([`${label}.insight.${key}.winner`, Boolean(winnerOk)])
+      checks.push([`${label}.insight.${key}.no_winner_reason`, Object.prototype.hasOwnProperty.call(insight, 'no_winner_reason')])
+      checks.push([`${label}.insight.${key}.winner_or_reason`, winner !== null || typeof insight.no_winner_reason === 'string'])
+    }
+
+    return checks
+  }
+
+  const getInsightWinnerPeer = (period, key) => {
+    const winner = period?.conversation_insights?.[key]?.winner
+    return winner && typeof winner === 'object' ? winner.peer_from_id : null
+  }
+
   const required = [
-    ...assertPeriodInvariants('all_time', allTime, { total: 6880, activeChats: 3 }),
-    ...assertPeriodInvariants('year', year, { total: 6700, activeChats: 2 }),
+    ...assertPeriodInvariants('all_time', allTime, { total: 10246, activeChats: 10 }),
+    ...assertPeriodInvariants('year', year, { total: 9360, activeChats: 7 }),
     ...assertPersonAnalyticsInvariants(report?.people_analytics),
+    ...assertInsightContract('all_time', allTime),
+    ...assertInsightContract('year', year),
+    ['year.comeback_real_chat_wins', getInsightWinnerPeer(year, 'comeback') === 'user300002'],
+    ['year.comeback_tiny_false_positive_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300003' && getInsightWinnerPeer(allTime, 'comeback') !== 'user300003'],
+    ['year.closer_dialog_fixture', getInsightWinnerPeer(year, 'closer_dialog') === 'user300004'],
+    ['year.faded_dialog_fixture', getInsightWinnerPeer(year, 'faded_dialog') === 'user300005'],
+    ['year.media_bond_fixture', getInsightWinnerPeer(year, 'media_bond') === 'user300006'],
     ['all_time.total_messages', allTime?.total_messages > 4500],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
@@ -305,7 +554,7 @@ function assertReport(report) {
     ['word_cloud', Object.keys(allTime?.word_cloud ?? {}).length > 0],
     ['achievements', report?.achievements?.length > 0],
     ['period_span', Boolean(allTime?.period_span?.first_date && allTime?.period_span?.last_date)],
-    ['quietest_month', Boolean(year?.quietest_month?.value) && year?.quietest_month?.count === 0],
+    ['quietest_month', Boolean(year?.quietest_month?.value) && Number(year?.quietest_month?.count ?? -1) >= 0],
     ['direction_extremes', Boolean(year?.most_balanced_day?.date && year?.most_one_sided_day?.date)],
     ['night_insights', Boolean(year?.night_peak_hour && year?.most_night_date)],
     ['reply_thresholds', year?.who_you_reply_fastest?.minimum_messages_required === 2500 && year?.who_you_ignore_most?.minimum_messages_required === 3000],

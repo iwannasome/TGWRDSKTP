@@ -6,6 +6,7 @@ import sqlite3
 import statistics
 import sys
 import threading
+from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -3340,6 +3341,650 @@ def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     rows.sort(key=lambda r: (r["imbalance_ratio"], -r["total_messages"], r["peer_from_id"]))
     return rows[:10]
+
+
+CONVERSATION_INSIGHT_KEYS: Tuple[str, ...] = (
+    "main_person",
+    "stable_dialog",
+    "comeback",
+    "closer_dialog",
+    "faded_dialog",
+    "night_companion",
+    "day_anchor",
+    "alive_dialog",
+    "longest_live_session",
+    "reply_rhythm",
+    "mutual_dialog",
+    "contact_initiator",
+    "silence_restarter",
+    "media_bond",
+)
+
+CONFIDENCE_EXACT = "exact"
+CONFIDENCE_BEHAVIORAL = "behavioral"
+CONFIDENCE_HEURISTIC = "heuristic"
+
+SESSION_GAP_SECONDS = 3 * 60 * 60
+SILENCE_RESTART_SECONDS = 7 * 24 * 60 * 60
+
+
+def _conversation_thresholds(label: str) -> Dict[str, int]:
+    if label == "year":
+        return {
+            "min_person_total": 120,
+            "min_major_total": 250,
+            "min_stable_total": 240,
+            "min_stable_months": 6,
+            "min_active_days": 6,
+            "comeback_gap_days": 45,
+            "comeback_before_messages": 80,
+            "comeback_after_messages": 100,
+            "comeback_after_active_days": 2,
+            "trend_baseline_messages": 40,
+            "trend_delta_messages": 120,
+            "reply_samples": 3,
+            "initiative_days": 4,
+            "media_events": 80,
+            "session_messages": 40,
+        }
+    return {
+        "min_person_total": 180,
+        "min_major_total": 320,
+        "min_stable_total": 300,
+        "min_stable_months": 4,
+        "min_active_days": 8,
+        "comeback_gap_days": 75,
+        "comeback_before_messages": 90,
+        "comeback_after_messages": 110,
+        "comeback_after_active_days": 2,
+        "trend_baseline_messages": 50,
+        "trend_delta_messages": 140,
+        "reply_samples": 3,
+        "initiative_days": 5,
+        "media_events": 90,
+        "session_messages": 45,
+    }
+
+
+def _insight_title(kind: str, label: str) -> str:
+    period = "года" if label == "year" else "за все время"
+    titles = {
+        "main_person": f"Главный человек {period}",
+        "stable_dialog": f"Самый стабильный диалог {period}",
+        "comeback": f"Камбэк {period}",
+        "closer_dialog": "Диалог, который стал ближе",
+        "faded_dialog": "Диалог, который затих",
+        "night_companion": "Ночной собеседник",
+        "day_anchor": "Дневной якорь",
+        "alive_dialog": "Самый живой диалог",
+        "longest_live_session": "Самая длинная живая сессия",
+        "reply_rhythm": "Ритм ответов",
+        "mutual_dialog": "Самый взаимный диалог",
+        "contact_initiator": "Кто чаще начинал контакт",
+        "silence_restarter": "Кто возвращал разговор после тишины",
+        "media_bond": "Медиа-связь",
+    }
+    return titles.get(kind, kind)
+
+
+def _empty_insight(kind: str, label: str, confidence: str, reason: str, evidence: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    return {
+        "kind": kind,
+        "title": _insight_title(kind, label),
+        "confidence": confidence,
+        "winner": None,
+        "score": 0.0,
+        "evidence": evidence or {},
+        "candidates": [],
+        "no_winner_reason": reason,
+    }
+
+
+def _candidate_from_profile(profile: Dict[str, Any], score: float, evidence: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "peer_from_id": str(profile.get("peer_from_id") or ""),
+        "display_name": str(profile.get("display_name") or profile.get("peer_from_id") or ""),
+        "score": float(round(float(score), 4)),
+        "total_messages": int(profile.get("total_messages", 0) or 0),
+        "evidence": evidence,
+    }
+
+
+def _make_insight(kind: str, label: str, confidence: str, candidate: Optional[Dict[str, Any]], candidates: List[Dict[str, Any]], reason: str) -> Dict[str, Any]:
+    if candidate is None:
+        return _empty_insight(kind, label, confidence, reason)
+
+    winner = {
+        "peer_from_id": str(candidate.get("peer_from_id") or ""),
+        "display_name": str(candidate.get("display_name") or candidate.get("peer_from_id") or ""),
+        "total_messages": int(candidate.get("total_messages", 0) or 0),
+    }
+    return {
+        "kind": kind,
+        "title": _insight_title(kind, label),
+        "confidence": confidence,
+        "winner": winner,
+        "score": float(candidate.get("score", 0.0) or 0.0),
+        "evidence": candidate.get("evidence") if isinstance(candidate.get("evidence"), dict) else {},
+        "candidates": candidates[:5],
+        "no_winner_reason": None,
+    }
+
+
+def _period_personal_message_rows(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Iterable[sqlite3.Row]:
+    base, p = _period_where_clause(start_ts, end_ts)
+    banned_params = banned_peer_ids()
+    banned_placeholders = sql_placeholders(banned_params)
+    sql = (
+        "SELECT c.peer_from_id, c.name, m.date_ts, m.is_out, m.media_type "
+        "FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
+        f"WHERE m.is_service = 0 "
+        f"  AND c.peer_from_id IS NOT NULL "
+        f"  AND TRIM(c.peer_from_id) != '' "
+        f"  AND c.peer_from_id NOT IN ({banned_placeholders}) "
+        f"  AND (c.name IS NULL OR (c.name NOT LIKE '%Saved Messages%' AND c.name NOT LIKE '%Избранное%')) "
+        f"  AND {base} "
+        "ORDER BY c.peer_from_id, m.date_ts, m.msg_pk;"
+    )
+    return conn.execute(sql, banned_params + p)
+
+
+def _finish_profile_session(profile: Dict[str, Any]) -> None:
+    session = profile.get("_session")
+    if not isinstance(session, dict):
+        return
+    count = int(session.get("count", 0) or 0)
+    if count <= 0:
+        profile["_session"] = None
+        return
+    start_ts = int(session.get("start_ts", 0) or 0)
+    end_ts = int(session.get("end_ts", start_ts) or start_ts)
+    duration = max(0, end_ts - start_ts)
+    profile.setdefault("sessions", []).append(
+        {
+            "start_ts": start_ts,
+            "end_ts": end_ts,
+            "duration_seconds": int(duration),
+            "message_count": int(count),
+            "sent_messages": int(session.get("sent_messages", 0) or 0),
+            "received_messages": int(session.get("received_messages", 0) or 0),
+            "density_per_hour": float(_safe_div(count * 3600, max(3600, duration))),
+        }
+    )
+    profile["_session"] = None
+
+
+def _count_between(values: List[int], start_ts: int, end_ts: int) -> int:
+    left = bisect_left(values, int(start_ts))
+    right = bisect_right(values, int(end_ts))
+    return max(0, right - left)
+
+
+def _active_days_between(values: List[int], start_ts: int, end_ts: int) -> int:
+    left = bisect_left(values, int(start_ts))
+    right = bisect_right(values, int(end_ts))
+    if right <= left:
+        return 0
+    msk = _moscow_tzinfo()
+    days = set()
+    for ts in values[left:right]:
+        try:
+            days.add(datetime.fromtimestamp(int(ts), tz=msk).strftime("%Y-%m-%d"))
+        except Exception:
+            continue
+    return len(days)
+
+
+def _build_conversation_profiles(
+    conn: sqlite3.Connection,
+    start_ts: int,
+    end_ts: int,
+    people: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    profiles: Dict[str, Dict[str, Any]] = {}
+    msk = _moscow_tzinfo()
+
+    for peer_id, stats in people.items():
+        if peer_id in BANNED_PEER_IDS:
+            continue
+        profiles[peer_id] = {
+            "peer_from_id": peer_id,
+            "display_name": str((stats or {}).get("display_name") or peer_id),
+            "total_messages": int((stats or {}).get("total_messages", 0) or 0),
+            "sent_messages": int((stats or {}).get("sent_messages", 0) or 0),
+            "received_messages": int((stats or {}).get("received_messages", 0) or 0),
+            "median_reply_seconds": int((stats or {}).get("median_reply_time_to_others_seconds", 0) or 0),
+            "reply_samples": int((stats or {}).get("reply_samples", 0) or 0),
+            "timestamps": [],
+            "is_out_by_ts": [],
+            "active_days_set": set(),
+            "active_months_set": set(),
+            "month_counts": Counter(),
+            "hour_counts": Counter(),
+            "media_counts": Counter(),
+            "first_by_day": {},
+            "days_started_by_you": 0,
+            "days_started_by_them": 0,
+            "restart_by_you": 0,
+            "restart_by_them": 0,
+            "sessions": [],
+            "_session": None,
+            "_last_ts": None,
+        }
+
+    for row in _period_personal_message_rows(conn, start_ts, end_ts):
+        if _CANCEL_EVENT.is_set():
+            raise CancelledError()
+        peer_id = row[0] if isinstance(row[0], str) else ""
+        if not peer_id:
+            continue
+        profile = profiles.get(peer_id)
+        if profile is None:
+            profile = {
+                "peer_from_id": peer_id,
+                "display_name": row[1] if isinstance(row[1], str) else peer_id,
+                "total_messages": 0,
+                "sent_messages": 0,
+                "received_messages": 0,
+                "median_reply_seconds": 0,
+                "reply_samples": 0,
+                "timestamps": [],
+                "is_out_by_ts": [],
+                "active_days_set": set(),
+                "active_months_set": set(),
+                "month_counts": Counter(),
+                "hour_counts": Counter(),
+                "media_counts": Counter(),
+                "first_by_day": {},
+                "days_started_by_you": 0,
+                "days_started_by_them": 0,
+                "restart_by_you": 0,
+                "restart_by_them": 0,
+                "sessions": [],
+                "_session": None,
+                "_last_ts": None,
+            }
+            profiles[peer_id] = profile
+
+        ts = int(row[2] or 0)
+        if ts <= 0:
+            continue
+        is_out = int(row[3] or 0)
+        media_type = row[4] if isinstance(row[4], str) else None
+
+        profile["timestamps"].append(ts)
+        profile["is_out_by_ts"].append(is_out)
+        try:
+            dt = datetime.fromtimestamp(ts, tz=msk)
+            day_key = dt.strftime("%Y-%m-%d")
+            month_key = dt.strftime("%Y-%m")
+            profile["active_days_set"].add(day_key)
+            profile["active_months_set"].add(month_key)
+            profile["month_counts"][month_key] += 1
+            profile["hour_counts"][int(dt.hour)] += 1
+            if day_key not in profile["first_by_day"]:
+                profile["first_by_day"][day_key] = is_out
+        except Exception:
+            pass
+
+        bucket = _normalize_media_bucket(media_type)
+        if bucket:
+            profile["media_counts"][bucket] += 1
+
+        last_ts = profile.get("_last_ts")
+        if isinstance(last_ts, int) and ts > last_ts and ts - last_ts >= SILENCE_RESTART_SECONDS:
+            if is_out == 1:
+                profile["restart_by_you"] = int(profile.get("restart_by_you", 0) or 0) + 1
+            else:
+                profile["restart_by_them"] = int(profile.get("restart_by_them", 0) or 0) + 1
+
+        session = profile.get("_session")
+        if not isinstance(session, dict) or not isinstance(last_ts, int) or ts - last_ts > SESSION_GAP_SECONDS:
+            _finish_profile_session(profile)
+            session = {"start_ts": ts, "end_ts": ts, "count": 0, "sent_messages": 0, "received_messages": 0}
+            profile["_session"] = session
+        session["end_ts"] = ts
+        session["count"] = int(session.get("count", 0) or 0) + 1
+        if is_out == 1:
+            session["sent_messages"] = int(session.get("sent_messages", 0) or 0) + 1
+        else:
+            session["received_messages"] = int(session.get("received_messages", 0) or 0) + 1
+
+        profile["_last_ts"] = ts
+
+    for profile in profiles.values():
+        _finish_profile_session(profile)
+        first_by_day = profile.get("first_by_day") if isinstance(profile.get("first_by_day"), dict) else {}
+        profile["days_started_by_you"] = sum(1 for value in first_by_day.values() if int(value) == 1)
+        profile["days_started_by_them"] = sum(1 for value in first_by_day.values() if int(value) == 0)
+        profile["active_days"] = len(profile.get("active_days_set") or [])
+        profile["active_months"] = len(profile.get("active_months_set") or [])
+        profile["media_total"] = int(sum((profile.get("media_counts") or Counter()).values()))
+        profile["first_ts"] = int(profile["timestamps"][0]) if profile["timestamps"] else 0
+        profile["last_ts"] = int(profile["timestamps"][-1]) if profile["timestamps"] else 0
+        profile["night_messages"] = int(sum(c for h, c in (profile.get("hour_counts") or Counter()).items() if 0 <= int(h) <= 5))
+        profile["day_messages"] = int(sum(c for h, c in (profile.get("hour_counts") or Counter()).items() if 6 <= int(h) <= 17))
+        month_counts = profile.get("month_counts") if isinstance(profile.get("month_counts"), Counter) else Counter()
+        sorted_months = sorted(month_counts)
+        if sorted_months:
+            if start_ts > 0 and end_ts > start_ts and (end_ts - start_ts) <= 370 * 86400 * 2:
+                first_window = [m for m in sorted_months if int(m[5:7]) <= 6]
+                second_window = [m for m in sorted_months if int(m[5:7]) >= 7]
+            else:
+                split = max(1, len(sorted_months) // 2)
+                first_window = sorted_months[:split]
+                second_window = sorted_months[split:]
+            profile["early_messages"] = int(sum(month_counts[m] for m in first_window))
+            profile["late_messages"] = int(sum(month_counts[m] for m in second_window))
+        else:
+            profile["early_messages"] = 0
+            profile["late_messages"] = 0
+
+    return profiles
+
+
+def _best_candidates(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(candidates, key=lambda x: (float(x.get("score", 0.0) or 0.0), int(x.get("total_messages", 0) or 0)), reverse=True)
+
+
+def _conversation_main_person(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        if total < th["min_major_total"]:
+            continue
+        active_days = int(profile.get("active_days", 0) or 0)
+        active_months = int(profile.get("active_months", 0) or 0)
+        sent = int(profile.get("sent_messages", 0) or 0)
+        recv = int(profile.get("received_messages", 0) or 0)
+        balance = 1.0 - min(1.0, _safe_div(abs(sent - recv), max(1, total)))
+        score = min(45.0, _safe_div(total, 80)) + min(25.0, active_days * 1.3) + min(20.0, active_months * 2.2) + balance * 10.0
+        evidence = {
+            "total_messages": total,
+            "active_days": active_days,
+            "active_months": active_months,
+            "balance_ratio": float(round(balance, 4)),
+        }
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    return _make_insight("main_person", label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "not_enough_large_dialogs")
+
+
+def _conversation_stable_dialog(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        active_months = int(profile.get("active_months", 0) or 0)
+        active_days = int(profile.get("active_days", 0) or 0)
+        if total < th["min_stable_total"] or active_months < th["min_stable_months"]:
+            continue
+        month_counts = profile.get("month_counts") if isinstance(profile.get("month_counts"), Counter) else Counter()
+        counts = [int(v) for v in month_counts.values() if int(v) > 0]
+        avg = _safe_div(sum(counts), len(counts)) if counts else 0.0
+        variance = _safe_div(sum(abs(c - avg) for c in counts), max(1, len(counts) * avg)) if avg else 1.0
+        stability = max(0.0, 1.0 - min(1.0, variance))
+        score = active_months * 12.0 + min(40.0, active_days) + stability * 30.0
+        evidence = {
+            "total_messages": total,
+            "active_months": active_months,
+            "active_days": active_days,
+            "stability_ratio": float(round(stability, 4)),
+        }
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    return _make_insight("stable_dialog", label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "not_enough_stable_dialogs")
+
+
+def _comeback_candidates(profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> List[Dict[str, Any]]:
+    out = []
+    gap_threshold = th["comeback_gap_days"] * 86400
+    before_window = 45 * 86400
+    after_window = 45 * 86400
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        if total < th["min_major_total"]:
+            continue
+        timestamps = profile.get("timestamps") if isinstance(profile.get("timestamps"), list) else []
+        if len(timestamps) < th["comeback_before_messages"] + th["comeback_after_messages"]:
+            continue
+        best = None
+        for idx in range(1, len(timestamps)):
+            prev_ts = int(timestamps[idx - 1])
+            cur_ts = int(timestamps[idx])
+            gap = cur_ts - prev_ts
+            if gap < gap_threshold:
+                continue
+            before_count = _count_between(timestamps, prev_ts - before_window, prev_ts)
+            after_count = _count_between(timestamps, cur_ts, cur_ts + after_window)
+            after_days = _active_days_between(timestamps, cur_ts, cur_ts + after_window)
+            if before_count < th["comeback_before_messages"] or after_count < th["comeback_after_messages"] or after_days < th["comeback_after_active_days"]:
+                continue
+            gap_days = int(gap // 86400)
+            score = gap_days + min(400.0, after_count) + after_days * 20.0 + min(100.0, before_count * 0.25)
+            evidence = {
+                "gap_days": gap_days,
+                "before_messages": int(before_count),
+                "after_messages": int(after_count),
+                "after_active_days": int(after_days),
+                "from_datetime": _ts_to_msk_datetime(prev_ts),
+                "to_datetime": _ts_to_msk_datetime(cur_ts),
+            }
+            candidate = _candidate_from_profile(profile, score, evidence)
+            if best is None or float(candidate["score"]) > float(best["score"]):
+                best = candidate
+        if best is not None:
+            out.append(best)
+    return _best_candidates(out)
+
+
+def _conversation_comeback(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
+    ordered = _comeback_candidates(profiles, th)
+    return _make_insight("comeback", label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "no_sustained_comeback_after_quality_gates")
+
+
+def _conversation_trend(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int], kind: str) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        early = int(profile.get("early_messages", 0) or 0)
+        late = int(profile.get("late_messages", 0) or 0)
+        if total < th["min_major_total"]:
+            continue
+        if kind == "closer_dialog":
+            if early < th["trend_baseline_messages"] or late - early < th["trend_delta_messages"] or _safe_div(late, max(1, early)) < 2.4:
+                continue
+            ratio = _safe_div(late, max(1, early))
+            score = (late - early) + ratio * 40.0
+        else:
+            if late < th["trend_baseline_messages"] or early - late < th["trend_delta_messages"] or _safe_div(early, max(1, late)) < 2.4:
+                continue
+            ratio = _safe_div(early, max(1, late))
+            score = (early - late) + ratio * 40.0
+        evidence = {
+            "early_messages": early,
+            "late_messages": late,
+            "change_messages": int(late - early),
+            "change_ratio": float(round(_safe_div(late, max(1, early)), 4)),
+        }
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    reason = "no_meaningful_growth_after_quality_gates" if kind == "closer_dialog" else "no_meaningful_fade_after_quality_gates"
+    return _make_insight(kind, label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, reason)
+
+
+def _conversation_time_person(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int], kind: str) -> Dict[str, Any]:
+    candidates = []
+    field = "night_messages" if kind == "night_companion" else "day_messages"
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        value = int(profile.get(field, 0) or 0)
+        if total < th["min_person_total"] or value < max(30, th["min_person_total"] // 3):
+            continue
+        ratio = _safe_div(value, total)
+        score = value + ratio * 120.0
+        evidence = {"messages": value, "total_messages": total, "ratio": float(round(ratio, 4))}
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    return _make_insight(kind, label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "not_enough_time_profile_activity")
+
+
+def _conversation_sessions(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int], kind: str) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        best_session = None
+        for session in profile.get("sessions", []):
+            if not isinstance(session, dict):
+                continue
+            count = int(session.get("message_count", 0) or 0)
+            if count < th["session_messages"]:
+                continue
+            duration = int(session.get("duration_seconds", 0) or 0)
+            density = float(session.get("density_per_hour", 0.0) or 0.0)
+            score = count + density * 8.0 if kind == "alive_dialog" else count + _safe_div(duration, 3600) * 3.0
+            evidence = {
+                "message_count": count,
+                "duration_seconds": duration,
+                "density_per_hour": float(round(density, 4)),
+                "start_datetime": _ts_to_msk_datetime(int(session.get("start_ts", 0) or 0)),
+                "end_datetime": _ts_to_msk_datetime(int(session.get("end_ts", 0) or 0)),
+            }
+            candidate = _candidate_from_profile(profile, score, evidence)
+            if best_session is None or float(candidate["score"]) > float(best_session["score"]):
+                best_session = candidate
+        if best_session is not None:
+            candidates.append(best_session)
+    ordered = _best_candidates(candidates)
+    confidence = CONFIDENCE_EXACT if kind == "longest_live_session" else CONFIDENCE_BEHAVIORAL
+    return _make_insight(kind, label, confidence, ordered[0] if ordered else None, ordered, "not_enough_live_sessions")
+
+
+def _conversation_reply_rhythm(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        samples = int(profile.get("reply_samples", 0) or 0)
+        median = int(profile.get("median_reply_seconds", 0) or 0)
+        total = int(profile.get("total_messages", 0) or 0)
+        if total < th["min_major_total"] or samples < th["reply_samples"] or median <= 0:
+            continue
+        if median <= 10 * 60:
+            rhythm = "fast"
+            score = 100000 - median + samples * 10
+        elif median <= 6 * 60 * 60:
+            rhythm = "measured"
+            score = 50000 - abs(median - 60 * 60) + samples * 10
+        else:
+            rhythm = "slow"
+            score = median + samples * 10
+        evidence = {"median_reply_seconds": median, "reply_samples": samples, "rhythm": rhythm}
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    return _make_insight("reply_rhythm", label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "not_enough_reply_samples")
+
+
+def _conversation_mutual_dialog(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        if total < th["min_major_total"]:
+            continue
+        sent = int(profile.get("sent_messages", 0) or 0)
+        recv = int(profile.get("received_messages", 0) or 0)
+        imbalance = _safe_div(abs(sent - recv), total)
+        score = (1.0 - min(1.0, imbalance)) * 1000.0 + min(200.0, _safe_div(total, 20))
+        evidence = {
+            "sent_messages": sent,
+            "received_messages": recv,
+            "imbalance_ratio": float(round(imbalance, 4)),
+        }
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    return _make_insight("mutual_dialog", label, CONFIDENCE_EXACT, ordered[0] if ordered else None, ordered, "not_enough_mutual_dialogs")
+
+
+def _conversation_initiative(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int], kind: str) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        if total < th["min_person_total"]:
+            continue
+        if kind == "contact_initiator":
+            them = int(profile.get("days_started_by_them", 0) or 0)
+            you = int(profile.get("days_started_by_you", 0) or 0)
+            initiated = them + you
+            if initiated < th["initiative_days"]:
+                continue
+            ratio = _safe_div(them, initiated)
+            score = them * 10.0 + ratio * 100.0
+            evidence = {"days_started_by_them": them, "days_started_by_you": you, "initiated_days": initiated, "them_ratio": float(round(ratio, 4))}
+        else:
+            them = int(profile.get("restart_by_them", 0) or 0)
+            you = int(profile.get("restart_by_you", 0) or 0)
+            if them + you <= 0 or them <= 0:
+                continue
+            ratio = _safe_div(them, them + you)
+            score = them * 30.0 + ratio * 100.0
+            evidence = {"restarts_by_them": them, "restarts_by_you": you, "them_ratio": float(round(ratio, 4))}
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    reason = "not_enough_initiated_days" if kind == "contact_initiator" else "not_enough_silence_restarts"
+    return _make_insight(kind, label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, reason)
+
+
+def _conversation_media_bond(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
+    candidates = []
+    for profile in profiles.values():
+        total = int(profile.get("total_messages", 0) or 0)
+        media_counts = profile.get("media_counts") if isinstance(profile.get("media_counts"), Counter) else Counter()
+        media_total = int(sum(media_counts.values()))
+        if total < th["min_person_total"] or media_total < th["media_events"]:
+            continue
+        top_media_type, top_count = media_counts.most_common(1)[0] if media_counts else ("", 0)
+        ratio = _safe_div(media_total, total)
+        score = media_total + ratio * 200.0
+        evidence = {
+            "media_total": media_total,
+            "top_media_type": top_media_type,
+            "top_media_count": int(top_count),
+            "media_ratio": float(round(ratio, 4)),
+        }
+        candidates.append(_candidate_from_profile(profile, score, evidence))
+    ordered = _best_candidates(candidates)
+    return _make_insight("media_bond", label, CONFIDENCE_EXACT, ordered[0] if ordered else None, ordered, "not_enough_media_events")
+
+
+def _conversation_insights(
+    conn: sqlite3.Connection,
+    label: str,
+    start_ts: int,
+    end_ts: int,
+    people: Dict[str, Dict[str, Any]],
+    reply_stats: Dict[str, Any],
+) -> Dict[str, Any]:
+    del reply_stats
+    thresholds = _conversation_thresholds(label)
+    profiles = _build_conversation_profiles(conn, start_ts, end_ts, people)
+    insights: Dict[str, Any] = {
+        "main_person": _conversation_main_person(label, profiles, thresholds),
+        "stable_dialog": _conversation_stable_dialog(label, profiles, thresholds),
+        "comeback": _conversation_comeback(label, profiles, thresholds),
+        "closer_dialog": _conversation_trend(label, profiles, thresholds, "closer_dialog"),
+        "faded_dialog": _conversation_trend(label, profiles, thresholds, "faded_dialog"),
+        "night_companion": _conversation_time_person(label, profiles, thresholds, "night_companion"),
+        "day_anchor": _conversation_time_person(label, profiles, thresholds, "day_anchor"),
+        "alive_dialog": _conversation_sessions(label, profiles, thresholds, "alive_dialog"),
+        "longest_live_session": _conversation_sessions(label, profiles, thresholds, "longest_live_session"),
+        "reply_rhythm": _conversation_reply_rhythm(label, profiles, thresholds),
+        "mutual_dialog": _conversation_mutual_dialog(label, profiles, thresholds),
+        "contact_initiator": _conversation_initiative(label, profiles, thresholds, "contact_initiator"),
+        "silence_restarter": _conversation_initiative(label, profiles, thresholds, "silence_restarter"),
+        "media_bond": _conversation_media_bond(label, profiles, thresholds),
+    }
+    for key in CONVERSATION_INSIGHT_KEYS:
+        if key not in insights:
+            insights[key] = _empty_insight(key, label, CONFIDENCE_BEHAVIORAL, "not_computed")
+    return insights
+
+
 def _achievements(all_time: Dict[str, Any]) -> List[Dict[str, Any]]:
     total_msgs = int(all_time.get("total_messages", 0) or 0)
     night_ratio = float(all_time.get("night_messages_ratio", 0.0) or 0.0)
@@ -3408,6 +4053,7 @@ def _slides_data(report: Dict[str, Any]) -> Dict[str, Any]:
         {"id": "s7_streak", "title": "Longest streak", "data": {"all_time": all_time.get("longest_streak_days"), "year": year.get("longest_streak_days")}},
         {"id": "s8_silence", "title": "Longest silence", "data": {"all_time": all_time.get("longest_silence_gap"), "year": year.get("longest_silence_gap")}},
         {"id": "s9_top_people", "title": "Top people", "data": {"top_people": top_people[:10]}},
+        {"id": "s9b_conversation_insights", "title": "Conversation insights", "data": {"all_time": all_time.get("conversation_insights"), "year": year.get("conversation_insights")}},
         {"id": "s10_reply_times", "title": "Reply times", "data": {"all_time": {"median": all_time.get("median_reply_time_to_others_seconds"), "fastest": all_time.get("who_you_reply_fastest"), "slowest": all_time.get("who_you_ignore_most")}, "year": {"median": year.get("median_reply_time_to_others_seconds"), "fastest": year.get("who_you_reply_fastest"), "slowest": year.get("who_you_ignore_most")}}},
         {"id": "s11_words", "title": "Top words", "data": {"all_time": all_time.get("top_words"), "year": year.get("top_words")}},
         {"id": "s12_word_cloud", "title": "Word cloud", "data": {"all_time": all_time.get("word_cloud"), "year": year.get("word_cloud")}},
@@ -3558,6 +4204,8 @@ def _compute_period_metrics(
     if isinstance(night_person, dict):
         night_person.update(_peer_activity_insights(conn, start_ts, end_ts, night_person.get("peer_from_id") if isinstance(night_person.get("peer_from_id"), str) else None))
 
+    conversation_insights = _conversation_insights(conn, label, start_ts, end_ts, people, reply_stats)
+
     metrics: Dict[str, Any] = {
         "total_messages": int(total),
         "sent_messages": int(sent),
@@ -3616,6 +4264,7 @@ def _compute_period_metrics(
         "top_10_people_by_messages": top_messages,
         "top_10_people_by_time_span": _top_10_people_by_time_span(people),
         "top_10_people_by_mutuality": mutuality,
+        "conversation_insights": conversation_insights,
         "active_days_count": int(active_days_count),
         "avg_messages_per_active_day": float(avg_msgs_per_day),
         "messages_06_08": int(messages_0608),
