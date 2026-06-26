@@ -17,11 +17,14 @@ VERSION = "0.1.0"
 
 _STDOUT_LOCK = threading.Lock()
 _CANCEL_EVENT = threading.Event()
+_STATE_LOCK = threading.Lock()
 _IMPORT_LOCK = threading.Lock()
 _IMPORT_THREAD: Optional[threading.Thread] = None
+_IMPORT_BUSY = False
 
 _REPORT_LOCK = threading.Lock()
 _REPORT_THREAD: Optional[threading.Thread] = None
+_REPORT_BUSY = False
 
 
 class CancelledError(Exception):
@@ -33,6 +36,18 @@ def write_json(obj: Dict[str, Any]) -> None:
     with _STDOUT_LOCK:
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
+
+
+def mark_import_idle() -> None:
+    global _IMPORT_BUSY
+    with _STATE_LOCK:
+        _IMPORT_BUSY = False
+
+
+def mark_report_idle() -> None:
+    global _REPORT_BUSY
+    with _STATE_LOCK:
+        _REPORT_BUSY = False
 
 
 def progress(stage: str, percent: int, current_chat: str = "", current_file: str = "") -> None:
@@ -354,6 +369,15 @@ BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
 MAX_INFERRED_REPLY_SECONDS = 7 * 24 * 60 * 60
 PERSON_ANALYTICS_LIMIT = 50
 
+
+def banned_peer_ids() -> Tuple[str, ...]:
+    return tuple(sorted(BANNED_PEER_IDS))
+
+
+def sql_placeholders(values: Tuple[Any, ...]) -> str:
+    if not values:
+        return "NULL"
+    return ",".join("?" for _ in values)
 
 
 def _get_table_columns(conn: sqlite3.Connection, table: str) -> List[str]:
@@ -1731,6 +1755,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
 
         db_size = compute_db_total_size_bytes(db_path)
 
+        mark_import_idle()
         progress("done", 100, "", "")
         write_json(
             {
@@ -1762,6 +1787,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         ensure_removed(db_path + "-wal")
         ensure_removed(db_path + "-shm")
 
+        mark_import_idle()
         write_json({"type": "import_error", "message": "Import cancelled"})
         return
 
@@ -1774,21 +1800,24 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
 
 
 def start_import_thread(export_dir: str, mode: str, db_path: str) -> None:
-    global _IMPORT_THREAD
+    global _IMPORT_BUSY, _IMPORT_THREAD
 
     def _runner() -> None:
         try:
             do_import(export_dir, mode, db_path)
         except Exception as e:
+            mark_import_idle()
             write_json({"type": "import_error", "message": str(e)})
 
     with _IMPORT_LOCK:
-        if _REPORT_THREAD is not None and _REPORT_THREAD.is_alive():
-            write_json({"type": "import_error", "message": "Report generation already running"})
-            return
-        if _IMPORT_THREAD is not None and _IMPORT_THREAD.is_alive():
-            write_json({"type": "import_error", "message": "Import already running"})
-            return
+        with _STATE_LOCK:
+            if _REPORT_BUSY:
+                write_json({"type": "import_error", "message": "Report generation already running"})
+                return
+            if _IMPORT_BUSY:
+                write_json({"type": "import_error", "message": "Import already running"})
+                return
+            _IMPORT_BUSY = True
 
         _CANCEL_EVENT.clear()
         t = threading.Thread(target=_runner, name="tgwr_import", daemon=True)
@@ -1975,6 +2004,15 @@ def _distinct_days_count(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
     row = conn.execute(
         f"SELECT COUNT(DISTINCT date((date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch')) "
         f"FROM messages WHERE is_service = 0 AND {base};",
+        p,
+    ).fetchone()
+    return int(row[0] or 0) if row else 0
+
+
+def _active_chats_count(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> int:
+    base, p = _period_where_clause(start_ts, end_ts)
+    row = conn.execute(
+        f"SELECT COUNT(DISTINCT chat_pk) FROM messages WHERE is_service = 0 AND {base};",
         p,
     ).fetchone()
     return int(row[0] or 0) if row else 0
@@ -2237,6 +2275,8 @@ def _night_insights(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dic
 
 def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Dict[str, Any]]:
     base, p = _period_where_clause(start_ts, end_ts)
+    banned_params = banned_peer_ids()
+    banned_placeholders = sql_placeholders(banned_params)
     sql = (
         "SELECT c.peer_from_id AS peer_from_id, "
         "       MAX(c.name) AS display_name, "
@@ -2250,13 +2290,13 @@ def _people_stats(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[
         f"       SUM(CASE WHEN CAST(strftime('%H', (m.date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) BETWEEN 6 AND 17 THEN 1 ELSE 0 END) AS day_messages "
         "FROM messages m JOIN chats c ON m.chat_pk = c.chat_pk "
         f"WHERE m.is_service = 0 AND c.peer_from_id IS NOT NULL AND TRIM(c.peer_from_id) != '' "
-        f"  AND c.peer_from_id NOT IN ('user1098898489', 'user6686969898') "
+        f"  AND c.peer_from_id NOT IN ({banned_placeholders}) "
         f"  AND (c.name IS NULL OR (c.name NOT LIKE '%Saved Messages%' AND c.name NOT LIKE '%Избранное%')) "
         f"  AND {base} "
         "GROUP BY c.peer_from_id;"
     )
     out: Dict[str, Dict[str, Any]] = {}
-    for row in conn.execute(sql, p):
+    for row in conn.execute(sql, banned_params + p):
         peer = row[0]
         if not isinstance(peer, str) or not peer.strip():
             continue
@@ -2389,13 +2429,15 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
     base, p = _period_where_clause(start_ts, end_ts)
 
     banned_pks = set()
+    banned_params = banned_peer_ids()
+    banned_placeholders = sql_placeholders(banned_params)
     ban_q = """
         SELECT chat_pk FROM chats
-        WHERE peer_from_id IN ('user1098898489', 'user6686969898')
+        WHERE peer_from_id IN ({banned_placeholders})
            OR name LIKE '%Saved Messages%'
            OR name LIKE '%Избранное%'
-    """
-    for r in conn.execute(ban_q):
+    """.format(banned_placeholders=banned_placeholders)
+    for r in conn.execute(ban_q, banned_params):
         banned_pks.add(r[0])
 
     q = f"SELECT chat_pk, date_ts FROM messages WHERE is_service = 0 AND {base} ORDER BY chat_pk, date_ts;"
@@ -2515,6 +2557,8 @@ def _longest_person_streak(conn: sqlite3.Connection, start_ts: int, end_ts: int)
     base, p = _period_where_clause(start_ts, end_ts)
 
     self_from_id = meta_get(conn, "self_from_id") or "UNKNOWN_SELF"
+    banned_params = banned_peer_ids()
+    banned_placeholders = sql_placeholders(banned_params)
 
     q = (
         f"SELECT c.peer_from_id, "
@@ -2525,14 +2569,14 @@ def _longest_person_streak(conn: sqlite3.Connection, start_ts: int, end_ts: int)
         f"  AND c.peer_from_id IS NOT NULL "
         f"  AND TRIM(c.peer_from_id) != '' "
         f"  AND c.peer_from_id != ? "
-        f"  AND c.peer_from_id NOT IN ('user1098898489', 'user6686969898') "
+        f"  AND c.peer_from_id NOT IN ({banned_placeholders}) "
         f"  AND (c.name IS NULL OR (c.name NOT LIKE '%Saved Messages%' AND c.name NOT LIKE '%Избранное%')) "
         f"  AND {base} "
         f"GROUP BY c.peer_from_id, d "
         f"ORDER BY c.peer_from_id, d;"
     )
 
-    params = (self_from_id,) + p
+    params = (self_from_id,) + banned_params + p
 
     best_len = 0
     best_start = None
@@ -3414,6 +3458,7 @@ def _compute_period_metrics(
     night_ratio = _safe_div(night_messages, total)
 
     active_days_count = _distinct_days_count(conn, start_ts, end_ts)
+    active_chats_count = _active_chats_count(conn, start_ts, end_ts)
     avg_msgs_per_day = _safe_div(total, active_days_count) if active_days_count else 0.0
 
     daily_activity = _daily_activity(conn, start_ts, end_ts)
@@ -3519,6 +3564,7 @@ def _compute_period_metrics(
         "received_messages": int(recv),
         "service_messages_count": int(service_total),
         "total_chats_personal": int(conn.execute("SELECT COUNT(*) FROM chats;").fetchone()[0] or 0),
+        "active_chats_count": int(active_chats_count),
         "most_active_day": most_day,
         "most_active_month": most_month,
         "most_active_hour": most_hour,
@@ -3692,7 +3738,7 @@ def do_build_report(db_path: str) -> None:
 
         report: Dict[str, Any] = {
             "meta": {
-                "generated_at": datetime.utcnow().replace(tzinfo=timezone.utc).isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
                 "msk_year_used": int(year_used),
                 "self_from_id": self_from_id,
             },
@@ -3716,6 +3762,7 @@ def do_build_report(db_path: str) -> None:
             raise RuntimeError(f"Failed to write report.json: {str(e)}")
 
         progress("compute_metrics", 100, "", "")
+        mark_report_idle()
         write_json(
             {
                 "type": "report_done",
@@ -3734,6 +3781,7 @@ def do_build_report(db_path: str) -> None:
         )
 
     except CancelledError:
+        mark_report_idle()
         write_json({"type": "report_error", "message": "Report generation cancelled"})
     finally:
         try:
@@ -3743,23 +3791,27 @@ def do_build_report(db_path: str) -> None:
 
 
 def start_report_thread(db_path: str) -> None:
-    global _REPORT_THREAD
+    global _REPORT_BUSY, _REPORT_THREAD
 
     def _runner() -> None:
         try:
             do_build_report(db_path)
         except CancelledError:
+            mark_report_idle()
             return
         except Exception as e:
+            mark_report_idle()
             write_json({"type": "report_error", "message": str(e)})
 
     with _REPORT_LOCK:
-        if _IMPORT_THREAD is not None and _IMPORT_THREAD.is_alive():
-            write_json({"type": "report_error", "message": "Import is running"})
-            return
-        if _REPORT_THREAD is not None and _REPORT_THREAD.is_alive():
-            write_json({"type": "report_error", "message": "Report generation already running"})
-            return
+        with _STATE_LOCK:
+            if _IMPORT_BUSY:
+                write_json({"type": "report_error", "message": "Import is running"})
+                return
+            if _REPORT_BUSY:
+                write_json({"type": "report_error", "message": "Report generation already running"})
+                return
+            _REPORT_BUSY = True
 
         _CANCEL_EVENT.clear()
         t = threading.Thread(target=_runner, name="tgwr_report", daemon=True)

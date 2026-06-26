@@ -219,7 +219,82 @@ async function runWorkerSmoke() {
 function assertReport(report) {
   const allTime = report?.periods?.all_time
   const year = report?.periods?.year
+
+  const sumCounts = (items, key = 'count') =>
+    Array.isArray(items)
+      ? items.reduce((acc, item) => acc + Number(item?.[key] ?? 0), 0)
+      : 0
+
+  const sumRecord = (record) =>
+    record && typeof record === 'object'
+      ? Object.values(record).reduce((acc, value) => acc + Number(value ?? 0), 0)
+      : 0
+
+  const closeTo = (a, b, epsilon = 0.000001) => Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= epsilon
+
+  const pick = (record, snakeKey, camelKey = snakeKey) => record?.[snakeKey] ?? record?.[camelKey]
+
+  const assertPeriodInvariants = (label, period, expected) => {
+    const total = Number(period?.total_messages ?? -1)
+    const sent = Number(period?.sent_messages ?? -1)
+    const received = Number(period?.received_messages ?? -1)
+    const daily = period?.daily_activity
+    const hourly = period?.hourly_activity
+    const topMessages = period?.top_10_people_by_messages ?? []
+
+    return [
+      [`${label}.exact_total`, total === expected.total],
+      [`${label}.sent_plus_received`, sent + received === total],
+      [`${label}.daily_sum`, sumCounts(daily) === total],
+      [`${label}.hourly_24`, Array.isArray(hourly) && hourly.length === 24],
+      [`${label}.hourly_sum`, sumCounts(hourly) === total],
+      [`${label}.active_days_bound`, Number(period?.active_days_count ?? 0) <= (Array.isArray(daily) ? daily.length : 0)],
+      [`${label}.active_chats_count`, Number(period?.active_chats_count ?? -1) === expected.activeChats],
+      [`${label}.top_people_totals`, topMessages.every((person) => Number(person?.sent_messages ?? 0) + Number(person?.received_messages ?? 0) === Number(person?.total_messages ?? -1))],
+      [`${label}.top_people_sorted`, topMessages.every((person, idx, arr) => idx === 0 || Number(arr[idx - 1]?.total_messages ?? 0) >= Number(person?.total_messages ?? 0))],
+      [`${label}.media_counts_non_negative`, Object.values(period?.media_counts ?? {}).every((count) => Number(count) >= 0)],
+      [`${label}.media_sum_reasonable`, sumRecord(period?.media_counts ?? {}) <= total]
+    ]
+  }
+
+  const assertPersonAnalyticsInvariants = (people) => {
+    if (!Array.isArray(people)) return [['people_analytics_shape', false]]
+    const checks = []
+    for (const [personIndex, person] of people.entries()) {
+      const periods = person?.periods ?? {}
+      for (const periodKey of ['all_time', 'year']) {
+        const period = periods?.[periodKey]
+        if (!period) continue
+        const total = Number(pick(period, 'total_messages', 'totalMessages') ?? 0)
+        const sent = Number(pick(period, 'sent_messages', 'sentMessages') ?? 0)
+        const received = Number(pick(period, 'received_messages', 'receivedMessages') ?? 0)
+        const sentRatio = Number(pick(period, 'sent_ratio', 'sentRatio') ?? 0)
+        const receivedRatio = Number(pick(period, 'received_ratio', 'receivedRatio') ?? 0)
+        const hourlyActivity = pick(period, 'hourly_activity', 'hourlyActivity')
+        const mediaCounts = pick(period, 'media_counts', 'mediaCounts') ?? {}
+        const mediaTotal = Number(pick(period, 'media_total', 'mediaTotal') ?? 0)
+        const daysStartedByYou = Number(pick(period, 'days_started_by_you', 'daysStartedByYou') ?? 0)
+        const daysStartedByThem = Number(pick(period, 'days_started_by_them', 'daysStartedByThem') ?? 0)
+        const initiatedDays = Number(pick(period, 'initiated_days', 'initiatedDays') ?? 0)
+        const yourReplySamples = Number(pick(period, 'your_reply_samples', 'yourReplySamples') ?? 0)
+        const theirReplySamples = Number(pick(period, 'their_reply_samples', 'theirReplySamples') ?? 0)
+
+        checks.push([`people_${personIndex}.${periodKey}.sent_received_total`, sent + received === total])
+        checks.push([`people_${personIndex}.${periodKey}.ratio_sum`, total === 0 || closeTo(sentRatio + receivedRatio, 1)])
+        checks.push([`people_${personIndex}.${periodKey}.hourly_24`, Array.isArray(hourlyActivity) && hourlyActivity.length === 24])
+        checks.push([`people_${personIndex}.${periodKey}.hourly_sum`, sumCounts(hourlyActivity) === total])
+        checks.push([`people_${personIndex}.${periodKey}.media_total`, sumRecord(mediaCounts) === mediaTotal])
+        checks.push([`people_${personIndex}.${periodKey}.initiated_days`, daysStartedByYou + daysStartedByThem === initiatedDays])
+        checks.push([`people_${personIndex}.${periodKey}.reply_samples`, yourReplySamples >= 0 && theirReplySamples >= 0])
+      }
+    }
+    return checks
+  }
+
   const required = [
+    ...assertPeriodInvariants('all_time', allTime, { total: 6880, activeChats: 3 }),
+    ...assertPeriodInvariants('year', year, { total: 6700, activeChats: 2 }),
+    ...assertPersonAnalyticsInvariants(report?.people_analytics),
     ['all_time.total_messages', allTime?.total_messages > 4500],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
@@ -268,6 +343,7 @@ function makeEmptyReport(baseReport) {
       sent_messages: 0,
       received_messages: 0,
       total_chats_personal: 0,
+      active_chats_count: 0,
       most_active_day: null,
       most_active_month: null,
       most_active_hour: null,
