@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import InsightExportCard, { INSIGHT_EXPORT_H, INSIGHT_EXPORT_W } from './InsightExportCard'
+import { capturePngBytes, writePngWithPickedDirectory } from './export'
 import {
   clamp,
   ellipsize,
@@ -159,10 +161,20 @@ function InsightTile({
 function InsightDetailPanel({
   insight,
   period,
+  anonymizeExport,
+  exportStatus,
+  exporting,
+  onAnonymizeExportChange,
+  onExport,
   onSelectPeer
 }: {
   insight: ConversationInsight
   period: PeriodKey
+  anonymizeExport: boolean
+  exportStatus: string
+  exporting: boolean
+  onAnonymizeExportChange: (value: boolean) => void
+  onExport: () => void
   onSelectPeer: (peerFromId: string) => void
 }): JSX.Element {
   const evidence = getInsightEvidenceEntries(insight, 8)
@@ -221,6 +233,33 @@ function InsightDetailPanel({
         )}
       </div>
 
+      <div className="mt-5 rounded-[20px] border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.08)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label className="flex min-w-0 cursor-pointer items-center gap-3 text-[13px] font-semibold text-slate-100">
+            <input
+              type="checkbox"
+              checked={anonymizeExport}
+              onChange={(event) => onAnonymizeExportChange(event.currentTarget.checked)}
+              className="h-4 w-4 accent-sky-400"
+            />
+            <span className="break-words [overflow-wrap:anywhere]">Скрыть имя в PNG</span>
+          </label>
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={exporting}
+            className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.26)] bg-[rgba(var(--tgwr-accent1-rgb),0.16)] px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.24)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {exporting ? 'Экспорт...' : 'Экспорт инсайта'}
+          </button>
+        </div>
+        {exportStatus ? (
+          <div className="mt-3 break-words text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.86)] [overflow-wrap:anywhere]">
+            {exportStatus}
+          </div>
+        ) : null}
+      </div>
+
       <div className="mt-5">
         <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">Кандидаты</div>
         {insight.candidates.length === 0 ? (
@@ -262,6 +301,10 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
   const [query, setQuery] = useState('')
   const [selectedPeer, setSelectedPeer] = useState('')
   const [selectedInsightKind, setSelectedInsightKind] = useState<ConversationInsightKind>('main_person')
+  const [anonymizeInsightExport, setAnonymizeInsightExport] = useState(false)
+  const [exportingInsight, setExportingInsight] = useState(false)
+  const [insightExportStatus, setInsightExportStatus] = useState('')
+  const insightExportRef = useRef<HTMLDivElement>(null)
 
   const visiblePeople = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -287,6 +330,10 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
     }
   }, [selectedPeer, visiblePeople])
 
+  useEffect(() => {
+    setInsightExportStatus('')
+  }, [period, selectedInsightKind])
+
   const selectedPerson = visiblePeople.find((person) => person.peerFromId === selectedPeer) ?? visiblePeople[0] ?? null
   const selected = selectedPerson ? periodData(selectedPerson, period) : null
   const selectedInsight = insights[selectedInsightKind]
@@ -309,6 +356,34 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
     ? Object.entries(selected.mediaCounts).filter(([, count]) => count > 0)
     : []
   const maxMedia = Math.max(1, ...mediaEntries.map(([, count]) => count))
+
+  const exportSelectedInsight = async (): Promise<void> => {
+    if (exportingInsight) return
+    const node = insightExportRef.current
+    if (!node) {
+      setInsightExportStatus('Карточка экспорта еще не готова.')
+      return
+    }
+
+    setExportingInsight(true)
+    setInsightExportStatus('Готовлю PNG...')
+    try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      const bytes = await capturePngBytes(node, {
+        width: INSIGHT_EXPORT_W,
+        height: INSIGHT_EXPORT_H,
+        backgroundColor: '#05070a'
+      })
+      const filename = `tgwr_by_iws_${period}_${selectedInsight.kind}.png`
+      const outPath = await writePngWithPickedDirectory(filename, bytes)
+      setInsightExportStatus(outPath ? `Сохранено: ${outPath}` : 'Экспорт отменен.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setInsightExportStatus(`Не удалось экспортировать: ${message}`)
+    } finally {
+      setExportingInsight(false)
+    }
+  }
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -376,6 +451,11 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
             <InsightDetailPanel
               insight={selectedInsight}
               period={period}
+              anonymizeExport={anonymizeInsightExport}
+              exportStatus={insightExportStatus}
+              exporting={exportingInsight}
+              onAnonymizeExportChange={setAnonymizeInsightExport}
+              onExport={exportSelectedInsight}
               onSelectPeer={(peerFromId) => {
                 if (!peerFromId) return
                 setQuery('')
@@ -639,6 +719,11 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
               )}
             </main>
           </div>
+        </div>
+      </div>
+      <div className="fixed left-[-6000px] top-0" aria-hidden="true">
+        <div ref={insightExportRef} style={{ width: INSIGHT_EXPORT_W, height: INSIGHT_EXPORT_H }}>
+          <InsightExportCard insight={selectedInsight} period={period} anonymize={anonymizeInsightExport} />
         </div>
       </div>
     </div>

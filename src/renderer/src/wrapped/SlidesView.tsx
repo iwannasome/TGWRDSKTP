@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import * as htmlToImage from 'html-to-image'
 import { PDFDocument } from 'pdf-lib'
 
+import { capturePngBytes, writeOutputFile } from './export'
 import { clamp } from './format'
 import { asReport, getYearLabel, type ConversationInsightKind, type PeriodKey } from './report'
 import type { SlideCommonProps, SlideDef, ThemeId } from './slideTypes'
@@ -94,36 +94,6 @@ function getInitialSlideIndex(): number {
   }
 }
 
-async function capturePngBytes(node: HTMLElement): Promise<Uint8Array> {
-  try { await document.fonts?.ready } catch { }
-  const images = Array.from(node.querySelectorAll('img'))
-  await Promise.all(images.map(async (img) => {
-    if (img.complete) return
-    try { await img.decode() } catch { }
-  }))
-
-  const blob = await htmlToImage.toBlob(node, {
-    cacheBust: true,
-    backgroundColor: '#05070a',
-    width: SLIDE_W,
-    height: SLIDE_H,
-    pixelRatio: 1,
-    style: { transform: 'none' }
-  })
-  if (blob) return new Uint8Array(await blob.arrayBuffer())
-
-  const dataUrl = await htmlToImage.toPng(node, {
-    cacheBust: true,
-    backgroundColor: '#05070a',
-    width: SLIDE_W,
-    height: SLIDE_H,
-    pixelRatio: 1,
-    style: { transform: 'none' }
-  })
-  const fallbackBlob = await fetch(dataUrl).then((res) => res.blob())
-  return new Uint8Array(await fallbackBlob.arrayBuffer())
-}
-
 export default function SlidesView({
   report, period, onPeriodToggle, onOpenDetails, onOpenPeople, theme, onThemeChange
 }: SlidesViewProps): JSX.Element {
@@ -202,11 +172,6 @@ export default function SlidesView({
     return () => window.removeEventListener('resize', update)
   }, [])
 
-  const writeOutputFile = useCallback(async (dirPath: string, filename: string, bytes: Uint8Array) => {
-    const res = await window.tgwr.writeOutputFile(dirPath, filename, bytes)
-    if (!res.ok) throw new Error(res.error ?? `Failed to write ${filename}`)
-  }, [])
-
   const runExportTask = useCallback(async (kind: ExportKind) => {
     if (exporting || exportRunningRef.current) return
     exportRunningRef.current = true
@@ -228,7 +193,7 @@ export default function SlidesView({
 
         const exportNode = exportStageRef.current
         if (!exportNode) throw new Error('Export stage is not ready')
-        const bytes = await capturePngBytes(exportNode)
+        const bytes = await capturePngBytes(exportNode, { width: SLIDE_W, height: SLIDE_H, backgroundColor: '#05070a' })
 
         if (pdf) {
           const img = await pdf.embedPng(bytes)
@@ -253,7 +218,7 @@ export default function SlidesView({
       exportRunningRef.current = false
       setExportSlideIndex(null)
     }
-  }, [exporting, writeOutputFile])
+  }, [exporting])
 
   const ActiveSlide = slides[index].Component
   const ExportSlide = exportSlideIndex !== null ? slides[exportSlideIndex].Component : null
