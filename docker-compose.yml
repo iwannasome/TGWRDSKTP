@@ -1,0 +1,14 @@
+services:
+  tgwr:
+    build:
+      context: .
+    ports:
+      - "6080:6080"
+    volumes:
+      - ./out/docker-data:/data
+      - ./out/docker-output:/output
+    environment:
+      DISPLAY: ":99"
+      HOME: /home/node
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      NO_AT_BRIDGE: "1"
