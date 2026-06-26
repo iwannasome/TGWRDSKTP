@@ -18,18 +18,17 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
 
   return (
     <SlideFrame
-      kicker="IW$"
+      kicker="TGWR Night"
       title={<span className="tgwr-gradient-text font-semibold">Ночные сообщения</span>}
-      subtitle="Спишь?)"
+      subtitle="Какая часть переписок попадала на позднюю ночь."
     >
       <div className="flex h-full flex-col justify-center">
         <div className="grid grid-cols-2 gap-8">
-          {/* Первая карточка: Процент */}
           <motion.div
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
-            className="rounded-[40px] border border-white/10 bg-white/5 p-9"
+            className="tgwr-telegram-panel rounded-[28px] p-9"
           >
             <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               В процентах:
@@ -49,12 +48,11 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
             </div>
           </motion.div>
 
-          {/* Вторая карточка: Количество */}
           <motion.div
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: exporting ? 0 : 0.12 }}
-            className="rounded-[40px] border border-white/10 bg-white/5 p-9"
+            className="tgwr-telegram-panel rounded-[28px] p-9"
           >
             <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Количество:
@@ -69,7 +67,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
         </div>
 
         <div className="mt-6 grid grid-cols-4 gap-4">
-          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+          <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-5 py-5">
             <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Пиковый ночной час
             </div>
@@ -78,7 +76,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
               <AnimatedNumber value={getNumber(peakHour ?? {}, 'count', 0)} exporting={exporting} duration={0.58} delay={0.34} /> сообщений
             </div>
           </div>
-          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+          <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-5 py-5">
             <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               После полуночи
             </div>
@@ -87,7 +85,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
             </div>
             <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">00:00-05:59</div>
           </div>
-          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+          <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-5 py-5">
             <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Самая ночная дата
             </div>
@@ -98,7 +96,7 @@ export default function Slide06NightRatio({ report, period, exporting }: SlideCo
               <AnimatedNumber value={getNumber(peakDate ?? {}, 'count', 0)} exporting={exporting} duration={0.58} delay={0.42} /> сообщений
             </div>
           </div>
-          <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-5 py-5">
+          <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-5 py-5">
             <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Последний поздний час
             </div>

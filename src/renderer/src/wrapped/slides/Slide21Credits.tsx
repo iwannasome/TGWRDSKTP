@@ -16,9 +16,9 @@ const THANKS = [
 export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Element {
   return (
     <SlideFrame
-      kicker="IW$ GNOMS"
-      title="Титры"
-      subtitle="Люди, без которых TGWR не был бы таким."
+      kicker="TGWR Credits"
+      title="Команда и благодарности"
+      subtitle="Люди, без которых этот Telegram Wrapped не был бы таким."
       footerHint="Спасибо за помощь, фидбек и поддержку."
     >
       <div className="grid h-full min-h-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-6">
@@ -26,7 +26,7 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.04 }}
-          className="flex min-h-0 flex-col justify-between rounded-[34px] border border-white/10 bg-white/5 p-8"
+          className="tgwr-telegram-panel flex min-h-0 flex-col justify-between rounded-[30px] p-8"
         >
           <div>
             <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
@@ -43,7 +43,7 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
           </div>
 
           <div className="mt-6 max-w-[620px] text-[16px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.95)]">
-            Идея, концепт, продукт, сборка всего этого хаоса в один локальный wrapped.
+            Идея, концепт, продукт и сборка локального Wrapped для Telegram.
           </div>
         </motion.div>
 
@@ -51,7 +51,7 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.1 }}
-          className="min-h-0 rounded-[34px] border border-white/10 bg-white/5 p-8"
+          className="tgwr-telegram-panel min-h-0 rounded-[30px] p-8"
         >
           <div className="flex items-end justify-between gap-6">
             <div>
@@ -74,7 +74,7 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
                 key={name}
                 data-tip={`Спасибо · #${idx + 1}`}
                 style={{ animationDelay: exporting ? undefined : `${Math.min(0.22, 0.05 + idx * 0.03)}s` }}
-                className="min-w-0 tgwr-info-card rounded-[24px] border border-white/10 bg-black/20 px-5 py-5"
+                className="min-w-0 tgwr-info-card rounded-[22px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-5 py-5"
               >
                 <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                   #{idx + 1}

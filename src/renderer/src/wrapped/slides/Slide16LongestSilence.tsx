@@ -12,18 +12,16 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
 
   return (
     <SlideFrame
-      kicker="IW$"
+      kicker="TGWR Silence"
       title="Самая длинная пауза"
-      subtitle="Давай возьмем паузу в общении?"
+      subtitle="Самый длинный промежуток тишины между двумя сообщениями."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
-          // Если идет экспорт — приземляем контент мгновенно
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          // Убираем задержку для скорости рендеринга
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
-          className="rounded-[44px] border border-white/10 bg-white/5 p-10"
+          className="tgwr-telegram-panel rounded-[30px] p-10"
         >
           <div className="break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{s?.chatName ?? '—'}</div>
 
@@ -43,27 +41,27 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
 
           {s ? (
             <div className="mt-7 grid grid-cols-5 gap-4">
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">начало</div>
                 <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">{s.fromDatetime || '—'}</div>
               </div>
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">конец</div>
                 <div className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">{s.toDatetime || '—'}</div>
               </div>
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дней тишины</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
                   <AnimatedNumber value={s.calendarDays} exporting={exporting} duration={0.62} delay={0.3} />
                 </div>
               </div>
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дольше обычного</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
                   x<AnimatedNumber value={Math.round(s.gapVsMedianRatio)} exporting={exporting} duration={0.62} delay={0.34} />
                 </div>
               </div>
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">тип паузы</div>
                 <div className="mt-2 text-[14px] font-semibold leading-snug text-slate-100">
                   {s.calendarDays >= 30 ? 'исчезновение' : s.calendarDays >= 7 ? 'отпуск' : 'пауза'}

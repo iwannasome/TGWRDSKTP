@@ -25,15 +25,17 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
   const balance = total > 0 ? Math.abs(sent - received) / total : 0
 
   return (
-    <SlideFrame kicker="IW$" title={<span className="tgwr-gradient-text font-semibold">Топ персона</span>} subtitle="Это твой любимец, или история давно минувших дней?">
+    <SlideFrame
+      kicker="TGWR People"
+      title={<span className="tgwr-gradient-text font-semibold">Главный диалог</span>}
+      subtitle="Чат, который занял больше всего места в твоем Telegram за выбранный период."
+    >
       <div className="flex h-full flex-col justify-center">
         <motion.div
-          // Отключаем "взлет" карточки при экспорте
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          // Убираем задержку, чтобы захватить финальные цифры мгновенно
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
-          className="rounded-[44px] border border-white/10 bg-white/5 p-10"
+          className="tgwr-telegram-panel rounded-[30px] p-10"
         >
           <div className="break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{name}</div>
 
@@ -42,12 +44,12 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
           </div>
 
           <div className="mt-4 text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
-            сообщений всего
+            сообщений в этом диалоге
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-6">
-            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
-              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-[24px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.46)] px-6 py-5">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Отправлено
               </div>
               <div className="mt-2 text-[26px] font-bold text-slate-50">
@@ -55,8 +57,8 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
               </div>
             </div>
 
-            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5">
-              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-[24px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.46)] px-6 py-5">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Получено
               </div>
               <div className="mt-2 text-[26px] font-bold text-slate-50">
@@ -66,27 +68,27 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
           </div>
 
           <div className="mt-6 grid grid-cols-5 gap-3">
-            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+            <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">доля всех сообщений</div>
               <div className="mt-2 text-[20px] font-bold text-slate-50">
                 <AnimatedNumber value={share} exporting={exporting} duration={0.62} delay={0.4} format={formatPercent01} />
               </div>
             </div>
-            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+            <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">в активный день</div>
               <div className="mt-2 text-[20px] font-bold text-slate-50">
                 <AnimatedNumber value={Math.round(avgActiveDay)} exporting={exporting} duration={0.62} delay={0.44} />
               </div>
             </div>
-            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+            <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучший день</div>
               <div className="mt-2 text-[14px] font-semibold leading-snug text-slate-100">{formatDateYYYYMMDD(getString(peakDay ?? {}, 'date', ''))}</div>
             </div>
-            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+            <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">лучший месяц</div>
               <div className="mt-2 text-[14px] font-semibold leading-snug text-slate-100">{formatMonth(getString(peakMonth ?? {}, 'value', ''))}</div>
             </div>
-            <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+            <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">отрыв от #2</div>
               <div className="mt-2 text-[20px] font-bold text-slate-50">
                 <AnimatedNumber value={lead} exporting={exporting} duration={0.62} delay={0.48} />
@@ -94,17 +96,17 @@ export default function Slide07TopPersonMessages({ report, period, exporting }: 
             </div>
           </div>
 
-          <div className="mt-5 h-3 overflow-hidden rounded-full border border-white/10 bg-black/20">
+          <div className="mt-5 h-3 overflow-hidden rounded-full border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.58)]">
             <div
               className="h-full rounded-full bg-[linear-gradient(90deg,rgba(var(--tgwr-accent1-rgb),0.9),rgba(var(--tgwr-accent2-rgb),0.85))]"
               style={{ width: `${Math.max(4, Math.min(100, (1 - balance) * 100))}%` }}
             />
           </div>
-          <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">ровность диалога внутри топ-персоны</div>
+          <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">ровность обмена сообщениями внутри главного диалога</div>
 
           {!arr.length && (
             <div className="mt-6 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-              Пока пусто: проверь self_from_id / peer_from_id в БД.
+              Пока не хватает данных, чтобы выделить главный диалог.
             </div>
           )}
         </motion.div>

@@ -140,7 +140,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
 
   return (
     <SlideFrame
-      kicker="IW$"
+      kicker="TGWR Calendar"
       title={<span className="tgwr-gradient-text font-semibold">Самый активный месяц</span>}
       subtitle="Год как карта: каждый день оставляет свой след."
     >
@@ -150,9 +150,8 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.04 }}
-            className="relative min-h-0 flex-1 overflow-hidden rounded-[34px] border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(145deg,rgba(var(--tgwr-accent1-rgb),0.16),rgba(var(--tgwr-card-rgb),0.72)_56%,rgba(var(--tgwr-accent2-rgb),0.14))] p-7 shadow-[0_26px_80px_rgba(0,0,0,0.30)]"
+            className="relative min-h-0 flex-1 overflow-hidden rounded-[30px] border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(145deg,rgba(var(--tgwr-accent1-rgb),0.16),rgba(var(--tgwr-card-rgb),0.72)_56%,rgba(var(--tgwr-accent2-rgb),0.12))] p-7 shadow-[0_20px_58px_rgba(0,0,0,0.26)]"
           >
-            <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.18)] blur-[58px]" />
             <div className="relative flex h-full flex-col">
               <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
                 максимум за месяц
@@ -170,7 +169,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                 {month ? formatMonth(month.value) : 'Нет данных'}
               </div>
               <div className="mt-auto grid grid-cols-2 gap-3 pt-6">
-                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     активных дней
                   </div>
@@ -183,7 +182,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                     />
                   </div>
                 </div>
-                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     пик дня
                   </div>
@@ -214,13 +213,13 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.1 }}
-            className="tgwr-info-card rounded-[28px] border border-white/10 bg-white/5 p-5"
+            className="tgwr-info-card rounded-[24px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-5"
           >
             <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
               интенсивность
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">low</span>
+              <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">ниже</span>
               {legend.map((level) => (
                 <div
                   key={level}
@@ -228,7 +227,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
                   style={{ background: heatFill(level) }}
                 />
               ))}
-              <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">high</span>
+              <span className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.68)]">выше</span>
             </div>
           </motion.div>
         </div>
@@ -237,7 +236,7 @@ export default function Slide04MostActiveMonth({ report, period, exporting }: Sl
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: exporting ? 0 : 0.38, delay: exporting ? 0 : 0.14 }}
-          className="flex min-h-0 flex-col rounded-[38px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.54)] p-7 shadow-[0_20px_80px_rgba(0,0,0,0.28)]"
+          className="tgwr-telegram-panel flex min-h-0 flex-col rounded-[30px] p-7"
         >
           <div className="flex items-end justify-between gap-6">
             <div>

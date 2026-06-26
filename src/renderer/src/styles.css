@@ -4,19 +4,19 @@
 
 :root {
   color-scheme: dark;
-  /* Default to neon */
-  --tgwr-bg-0: #05070a;
-  --tgwr-bg-1: #070b12;
-  --tgwr-bg-2: #070716;
+  --tgwr-bg-0: #0b1118;
+  --tgwr-bg-1: #0f1720;
+  --tgwr-bg-2: #111b21;
 
-  --tgwr-card-rgb: 7, 11, 18;
-  --tgwr-border-rgb: 148, 163, 184;
-  --tgwr-fg: #e2e8f0;
-  --tgwr-muted-rgb: 148, 163, 184;
+  --tgwr-surface-rgb: 23, 33, 43;
+  --tgwr-card-rgb: 23, 33, 43;
+  --tgwr-border-rgb: 91, 121, 145;
+  --tgwr-fg: #f2f7fb;
+  --tgwr-muted-rgb: 142, 165, 184;
 
-  --tgwr-accent1-rgb: 56, 189, 248;
-  --tgwr-accent2-rgb: 217, 70, 239;
-  --tgwr-grid-rgb: 56, 189, 248;
+  --tgwr-accent1-rgb: 42, 171, 238;
+  --tgwr-accent2-rgb: 126, 87, 194;
+  --tgwr-grid-rgb: 42, 171, 238;
 }
 
 /*
@@ -24,48 +24,51 @@
   We use RGB vars so we can do rgba(var(--x), a).
 */
 body.theme-neon {
-  --tgwr-bg-0: #05070a;
-  --tgwr-bg-1: #070b12;
-  --tgwr-bg-2: #070716;
+  --tgwr-bg-0: #0b1118;
+  --tgwr-bg-1: #0f1720;
+  --tgwr-bg-2: #111b21;
 
-  --tgwr-card-rgb: 7, 11, 18;
-  --tgwr-border-rgb: 148, 163, 184;
-  --tgwr-fg: #e2e8f0;
-  --tgwr-muted-rgb: 148, 163, 184;
+  --tgwr-surface-rgb: 23, 33, 43;
+  --tgwr-card-rgb: 23, 33, 43;
+  --tgwr-border-rgb: 91, 121, 145;
+  --tgwr-fg: #f2f7fb;
+  --tgwr-muted-rgb: 142, 165, 184;
 
-  --tgwr-accent1-rgb: 56, 189, 248; /* sky */
-  --tgwr-accent2-rgb: 217, 70, 239; /* fuchsia */
-  --tgwr-grid-rgb: 56, 189, 248;
+  --tgwr-accent1-rgb: 42, 171, 238;
+  --tgwr-accent2-rgb: 126, 87, 194;
+  --tgwr-grid-rgb: 42, 171, 238;
 }
 
 body.theme-cyber {
-  --tgwr-bg-0: #04060a;
-  --tgwr-bg-1: #061019;
-  --tgwr-bg-2: #050a10;
+  --tgwr-bg-0: #071419;
+  --tgwr-bg-1: #0b2028;
+  --tgwr-bg-2: #0d2830;
 
-  --tgwr-card-rgb: 5, 12, 18;
-  --tgwr-border-rgb: 94, 234, 212;
-  --tgwr-fg: #dcfce7;
-  --tgwr-muted-rgb: 125, 211, 252;
+  --tgwr-surface-rgb: 17, 39, 49;
+  --tgwr-card-rgb: 17, 39, 49;
+  --tgwr-border-rgb: 88, 164, 181;
+  --tgwr-fg: #effbff;
+  --tgwr-muted-rgb: 151, 195, 207;
 
-  --tgwr-accent1-rgb: 45, 212, 191; /* teal */
-  --tgwr-accent2-rgb: 163, 230, 53; /* lime */
-  --tgwr-grid-rgb: 45, 212, 191;
+  --tgwr-accent1-rgb: 45, 183, 220;
+  --tgwr-accent2-rgb: 77, 208, 225;
+  --tgwr-grid-rgb: 45, 183, 220;
 }
 
 body.theme-midnight {
-  --tgwr-bg-0: #050716;
-  --tgwr-bg-1: #070a1b;
-  --tgwr-bg-2: #040611;
+  --tgwr-bg-0: #0d101d;
+  --tgwr-bg-1: #14182a;
+  --tgwr-bg-2: #171a30;
 
-  --tgwr-card-rgb: 7, 10, 27;
-  --tgwr-border-rgb: 99, 102, 241;
-  --tgwr-fg: #e0e7ff;
-  --tgwr-muted-rgb: 165, 180, 252;
+  --tgwr-surface-rgb: 28, 31, 52;
+  --tgwr-card-rgb: 28, 31, 52;
+  --tgwr-border-rgb: 119, 122, 187;
+  --tgwr-fg: #f4f5ff;
+  --tgwr-muted-rgb: 169, 174, 220;
 
-  --tgwr-accent1-rgb: 99, 102, 241; /* indigo */
-  --tgwr-accent2-rgb: 59, 130, 246; /* blue */
-  --tgwr-grid-rgb: 99, 102, 241;
+  --tgwr-accent1-rgb: 78, 164, 255;
+  --tgwr-accent2-rgb: 154, 112, 255;
+  --tgwr-grid-rgb: 78, 164, 255;
 }
 
 html,
@@ -80,8 +83,8 @@ body {
   color: var(--tgwr-fg);
   overflow: hidden;
   background:
-    radial-gradient(900px circle at 18% 8%, rgba(var(--tgwr-accent1-rgb), 0.16), transparent 58%),
-    radial-gradient(820px circle at 86% 92%, rgba(var(--tgwr-accent2-rgb), 0.12), transparent 60%),
+    linear-gradient(135deg, rgba(var(--tgwr-accent1-rgb), 0.12), transparent 34%),
+    linear-gradient(315deg, rgba(var(--tgwr-accent2-rgb), 0.11), transparent 38%),
     linear-gradient(180deg, var(--tgwr-bg-0) 0%, var(--tgwr-bg-1) 45%, var(--tgwr-bg-2) 100%);
 }
 
@@ -91,12 +94,12 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.22;
+  opacity: 0.10;
   background-image:
-    linear-gradient(to right, rgba(var(--tgwr-grid-rgb), 0.10) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(var(--tgwr-grid-rgb), 0.08) 1px, transparent 1px);
-  background-size: 64px 64px;
-  mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.28) 58%, transparent 76%);
+    linear-gradient(to right, rgba(var(--tgwr-grid-rgb), 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--tgwr-grid-rgb), 0.06) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.48) 28%, transparent 100%);
 }
 
 /* Subtle scanlines for slide cards */
@@ -105,22 +108,40 @@ body::before {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.08;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.10) 0px,
-    rgba(255, 255, 255, 0.10) 1px,
-    transparent 2px,
-    transparent 6px
-  );
-  mix-blend-mode: overlay;
+  opacity: 0;
+  background: none;
 }
 
 .tgwr-gradient-text {
-  background: linear-gradient(90deg, rgba(var(--tgwr-accent1-rgb), 1), rgba(var(--tgwr-accent2-rgb), 1));
+  background: linear-gradient(90deg, #f8fbff 0%, rgba(var(--tgwr-accent1-rgb), 1) 48%, rgba(var(--tgwr-accent2-rgb), 0.96) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+.tgwr-story-surface {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
+    rgba(var(--tgwr-card-rgb), 0.74);
+  box-shadow:
+    0 24px 90px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.tgwr-telegram-panel {
+  border: 1px solid rgba(var(--tgwr-border-rgb), 0.16);
+  background: rgba(var(--tgwr-card-rgb), 0.52);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.22);
+}
+
+.tgwr-bubble-out {
+  background: linear-gradient(135deg, rgba(var(--tgwr-accent1-rgb), 0.88), rgba(38, 143, 210, 0.88));
+  color: #ffffff;
+}
+
+.tgwr-bubble-in {
+  background: rgba(var(--tgwr-surface-rgb), 0.84);
+  color: var(--tgwr-fg);
 }
 
 @keyframes tgwr-float {
@@ -150,15 +171,11 @@ body::before {
 }
 
 .tgwr-hover-card:hover {
-  transform: translate3d(0, -4px, 0) scale(1.012);
+  transform: translate3d(0, -2px, 0) scale(1.006);
   border-color: rgba(var(--tgwr-accent1-rgb), 0.26);
   box-shadow:
-    0 18px 50px rgba(0, 0, 0, 0.28),
-    0 0 28px rgba(var(--tgwr-accent1-rgb), 0.12);
-}
-
-.tgwr-hover-card:active {
-  transform: translate3d(0, -1px, 0) scale(0.992);
+    0 18px 42px rgba(0, 0, 0, 0.24),
+    0 0 18px rgba(var(--tgwr-accent1-rgb), 0.08);
 }
 
 @keyframes tgwr-heat-cell-in {
@@ -234,11 +251,11 @@ body::before {
 
 .tgwr-info-card:hover {
   border-color: rgba(var(--tgwr-accent1-rgb), 0.28);
-  background-color: rgba(255, 255, 255, 0.075);
+  background-color: rgba(255, 255, 255, 0.058);
   box-shadow:
-    0 16px 46px rgba(0, 0, 0, 0.22),
-    0 0 24px rgba(var(--tgwr-accent1-rgb), 0.10);
-  filter: saturate(1.08);
+    0 14px 34px rgba(0, 0, 0, 0.18),
+    0 0 18px rgba(var(--tgwr-accent1-rgb), 0.07);
+  filter: saturate(1.04);
 }
 
 .tgwr-info-card[data-tip]::after {

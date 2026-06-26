@@ -29,12 +29,12 @@ export default function Slide11WordCloud({ report, period, exporting }: SlideCom
 
   return (
     <SlideFrame
-      kicker="IW$"
-      title={<span className="tgwr-gradient-text font-semibold">Cлова года</span>}
-      subtitle="Мы говорим и пишем тысячи слов в день. А что насчет взглянуть на самые популярные?"
+      kicker="TGWR Words"
+      title={<span className="tgwr-gradient-text font-semibold">Слова года</span>}
+      subtitle="Самые частые слова из переписок — как быстрый снимок твоего тона и тем."
     >
       <div className="flex h-full flex-col justify-center">
-        <div className="overflow-hidden rounded-[44px] border border-white/10 bg-white/5 p-10">
+        <div className="tgwr-telegram-panel overflow-hidden rounded-[30px] p-10">
           <div className="flex flex-wrap items-center justify-start gap-x-6 gap-y-4">
             {words.length === 0 ? (
               <div className="text-[16px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">

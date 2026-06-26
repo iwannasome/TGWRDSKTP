@@ -258,7 +258,7 @@ export default function SlidesView({
 
   return (
     <div
-      className="relative h-screen w-screen overflow-hidden bg-[#05070a]"
+      className="relative h-screen w-screen overflow-hidden bg-[var(--tgwr-bg-0)]"
       data-tgwr-slide-index={index}
       data-tgwr-slide-total={slides.length}
     >
@@ -275,11 +275,11 @@ export default function SlidesView({
       ) : null}
 
       {/* Основная сцена */}
-      <div className="flex h-full w-full items-center justify-center pb-[96px] md:pl-[220px] md:pb-0">
+      <div className="flex h-full w-full items-center justify-center pb-[96px] md:pl-[208px] md:pb-0">
         <motion.div
           ref={stageRef}
           style={{ width: SLIDE_W, height: SLIDE_H, scale, transformOrigin: 'center' }}
-          className="relative rounded-[48px] border border-white/10 bg-[#05070a] shadow-2xl"
+          className="relative rounded-[32px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.22)] shadow-[0_24px_110px_rgba(0,0,0,0.42)]"
         >
           <AnimatePresence initial={false} custom={direction}>
             <motion.div
@@ -300,17 +300,17 @@ export default function SlidesView({
 
       {/* Desktop controls */}
       {!captureMode && (
-        <div className="fixed bottom-5 left-4 right-4 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl md:bottom-auto md:left-6 md:right-auto md:top-1/2 md:w-[164px] md:-translate-y-1/2 md:flex-col md:items-stretch md:justify-start md:rounded-2xl md:px-4">
+        <div className="fixed bottom-5 left-4 right-4 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.88)] px-4 py-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl md:bottom-auto md:left-6 md:right-auto md:top-1/2 md:w-[156px] md:-translate-y-1/2 md:flex-col md:items-stretch md:justify-start md:px-4">
 
-          <div className="hidden text-[11px] font-bold uppercase tracking-[0.22em] text-white/40 md:block">
-            Slide deck
+          <div className="hidden text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.66)] md:block">
+            TGWR Story
           </div>
 
           <div className="flex items-center justify-center gap-2 md:grid md:grid-cols-2">
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/75">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/80">
               {index + 1}/{slides.length}
             </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/75">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/80">
               {periodLabel}
             </div>
           </div>
@@ -319,9 +319,9 @@ export default function SlidesView({
             <motion.button
               type="button"
               onClick={() => go(-1)}
-              whileHover={{ scale: 1.08, boxShadow: '0 0 18px rgba(var(--tgwr-accent1-rgb),0.18)' }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.92 }}
-              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 hover:text-white"
               aria-label="Предыдущий слайд"
             >
               ↑
@@ -329,9 +329,9 @@ export default function SlidesView({
             <motion.button
               type="button"
               onClick={() => go(1)}
-              whileHover={{ scale: 1.08, boxShadow: '0 0 18px rgba(var(--tgwr-accent1-rgb),0.18)' }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.92 }}
-              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 hover:text-white"
               aria-label="Следующий слайд"
             >
               ↓
@@ -345,7 +345,7 @@ export default function SlidesView({
             onClick={onOpenDetails}
             whileHover={{ scale: 1.035 }}
             whileTap={{ scale: 0.965 }}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:bg-white/10 hover:text-white"
           >
             Детали
           </motion.button>
@@ -355,7 +355,7 @@ export default function SlidesView({
             onClick={onOpenPeople}
             whileHover={{ scale: 1.035 }}
             whileTap={{ scale: 0.965 }}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:bg-white/10 hover:text-white"
           >
             Люди
           </motion.button>
@@ -371,11 +371,11 @@ export default function SlidesView({
                 whileHover={{ scale: 1.035 }}
                 whileTap={{ scale: 0.965 }}
                 className={[
-                  'rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-normal transition',
-                  theme === t ? 'bg-white/20 text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+                  'rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-normal transition',
+                  theme === t ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                 ].join(' ')}
               >
-                {t}
+                {t === 'neon' ? 'blue' : t === 'cyber' ? 'aqua' : 'premium'}
               </motion.button>
             ))}
           </div>
@@ -386,18 +386,18 @@ export default function SlidesView({
             <motion.button
               type="button"
               onClick={() => runExportTask('png')}
-              whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(34,211,238,0.18)' }}
+              whileHover={{ scale: 1.035 }}
               whileTap={{ scale: 0.965 }}
-              className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-500/20"
+              className="rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.13)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.22)]"
             >
               PNG
             </motion.button>
             <motion.button
               type="button"
               onClick={() => runExportTask('pdf')}
-              whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(216,180,254,0.18)' }}
+              whileHover={{ scale: 1.035 }}
               whileTap={{ scale: 0.965 }}
-              className="rounded-full bg-purple-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-purple-300 transition hover:bg-purple-500/20"
+              className="rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.13)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200 transition hover:bg-[rgba(var(--tgwr-accent2-rgb),0.22)]"
             >
               PDF
             </motion.button>

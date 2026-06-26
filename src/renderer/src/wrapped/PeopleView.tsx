@@ -28,7 +28,7 @@ type Props = {
 const mediaLabels: Record<string, string> = {
   photo: 'Фото',
   video: 'Видео',
-  voice: 'Voice',
+  voice: 'Голосовые',
   sticker: 'Стикеры',
   gif: 'GIF',
   file: 'Файлы',
@@ -41,18 +41,18 @@ function periodData(person: PersonAnalytics, period: PeriodKey): PersonPeriodAna
 
 function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: string; onToggle: () => void }): JSX.Element {
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.58)] p-1">
       <button
         type="button"
         onClick={period === 'all_time' ? undefined : onToggle}
         className={[
           'rounded-full px-4 py-2 text-sm font-semibold transition',
           period === 'all_time'
-            ? 'bg-white/10 text-slate-50'
+            ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-slate-50'
             : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
         ].join(' ')}
       >
-        All-time
+        Весь архив
       </button>
       <button
         type="button"
@@ -60,7 +60,7 @@ function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: strin
         className={[
           'rounded-full px-4 py-2 text-sm font-semibold transition',
           period === 'year'
-            ? 'bg-white/10 text-slate-50'
+            ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-slate-50'
             : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
         ].join(' ')}
       >
@@ -72,7 +72,7 @@ function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: strin
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint?: string }): JSX.Element {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_16px_55px_rgba(0,0,0,0.24)]">
+    <div className="min-w-0 rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
       <div className="break-words text-[13px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)] [overflow-wrap:anywhere]">
         {label}
       </div>
@@ -84,7 +84,7 @@ function MetricCard({ label, value, hint }: { label: string; value: string; hint
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }): JSX.Element {
   return (
-    <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+    <section className="tgwr-telegram-panel min-w-0 overflow-hidden rounded-[24px] p-5">
       <div className="break-words text-[18px] font-semibold text-slate-100 [overflow-wrap:anywhere]">{title}</div>
       <div className="mt-5">{children}</div>
     </section>
@@ -93,7 +93,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function EmptyBlock({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <div className="break-words rounded-xl border border-white/10 bg-black/20 p-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)] [overflow-wrap:anywhere]">
+    <div className="break-words rounded-[18px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.86)] [overflow-wrap:anywhere]">
       {children}
     </div>
   )
@@ -150,14 +150,14 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
     <div className="relative h-full w-full overflow-hidden">
       <div className="absolute inset-0 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[1440px]">
-          <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-white/10 bg-[#05070a]/80 px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-[rgba(var(--tgwr-border-rgb),0.14)] bg-[rgba(var(--tgwr-bg-0),0.86)] px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div>
               <div className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
-                People analytics
+                TGWR Explore
               </div>
-              <div className="mt-2 text-[28px] font-bold leading-tight text-slate-100 sm:text-[32px]">Аналитика по человеку</div>
+              <div className="mt-2 text-[28px] font-bold leading-tight text-slate-100 sm:text-[32px]">Люди</div>
               <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                {formatInt(people.length)} диалогов в отчете
+                {formatInt(people.length)} диалогов в отчете, отсортировано по активности
               </div>
             </div>
 
@@ -173,7 +173,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[rgba(var(--tgwr-accent1-rgb),0.13)] px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.20)]"
               >
                 Назад
               </button>
@@ -181,12 +181,12 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
           </div>
 
           <div className="mt-6 grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <aside className="min-h-0 rounded-2xl border border-white/10 bg-white/[0.045] p-4 shadow-[0_20px_70px_rgba(0,0,0,0.28)] xl:sticky xl:top-[116px] xl:max-h-[calc(100vh-140px)]">
+            <aside className="tgwr-telegram-panel min-h-0 rounded-[24px] p-4 xl:sticky xl:top-[116px] xl:max-h-[calc(100vh-140px)]">
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Поиск"
-                className="w-full rounded-full border border-white/10 bg-black/25 px-4 py-2.5 text-sm font-semibold text-slate-100 outline-none transition placeholder:text-[rgba(var(--tgwr-muted-rgb),0.55)] focus:border-[rgba(var(--tgwr-accent1-rgb),0.45)]"
+                className="w-full rounded-full border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.54)] px-4 py-2.5 text-sm font-semibold text-slate-100 outline-none transition placeholder:text-[rgba(var(--tgwr-muted-rgb),0.55)] focus:border-[rgba(var(--tgwr-accent1-rgb),0.45)]"
               />
 
               <div className="mt-4 max-h-[calc(100vh-220px)] space-y-2 overflow-auto pr-1">
@@ -205,7 +205,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                           'w-full rounded-xl border p-3 text-left transition',
                           active
                             ? 'border-[rgba(var(--tgwr-accent1-rgb),0.34)] bg-[rgba(var(--tgwr-accent1-rgb),0.12)]'
-                            : 'border-white/10 bg-black/16 hover:bg-white/[0.06]'
+                            : 'border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.34)] hover:bg-white/[0.06]'
                         ].join(' ')}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -221,7 +221,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                         </div>
                         <div className="mt-3 flex items-center justify-between gap-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
                           <span className="min-w-0 truncate tabular-nums">{formatInt(p?.totalMessages ?? 0)}</span>
-                          <span className="shrink-0 tabular-nums">{p ? formatPercent01(p.sentRatio) : '—'} sent</span>
+                          <span className="shrink-0 tabular-nums">{p ? formatPercent01(p.sentRatio) : '—'} отправлено</span>
                         </div>
                       </button>
                     )
@@ -235,7 +235,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                 <EmptyBlock>В отчете нет данных по людям.</EmptyBlock>
               ) : (
                 <div className="grid gap-5">
-                  <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+                  <section className="tgwr-telegram-panel rounded-[24px] p-5">
                     <div className="flex flex-wrap items-start justify-between gap-5">
                       <div className="min-w-0">
                         <div className="break-words text-[30px] font-bold leading-tight text-slate-100 [overflow-wrap:anywhere]">
@@ -246,7 +246,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                         </div>
                       </div>
                       <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100">
-                        {period === 'year' ? year : 'All-time'}
+                        {period === 'year' ? year : 'Весь архив'}
                       </div>
                     </div>
 
@@ -257,15 +257,15 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                       <MetricCard label="Период" value={formatInt(selected.timeSpanDays || selected.activeDays)} hint={`${formatDateYYYYMMDD(selected.firstDate)} — ${formatDateYYYYMMDD(selected.lastDate)}`} />
                     </div>
 
-                    <div className="mt-5 overflow-hidden rounded-xl border border-white/10 bg-black/25">
+                    <div className="mt-5 overflow-hidden rounded-[18px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.46)]">
                       <div className="flex h-3 w-full">
                         <div className="bg-[rgba(var(--tgwr-accent1-rgb),0.82)]" style={{ width: `${balanceSent}%` }} />
                         <div className="bg-[rgba(var(--tgwr-accent2-rgb),0.72)]" style={{ width: `${balanceReceived}%` }} />
                       </div>
                       <div className="flex flex-wrap justify-between gap-3 px-4 py-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.86)]">
-                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">sent · {formatInt(selected.sentMessages)}</span>
-                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">recv · {formatInt(selected.receivedMessages)}</span>
-                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">diff · {formatInt(selected.mutualityAbsDiff)}</span>
+                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">отправлено · {formatInt(selected.sentMessages)}</span>
+                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">получено · {formatInt(selected.receivedMessages)}</span>
+                        <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">разница · {formatInt(selected.mutualityAbsDiff)}</span>
                       </div>
                     </div>
                   </section>
@@ -321,8 +321,8 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
 
                     <Panel title="Ответы">
                       <div className="grid gap-3">
-                        <MetricCard label="Ты отвечаешь" value={formatSecondsHuman(selected.yourMedianReplySeconds)} hint={`${formatInt(selected.yourReplySamples)} samples`} />
-                        <MetricCard label="Тебе отвечают" value={formatSecondsHuman(selected.theirMedianReplySeconds)} hint={`${formatInt(selected.theirReplySamples)} samples`} />
+                        <MetricCard label="Ты отвечаешь" value={formatSecondsHuman(selected.yourMedianReplySeconds)} hint={`${formatInt(selected.yourReplySamples)} замеров`} />
+                        <MetricCard label="Тебе отвечают" value={formatSecondsHuman(selected.theirMedianReplySeconds)} hint={`${formatInt(selected.theirReplySamples)} замеров`} />
                         <MetricCard label="Ночь" value={formatPercent01(selected.nightRatio)} hint={`${formatInt(selected.nightMessages)} сообщений 00:00—05:59`} />
                       </div>
                     </Panel>
@@ -353,7 +353,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                       <div className="grid gap-5 lg:grid-cols-2">
                         <div>
                           <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                            Words
+                            Слова
                           </div>
                           {selected.topWords.length === 0 ? (
                             <EmptyBlock>Нет слов.</EmptyBlock>
@@ -392,10 +392,10 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                       ) : (
                         <div className="space-y-3">
                           {selected.topLongestMessages.map((item, idx) => (
-                            <div key={`${item.dateTs}-${idx}`} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                            <div key={`${item.dateTs}-${idx}`} className="rounded-[18px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                               <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
                                 <span>{item.direction === 'out' ? 'Ты' : item.direction === 'in' ? 'Собеседник' : 'Сообщение'}</span>
-                                <span>{formatInt(item.lengthChars)} chars</span>
+                                <span>{formatInt(item.lengthChars)} символов</span>
                               </div>
                               <div className="mt-2 break-words text-[14px] leading-relaxed text-slate-100/90 [overflow-wrap:anywhere]">
                                 {ellipsize(item.snippet, 220)}
@@ -408,7 +408,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                   </div>
 
                   <div className="pb-8 text-center text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                    TGWR · local only
+                    TGWR · локально на этом компьютере
                   </div>
                 </div>
               )}
