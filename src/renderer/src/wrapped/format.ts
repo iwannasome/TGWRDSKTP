@@ -123,11 +123,123 @@ export function formatInsightNoWinnerReason(reason: string | null): string {
   }
 }
 
+export function formatInsightEvidenceLabel(key: string): string {
+  switch (key) {
+    case 'total_messages':
+      return 'Сообщений'
+    case 'active_days':
+      return 'Активных дней'
+    case 'active_months':
+      return 'Активных месяцев'
+    case 'balance_ratio':
+      return 'Баланс'
+    case 'stability_ratio':
+      return 'Стабильность'
+    case 'gap_days':
+      return 'Пауза'
+    case 'before_messages':
+      return 'До паузы'
+    case 'after_messages':
+      return 'После паузы'
+    case 'after_active_days':
+      return 'Активных дней после'
+    case 'from_datetime':
+      return 'С какого момента'
+    case 'to_datetime':
+      return 'Возврат'
+    case 'early_messages':
+      return 'Раньше'
+    case 'late_messages':
+      return 'Позже'
+    case 'change_messages':
+      return 'Изменение'
+    case 'change_ratio':
+      return 'Мультипликатор'
+    case 'messages':
+      return 'Сообщений'
+    case 'ratio':
+      return 'Доля'
+    case 'message_count':
+      return 'Сообщений в сессии'
+    case 'duration_seconds':
+      return 'Длительность'
+    case 'density_per_hour':
+      return 'Плотность'
+    case 'start_datetime':
+      return 'Старт'
+    case 'end_datetime':
+      return 'Финиш'
+    case 'median_reply_seconds':
+      return 'Медианный ответ'
+    case 'reply_samples':
+      return 'Замеров'
+    case 'rhythm':
+      return 'Ритм'
+    case 'sent_messages':
+      return 'Отправлено'
+    case 'received_messages':
+      return 'Получено'
+    case 'imbalance_ratio':
+      return 'Дисбаланс'
+    case 'days_started_by_them':
+      return 'Начато собеседником'
+    case 'days_started_by_you':
+      return 'Начато тобой'
+    case 'initiated_days':
+      return 'Дней с первым сообщением'
+    case 'them_ratio':
+      return 'Доля собеседника'
+    case 'restarts_by_them':
+      return 'Возвратов собеседником'
+    case 'restarts_by_you':
+      return 'Возвратов тобой'
+    case 'media_total':
+      return 'Медиа'
+    case 'top_media_type':
+      return 'Главный тип'
+    case 'top_media_count':
+      return 'Главного типа'
+    case 'media_ratio':
+      return 'Доля медиа'
+    default:
+      return key
+        .replaceAll('_', ' ')
+        .replace(/^\w/, (char) => char.toUpperCase())
+  }
+}
+
 export function formatEvidenceValue(key: string, value: unknown): string {
   const n = typeof value === 'number' ? value : Number(value)
-  if (key.endsWith('_ratio') && Number.isFinite(n)) return formatPercent01(n)
+  if (key === 'density_per_hour' && Number.isFinite(n)) {
+    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/ч`
+  }
+  if (key === 'change_ratio' && Number.isFinite(n)) {
+    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}x`
+  }
+  if ((key === 'ratio' || key.endsWith('_ratio')) && Number.isFinite(n)) return formatPercent01(n)
   if (key.endsWith('_seconds') && Number.isFinite(n)) return formatSecondsHuman(n)
   if (key.endsWith('_days') && Number.isFinite(n)) return `${formatInt(n)} дн.`
+  if (key === 'top_media_type' && typeof value === 'string') {
+    const labels: Record<string, string> = {
+      photo: 'фото',
+      video: 'видео',
+      voice: 'голосовые',
+      sticker: 'стикеры',
+      gif: 'GIF',
+      file: 'файлы',
+      other: 'другое'
+    }
+    return labels[value] ?? value
+  }
+  if (key === 'rhythm' && typeof value === 'string') {
+    const labels: Record<string, string> = {
+      fast: 'быстрый',
+      measured: 'размеренный',
+      slow: 'медленный',
+      rare: 'редкий'
+    }
+    return labels[value] ?? value
+  }
   if (typeof value === 'number' && Number.isFinite(value)) return formatInt(value)
   if (typeof value === 'string' && value.length > 0) return value
   return '—'

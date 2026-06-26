@@ -1,6 +1,13 @@
 import React, { useMemo } from 'react'
-import { formatInt, formatPercent01 } from './format'
-import { getPeriod, getTop10, getYearLabel, type PeriodKey } from './report'
+import {
+  formatInsightConfidence,
+  formatInsightNoWinnerReason,
+  formatInt,
+  formatPercent01,
+  formatPeriodHuman
+} from './format'
+import { summarizeInsightEvidence } from './insightCopy'
+import { CONVERSATION_INSIGHT_KEYS, getConversationInsights, getPeriod, getTop10, getYearLabel, type PeriodKey } from './report'
 import { asString, getNumber, getString } from './safe'
 
 function formatTs(ts: number): string {
@@ -119,6 +126,7 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
   const topMessages = useMemo(() => getTop10(p, 'top_10_people_by_messages'), [p])
   const topSpan = useMemo(() => getTop10(p, 'top_10_people_by_time_span'), [p])
   const topMutual = useMemo(() => getTop10(p, 'top_10_people_by_mutuality'), [p])
+  const insights = useMemo(() => getConversationInsights(report, period), [report, period])
 
   const rowsMessages = useMemo(() => {
     return topMessages.map((it, idx) => {
@@ -171,6 +179,19 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
     })
   }, [topMutual])
 
+  const rowsInsights = useMemo(() => {
+    return CONVERSATION_INSIGHT_KEYS.map((kind, idx) => {
+      const insight = insights[kind]
+      return {
+        rank: String(idx + 1),
+        insight: insight.title,
+        winner: insight.winner?.displayName ?? '—',
+        confidence: formatInsightConfidence(insight.confidence),
+        evidence: insight.winner ? summarizeInsightEvidence(insight, 3) : formatInsightNoWinnerReason(insight.noWinnerReason)
+      }
+    })
+  }, [insights])
+
   return (
     <div className="relative h-full w-full overflow-hidden">
       <div className="absolute inset-0 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
@@ -206,6 +227,21 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
           </div>
 
           <div className="mt-6 grid gap-5 xl:grid-cols-2">
+            <div className="xl:col-span-2">
+              <Card title="Инсайты переписки" subtitle={`Все 14 выводов ${formatPeriodHuman(period)}: победитель, уверенность и короткое доказательство.`}>
+                <Table
+                  headers={[
+                    { key: 'rank', title: '#' },
+                    { key: 'insight', title: 'Инсайт' },
+                    { key: 'winner', title: 'Победитель' },
+                    { key: 'confidence', title: 'Уверенность' },
+                    { key: 'evidence', title: 'Доказательство' }
+                  ]}
+                  rows={rowsInsights}
+                />
+              </Card>
+            </div>
+
             <Card title="Топ-10 · сообщения" subtitle="С кем больше всего сообщений">
               {rowsMessages.length === 0 ? (
                 <div className="text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Пусто.</div>

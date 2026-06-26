@@ -5,13 +5,26 @@ import {
   formatDateYYYYMMDD,
   formatHour,
   formatInt,
+  formatInsightConfidence,
+  formatInsightNoWinnerReason,
   formatMonth,
+  formatPeriodHuman,
   formatPercent01,
   formatSecondsHuman
 } from './format'
 import {
+  getInsightDescription,
+  getInsightEvidenceEntries,
+  getInsightPeerRole,
+  summarizeInsightEvidence
+} from './insightCopy'
+import {
+  CONVERSATION_INSIGHT_KEYS,
+  getConversationInsights,
   getPeopleAnalytics,
   getYearLabel,
+  type ConversationInsight,
+  type ConversationInsightKind,
   type PersonAnalytics,
   type PersonPeriodAnalytics,
   type PeriodKey
@@ -99,11 +112,156 @@ function EmptyBlock({ children }: { children: React.ReactNode }): JSX.Element {
   )
 }
 
+function ConfidenceBadge({ insight }: { insight: ConversationInsight }): JSX.Element {
+  return <span className="tgwr-confidence-badge">{formatInsightConfidence(insight.confidence)}</span>
+}
+
+function InsightTile({
+  insight,
+  period,
+  active,
+  onSelect
+}: {
+  insight: ConversationInsight
+  period: PeriodKey
+  active: boolean
+  onSelect: () => void
+}): JSX.Element {
+  const emptyText = formatInsightNoWinnerReason(insight.noWinnerReason)
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      data-active={active ? 'true' : 'false'}
+      data-empty={insight.winner ? 'false' : 'true'}
+      className="tgwr-insight-card min-h-[156px] w-full p-4 text-left"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="break-words text-[15px] font-bold leading-snug text-slate-100 [overflow-wrap:anywhere]">{insight.title}</div>
+          <div className="mt-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.70)]">
+            {formatPeriodHuman(period).replace('за ', '')}
+          </div>
+        </div>
+        <ConfidenceBadge insight={insight} />
+      </div>
+
+      <div className="mt-4 break-words text-[16px] font-semibold leading-snug text-slate-50 [overflow-wrap:anywhere]">
+        {insight.winner?.displayName ?? 'Нет честного победителя'}
+      </div>
+      <div className="mt-2 line-clamp-2 break-words text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.82)] [overflow-wrap:anywhere]">
+        {insight.winner ? summarizeInsightEvidence(insight, 2) : emptyText}
+      </div>
+    </button>
+  )
+}
+
+function InsightDetailPanel({
+  insight,
+  period,
+  onSelectPeer
+}: {
+  insight: ConversationInsight
+  period: PeriodKey
+  onSelectPeer: (peerFromId: string) => void
+}): JSX.Element {
+  const evidence = getInsightEvidenceEntries(insight, 8)
+  const emptyText = formatInsightNoWinnerReason(insight.noWinnerReason)
+
+  return (
+    <section className="tgwr-telegram-panel min-w-0 overflow-hidden rounded-[24px] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="break-words text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)] [overflow-wrap:anywhere]">
+            Разбор {formatPeriodHuman(period)}
+          </div>
+          <div className="mt-2 break-words text-[24px] font-bold leading-tight text-slate-100 [overflow-wrap:anywhere]">{insight.title}</div>
+        </div>
+        <ConfidenceBadge insight={insight} />
+      </div>
+
+      <div className="mt-4 break-words text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.88)] [overflow-wrap:anywhere]">
+        {getInsightDescription(insight.kind)}
+      </div>
+
+      {insight.winner ? (
+        <div className="mt-5 rounded-[20px] border border-[rgba(var(--tgwr-accent1-rgb),0.22)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] p-4">
+          <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.74)]">Победитель</div>
+          <div className="mt-2 break-words text-[24px] font-bold leading-tight text-slate-50 [overflow-wrap:anywhere]">{insight.winner.displayName}</div>
+          <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+            {formatInt(insight.winner.totalMessages)} сообщений в выбранном периоде
+          </div>
+          <button
+            type="button"
+            onClick={() => onSelectPeer(insight.winner?.peerFromId ?? '')}
+            className="mt-4 rounded-full border border-white/10 bg-white/[0.08] px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/[0.12]"
+          >
+            Открыть профиль
+          </button>
+        </div>
+      ) : (
+        <div className="mt-5 rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4 text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.88)]">
+          {emptyText}
+        </div>
+      )}
+
+      <div className="mt-5">
+        <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">Доказательства</div>
+        {evidence.length === 0 ? (
+          <EmptyBlock>Нет числовых доказательств для этого слота.</EmptyBlock>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {evidence.map((entry) => (
+              <div key={entry.key} className="tgwr-evidence-row">
+                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{entry.label}</span>
+                <span className="shrink-0 text-right font-semibold text-slate-100">{entry.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5">
+        <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">Кандидаты</div>
+        {insight.candidates.length === 0 ? (
+          <EmptyBlock>Кандидаты не прошли пороги или отчет создан старой версией.</EmptyBlock>
+        ) : (
+          <div className="space-y-2">
+            {insight.candidates.slice(0, 4).map((candidate, idx) => (
+              <button
+                key={`${candidate.peerFromId}-${idx}`}
+                type="button"
+                onClick={() => onSelectPeer(candidate.peerFromId)}
+                className="w-full rounded-[16px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.34)] p-3 text-left transition hover:bg-white/[0.06]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="break-words text-sm font-bold text-slate-100 [overflow-wrap:anywhere]">{candidate.displayName}</div>
+                    <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                      {summarizeInsightEvidence({ ...insight, evidence: candidate.evidence }, 2)}
+                    </div>
+                  </div>
+                  <div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[12px] font-bold text-slate-200">
+                    #{idx + 1}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
 export default function PeopleView({ report, period, onClose, onOpenDetails, onPeriodToggle }: Props): JSX.Element {
   const year = getYearLabel(report)
   const people = useMemo(() => getPeopleAnalytics(report), [report])
+  const insights = useMemo(() => getConversationInsights(report, period), [report, period])
+  const insightList = useMemo(() => CONVERSATION_INSIGHT_KEYS.map((kind) => insights[kind]), [insights])
   const [query, setQuery] = useState('')
   const [selectedPeer, setSelectedPeer] = useState('')
+  const [selectedInsightKind, setSelectedInsightKind] = useState<ConversationInsightKind>('main_person')
 
   const visiblePeople = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -131,6 +289,12 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
 
   const selectedPerson = visiblePeople.find((person) => person.peerFromId === selectedPeer) ?? visiblePeople[0] ?? null
   const selected = selectedPerson ? periodData(selectedPerson, period) : null
+  const selectedInsight = insights[selectedInsightKind]
+  const relatedInsights = selected
+    ? insightList
+        .map((insight) => ({ insight, role: getInsightPeerRole(insight, selected.peerFromId) }))
+        .filter((item): item is { insight: ConversationInsight; role: string } => item.role !== null)
+    : []
 
   const monthBars = useMemo(() => {
     if (!selected) return []
@@ -179,6 +343,46 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
               </button>
             </div>
           </div>
+
+          <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.75fr)]">
+            <div className="tgwr-telegram-panel min-w-0 overflow-hidden rounded-[24px] p-5">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                    Сигналы переписки
+                  </div>
+                  <div className="mt-2 break-words text-[24px] font-bold leading-tight text-slate-100 [overflow-wrap:anywhere]">
+                    14 выводов по переписке
+                  </div>
+                </div>
+                <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[13px] font-semibold text-[rgba(var(--tgwr-muted-rgb),0.9)]">
+                  {formatPeriodHuman(period)}
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                {insightList.map((insight) => (
+                  <InsightTile
+                    key={insight.kind}
+                    insight={insight}
+                    period={period}
+                    active={insight.kind === selectedInsightKind}
+                    onSelect={() => setSelectedInsightKind(insight.kind)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <InsightDetailPanel
+              insight={selectedInsight}
+              period={period}
+              onSelectPeer={(peerFromId) => {
+                if (!peerFromId) return
+                setQuery('')
+                setSelectedPeer(peerFromId)
+              }}
+            />
+          </section>
 
           <div className="mt-6 grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
             <aside className="tgwr-telegram-panel min-h-0 rounded-[24px] p-4 xl:sticky xl:top-[116px] xl:max-h-[calc(100vh-140px)]">
@@ -268,6 +472,27 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                         <span className="min-w-0 break-words tabular-nums [overflow-wrap:anywhere]">разница · {formatInt(selected.mutualityAbsDiff)}</span>
                       </div>
                     </div>
+
+                    {relatedInsights.length > 0 ? (
+                      <div className="mt-5 rounded-[18px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.40)] p-4">
+                        <div className="mb-3 text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                          Роли в инсайтах
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {relatedInsights.map(({ insight, role }) => (
+                            <button
+                              key={`${insight.kind}-${role}`}
+                              type="button"
+                              onClick={() => setSelectedInsightKind(insight.kind)}
+                              className="max-w-full rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.22)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-3 py-1.5 text-left text-[13px] font-semibold text-slate-100 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.16)]"
+                            >
+                              <span className="break-words [overflow-wrap:anywhere]">{insight.title}</span>
+                              <span className="ml-2 text-[rgba(var(--tgwr-muted-rgb),0.78)]">{role}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </section>
 
                   <div className="grid gap-5 xl:grid-cols-2">
