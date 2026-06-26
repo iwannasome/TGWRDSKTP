@@ -64,6 +64,52 @@ export type PersonAnalytics = {
   periods: Partial<Record<PeriodKey, PersonPeriodAnalytics>>
 }
 
+export const CONVERSATION_INSIGHT_KEYS = [
+  'main_person',
+  'stable_dialog',
+  'comeback',
+  'closer_dialog',
+  'faded_dialog',
+  'night_companion',
+  'day_anchor',
+  'alive_dialog',
+  'longest_live_session',
+  'reply_rhythm',
+  'mutual_dialog',
+  'contact_initiator',
+  'silence_restarter',
+  'media_bond'
+] as const
+
+export type ConversationInsightKind = (typeof CONVERSATION_INSIGHT_KEYS)[number]
+export type ConversationInsightConfidence = 'exact' | 'behavioral' | 'heuristic'
+
+export type ConversationInsightWinner = {
+  peerFromId: string
+  displayName: string
+  totalMessages: number
+}
+
+export type ConversationInsightCandidate = ConversationInsightWinner & {
+  score: number
+  evidence: Record<string, unknown>
+}
+
+export type ConversationInsight = {
+  kind: ConversationInsightKind
+  title: string
+  confidence: ConversationInsightConfidence
+  winner: ConversationInsightWinner | null
+  score: number
+  evidence: Record<string, unknown>
+  candidates: ConversationInsightCandidate[]
+  noWinnerReason: string | null
+}
+
+export type ConversationInsights = Record<ConversationInsightKind, ConversationInsight>
+
+const DEFAULT_CONFIDENCE: ConversationInsightConfidence = 'behavioral'
+
 export function asReport(data: unknown): Record<string, unknown> | null {
   return asRecord(data)
 }
@@ -83,6 +129,102 @@ export function getPeriod(report: unknown, period: PeriodKey): Record<string, un
   if (!isRecord(periods)) return {}
   const p = periods[period]
   return asRecord(p) ?? {}
+}
+
+function isConversationInsightKind(value: string): value is ConversationInsightKind {
+  return (CONVERSATION_INSIGHT_KEYS as readonly string[]).includes(value)
+}
+
+function normalizeConfidence(value: unknown): ConversationInsightConfidence {
+  return value === 'exact' || value === 'behavioral' || value === 'heuristic' ? value : DEFAULT_CONFIDENCE
+}
+
+function defaultInsight(kind: ConversationInsightKind): ConversationInsight {
+  return {
+    kind,
+    title: kind,
+    confidence: DEFAULT_CONFIDENCE,
+    winner: null,
+    score: 0,
+    evidence: {},
+    candidates: [],
+    noWinnerReason: 'missing_insight'
+  }
+}
+
+function normalizeInsightWinner(value: unknown): ConversationInsightWinner | null {
+  const obj = asRecord(value)
+  if (!obj) return null
+  const peerFromId = getString(obj, 'peer_from_id', '') || getString(obj, 'peerFromId', '')
+  const displayName = getString(obj, 'display_name', '') || getString(obj, 'displayName', '') || peerFromId
+  if (!peerFromId && !displayName) return null
+  return {
+    peerFromId,
+    displayName,
+    totalMessages: getNumber(obj, 'total_messages', getNumber(obj, 'totalMessages', 0))
+  }
+}
+
+function normalizeInsightCandidate(value: unknown): ConversationInsightCandidate | null {
+  const obj = asRecord(value)
+  if (!obj) return null
+  const winner = normalizeInsightWinner(obj)
+  if (!winner) return null
+  return {
+    ...winner,
+    score: getNumber(obj, 'score', 0),
+    evidence: getRecord(obj, 'evidence') ?? {}
+  }
+}
+
+function normalizeConversationInsight(kind: ConversationInsightKind, value: unknown): ConversationInsight {
+  const obj = asRecord(value)
+  if (!obj) return defaultInsight(kind)
+  const rawKind = getString(obj, 'kind', kind)
+  const normalizedKind = isConversationInsightKind(rawKind) ? rawKind : kind
+  const candidates = getArray(obj, 'candidates')
+    .map(normalizeInsightCandidate)
+    .filter((item): item is ConversationInsightCandidate => item !== null)
+
+  return {
+    kind: normalizedKind,
+    title: getString(obj, 'title', kind),
+    confidence: normalizeConfidence(obj.confidence),
+    winner: normalizeInsightWinner(obj.winner),
+    score: getNumber(obj, 'score', 0),
+    evidence: getRecord(obj, 'evidence') ?? {},
+    candidates,
+    noWinnerReason: obj.no_winner_reason === null ? null : getString(obj, 'no_winner_reason', getString(obj, 'noWinnerReason', 'missing_reason'))
+  }
+}
+
+export function getConversationInsights(report: unknown, period: PeriodKey): ConversationInsights {
+  const p = getPeriod(report, period)
+  const raw = getRecord(p, 'conversation_insights')
+  const out = {} as ConversationInsights
+  for (const kind of CONVERSATION_INSIGHT_KEYS) {
+    out[kind] = normalizeConversationInsight(kind, raw?.[kind])
+  }
+  return out
+}
+
+export function getConversationInsight(report: unknown, period: PeriodKey, kind: ConversationInsightKind): ConversationInsight {
+  return getConversationInsights(report, period)[kind]
+}
+
+export function getDeckConversationInsights(report: unknown, period: PeriodKey): ConversationInsight[] {
+  const insights = getConversationInsights(report, period)
+  const preferred: ConversationInsightKind[] = [
+    'main_person',
+    'comeback',
+    'closer_dialog',
+    'night_companion',
+    'day_anchor',
+    'mutual_dialog',
+    'alive_dialog',
+    'longest_live_session'
+  ]
+  return preferred.map((kind) => insights[kind]).filter((insight) => insight.winner !== null).slice(0, 7)
 }
 
 export function getTotalMessages(p: Record<string, unknown>): number {

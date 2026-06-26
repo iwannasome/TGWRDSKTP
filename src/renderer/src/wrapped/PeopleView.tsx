@@ -153,7 +153,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
           <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-[rgba(var(--tgwr-border-rgb),0.14)] bg-[rgba(var(--tgwr-bg-0),0.86)] px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div>
               <div className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
-                TGWR Explore
+                TGWR by IWS Explore
               </div>
               <div className="mt-2 text-[28px] font-bold leading-tight text-slate-100 sm:text-[32px]">Люди</div>
               <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
@@ -408,7 +408,7 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
                   </div>
 
                   <div className="pb-8 text-center text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                    TGWR · локально на этом компьютере
+                    TGWR by IWS · локально на этом компьютере
                   </div>
                 </div>
               )}

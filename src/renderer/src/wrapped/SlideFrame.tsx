@@ -19,6 +19,10 @@ export default function SlideFrame({ kicker, title, subtitle, footerHint, childr
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[7px] bg-[linear-gradient(90deg,rgba(var(--tgwr-accent1-rgb),0.92),rgba(var(--tgwr-accent2-rgb),0.78))]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1100px_circle_at_78%_8%,rgba(var(--tgwr-accent1-rgb),0.10),transparent_48%)]" />
+      <div className="pointer-events-none absolute bottom-8 right-9 z-20 text-right">
+        <div className="text-[13px] font-semibold uppercase tracking-[0.24em] text-white/30">IWS</div>
+        <div className="mt-1 text-[11px] font-medium text-white/20">TGWR by IWS</div>
+      </div>
 
       <div className="relative flex h-full w-full flex-col px-[78px] py-[58px]">
         <div className="min-h-[116px]">

@@ -303,7 +303,7 @@ export default function SlidesView({
         <div className="fixed bottom-5 left-4 right-4 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.88)] px-4 py-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl md:bottom-auto md:left-6 md:right-auto md:top-1/2 md:w-[156px] md:-translate-y-1/2 md:flex-col md:items-stretch md:justify-start md:px-4">
 
           <div className="hidden text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.66)] md:block">
-            TGWR Story
+            TGWR by IWS
           </div>
 
           <div className="flex items-center justify-center gap-2 md:grid md:grid-cols-2">

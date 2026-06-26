@@ -78,3 +78,57 @@ export function ellipsize(text: string, max = 120): string {
   if (t.length <= max) return t
   return `${t.slice(0, Math.max(0, max - 1))}…`
 }
+
+export type InsightConfidenceLike = 'exact' | 'behavioral' | 'heuristic' | string
+
+export function formatInsightConfidence(value: InsightConfidenceLike): string {
+  switch (value) {
+    case 'exact':
+      return 'точно посчитано'
+    case 'behavioral':
+      return 'поведенческий вывод'
+    case 'heuristic':
+      return 'легкая эвристика'
+    default:
+      return 'поведенческий вывод'
+  }
+}
+
+export function formatPeriodHuman(period: 'year' | 'all_time'): string {
+  return period === 'all_time' ? 'за все время' : 'за год'
+}
+
+export function formatInsightNoWinnerReason(reason: string | null): string {
+  switch (reason) {
+    case null:
+      return ''
+    case 'not_enough_large_dialogs':
+      return 'Недостаточно крупных диалогов для честного вывода.'
+    case 'not_enough_stable_dialogs':
+      return 'Нет диалога, который прошел пороги стабильности.'
+    case 'no_sustained_comeback_after_quality_gates':
+      return 'Нет камбэка с достаточной активностью до и после паузы.'
+    case 'no_meaningful_growth_after_quality_gates':
+      return 'Нет роста, который проходит фильтр маленькой базы.'
+    case 'no_meaningful_fade_after_quality_gates':
+      return 'Нет заметного затухания после реальной активности.'
+    case 'not_enough_reply_samples':
+      return 'Недостаточно ответов для надежного ритма.'
+    case 'not_enough_media_events':
+      return 'Недостаточно медиа-сообщений.'
+    case 'missing_insight':
+      return 'Этот отчет был создан старой версией TGWR.'
+    default:
+      return 'Недостаточно данных для честного вывода.'
+  }
+}
+
+export function formatEvidenceValue(key: string, value: unknown): string {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (key.endsWith('_ratio') && Number.isFinite(n)) return formatPercent01(n)
+  if (key.endsWith('_seconds') && Number.isFinite(n)) return formatSecondsHuman(n)
+  if (key.endsWith('_days') && Number.isFinite(n)) return `${formatInt(n)} дн.`
+  if (typeof value === 'number' && Number.isFinite(value)) return formatInt(value)
+  if (typeof value === 'string' && value.length > 0) return value
+  return '—'
+}
