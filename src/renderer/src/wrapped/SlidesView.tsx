@@ -4,8 +4,8 @@ import * as htmlToImage from 'html-to-image'
 import { PDFDocument } from 'pdf-lib'
 
 import { clamp } from './format'
-import { asReport, getYearLabel, type PeriodKey } from './report'
-import type { SlideDef, ThemeId } from './slideTypes'
+import { asReport, getYearLabel, type ConversationInsightKind, type PeriodKey } from './report'
+import type { SlideCommonProps, SlideDef, ThemeId } from './slideTypes'
 
 import Slide01Cover from './slides/Slide01Cover'
 import Slide02TotalMessages from './slides/Slide02TotalMessages'
@@ -13,18 +13,13 @@ import Slide03SentVsReceived from './slides/Slide03SentVsReceived'
 import Slide04MostActiveMonth from './slides/Slide04MostActiveMonth'
 import Slide05MostActiveHour from './slides/Slide05MostActiveHour'
 import Slide06NightRatio from './slides/Slide06NightRatio'
-import Slide07TopPersonMessages from './slides/Slide07TopPersonMessages'
-import Slide08TopPersonMutuality from './slides/Slide08TopPersonMutuality'
-import Slide09FastestReplyPerson from './slides/Slide09FastestReplyPerson'
-import Slide10IgnoredMostPerson from './slides/Slide10IgnoredMostPerson'
+import InsightStorySlide from './slides/InsightStorySlide'
 import Slide11WordCloud from './slides/Slide11WordCloud'
 import Slide12EmojiTop from './slides/Slide12EmojiTop'
 import Slide13MediaCounts from './slides/Slide13MediaCounts'
 import Slide14LongestMessage from './slides/Slide14LongestMessage'
 import Slide15LongestStreak from './slides/Slide15LongestStreak'
 import Slide16LongestSilence from './slides/Slide16LongestSilence'
-import Slide17DayPerson from './slides/Slide17DayPerson'
-import Slide18NightPerson from './slides/Slide18NightPerson'
 import Slide19Achievements from './slides/Slide19Achievements'
 import Slide20End from './slides/Slide20End'
 import Slide21Credits from './slides/Slide21Credits'
@@ -33,6 +28,12 @@ import Slide21Credits from './slides/Slide21Credits'
 const SLIDE_W = 1920
 const SLIDE_H = 1080
 
+function makeInsightSlide(kind: ConversationInsightKind): (props: SlideCommonProps) => JSX.Element {
+  return function ConversationInsightSlide(props: SlideCommonProps): JSX.Element {
+    return <InsightStorySlide {...props} kind={kind} />
+  }
+}
+
 const slides: SlideDef[] = [
   { id: 's1', title: 'Cover', Component: Slide01Cover },
   { id: 's2', title: 'Total Messages', Component: Slide02TotalMessages },
@@ -40,21 +41,22 @@ const slides: SlideDef[] = [
   { id: 's4', title: 'Most Active Month', Component: Slide04MostActiveMonth },
   { id: 's5', title: 'Most Active Hour', Component: Slide05MostActiveHour },
   { id: 's6', title: 'Night Ratio', Component: Slide06NightRatio },
-  { id: 's7', title: 'Top Person (Messages)', Component: Slide07TopPersonMessages },
-  { id: 's8', title: 'Top Person (Mutuality)', Component: Slide08TopPersonMutuality },
-  { id: 's9', title: 'Fastest Reply', Component: Slide09FastestReplyPerson },
-  { id: 's10', title: 'Most Ignored', Component: Slide10IgnoredMostPerson },
-  { id: 's11', title: 'Word Cloud', Component: Slide11WordCloud },
-  { id: 's12', title: 'Top Emojis', Component: Slide12EmojiTop },
-  { id: 's13', title: 'Media Counts', Component: Slide13MediaCounts },
-  { id: 's14', title: 'Longest Message', Component: Slide14LongestMessage },
-  { id: 's15', title: 'Longest Streak', Component: Slide15LongestStreak },
-  { id: 's16', title: 'Longest Silence', Component: Slide16LongestSilence },
-  { id: 's17', title: 'Day Person', Component: Slide17DayPerson },
-  { id: 's18', title: 'Night Person', Component: Slide18NightPerson },
-  { id: 's19', title: 'Achievements', Component: Slide19Achievements },
-  { id: 's20', title: 'Final Slide', Component: Slide20End },
-  { id: 's21', title: 'Credits', Component: Slide21Credits }
+  { id: 's7_main_person', title: 'Main Person Insight', Component: makeInsightSlide('main_person') },
+  { id: 's8_stable_dialog', title: 'Stable Dialog Insight', Component: makeInsightSlide('stable_dialog') },
+  { id: 's9_comeback', title: 'Comeback Insight', Component: makeInsightSlide('comeback') },
+  { id: 's10_closer_dialog', title: 'Closer Dialog Insight', Component: makeInsightSlide('closer_dialog') },
+  { id: 's11_night_companion', title: 'Night Companion Insight', Component: makeInsightSlide('night_companion') },
+  { id: 's12_mutual_dialog', title: 'Mutual Dialog Insight', Component: makeInsightSlide('mutual_dialog') },
+  { id: 's13_media_bond', title: 'Media Bond Insight', Component: makeInsightSlide('media_bond') },
+  { id: 's14_word_cloud', title: 'Word Cloud', Component: Slide11WordCloud },
+  { id: 's15_top_emojis', title: 'Top Emojis', Component: Slide12EmojiTop },
+  { id: 's16_media_counts', title: 'Media Counts', Component: Slide13MediaCounts },
+  { id: 's17_longest_message', title: 'Longest Message', Component: Slide14LongestMessage },
+  { id: 's18_longest_streak', title: 'Longest Streak', Component: Slide15LongestStreak },
+  { id: 's19_longest_silence', title: 'Longest Silence', Component: Slide16LongestSilence },
+  { id: 's20_achievements', title: 'Achievements', Component: Slide19Achievements },
+  { id: 's21_final', title: 'Final Slide', Component: Slide20End },
+  { id: 's22_credits', title: 'Credits', Component: Slide21Credits }
 ]
 
 type SlidesViewProps = {
