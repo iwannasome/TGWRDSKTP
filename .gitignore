@@ -9,6 +9,7 @@ node_modules/
 dist/
 release/
 out/
+.tmp/
 .vite/
 *.tsbuildinfo
 *.AppImage

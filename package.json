@@ -2,8 +2,12 @@
   "name": "tgwr",
   "private": true,
   "version": "0.1.0",
-  "description": "TGWR (Telegram Wrapped) — fully local desktop app (Electron + Python worker)",
-  "author": "iwannasome",
+  "description": "TGWR by IWS — fully local Telegram Wrapped desktop app",
+  "author": {
+    "name": "iwannasome",
+    "email": "iwannasome@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/iwannasome/TGWRDSKTP",
   "license": "MIT",
   "main": "dist/main/index.js",
   "type": "module",
@@ -23,7 +27,7 @@
     "dist:win": "npm run build && node scripts/electron-builder-safe.mjs --win nsis",
     "dist:win:portable": "npm run build && node scripts/electron-builder-safe.mjs --win portable",
     "dist:mac": "npm run build && node scripts/electron-builder-safe.mjs --mac dmg",
-    "dist:linux": "npm run build && node scripts/electron-builder-safe.mjs --linux AppImage",
+    "dist:linux": "npm run build && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm",
     "dist:current": "npm run build && node scripts/electron-builder-safe.mjs"
   },
   "dependencies": {
@@ -49,7 +53,7 @@
   },
   "build": {
     "appId": "com.iwannasome.tgwr",
-    "productName": "TGWR",
+    "productName": "TGWR by IWS",
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -79,14 +83,14 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+      "artifactName": "TGWR-by-IWS-Setup-${version}-${arch}.${ext}"
     },
 
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+      "artifactName": "TGWR-by-IWS-Setup-${version}-${arch}.${ext}"
     },
 
     "mac": {
@@ -98,11 +102,11 @@
       ],
       "icon": "build/icon.icns",
       "category": "public.app-category.utilities",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "TGWR-by-IWS-${version}-${arch}.${ext}"
     },
 
     "dmg": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "TGWR-by-IWS-${version}-${arch}.${ext}"
     },
 
     "linux": {
@@ -110,10 +114,20 @@
         {
           "target": "AppImage",
           "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        },
+        {
+          "target": "rpm",
+          "arch": ["x64"]
         }
       ],
       "icon": "build/icon.png",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "category": "Utility",
+      "maintainer": "iwannasome <iwannasome@users.noreply.github.com>",
+      "artifactName": "TGWR-by-IWS-${version}-${arch}.${ext}"
     }
   }
 }
