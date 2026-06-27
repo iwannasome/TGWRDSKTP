@@ -18,7 +18,7 @@ export default function Slide08TopPersonMutuality({ report, period, exporting }:
   const ratio = top ? getNumber(top, 'imbalance_ratio', 0) : 0
   const symmetry = top ? getNumber(top, 'symmetry_percent', Math.max(0, 100 - ratio * 100)) : 0
   const activeDays = top ? getNumber(top, 'active_days', 0) : 0
-  const minimum = top ? getNumber(top, 'minimum_messages_required', 2000) : 2000
+  const minimum = top ? getNumber(top, 'minimum_messages_required', 5000) : 5000
 
   return (
     <SlideFrame

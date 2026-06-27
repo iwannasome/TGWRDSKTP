@@ -3302,7 +3302,7 @@ def _top_10_people_by_time_span(people: Dict[str, Dict[str, Any]]) -> List[Dict[
 def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Mutuality = minimal imbalance |sent-recv| / total,
-    BUT only for "big" conversations: total_messages >= 2000 (as requested).
+    BUT only for very large conversations: total_messages >= 5000.
     """
     rows: List[Dict[str, Any]] = []
 
@@ -3314,8 +3314,7 @@ def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
         recv = int(it.get("received_messages") or 0)
         total = int(it.get("total_messages") or (sent + recv) or 0)
 
-        # HARD FILTER: only big chats
-        if total < 2000:
+        if total < MUTUALITY_MIN_MESSAGES:
             continue
 
         abs_diff = abs(sent - recv)
@@ -3335,7 +3334,7 @@ def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "imbalance_ratio": float(ratio),
                 "symmetry_percent": float(max(0.0, 1.0 - ratio) * 100.0),
                 "active_days": int(it.get("active_days", 0) or 0),
-                "minimum_messages_required": 2000,
+                "minimum_messages_required": MUTUALITY_MIN_MESSAGES,
             }
         )
 
@@ -3366,43 +3365,46 @@ CONFIDENCE_HEURISTIC = "heuristic"
 
 SESSION_GAP_SECONDS = 3 * 60 * 60
 SILENCE_RESTART_SECONDS = 7 * 24 * 60 * 60
+MUTUALITY_MIN_MESSAGES = 5000
 
 
 def _conversation_thresholds(label: str) -> Dict[str, int]:
     if label == "year":
         return {
-            "min_person_total": 120,
-            "min_major_total": 250,
-            "min_stable_total": 240,
+            "min_person_total": 180,
+            "min_major_total": 400,
+            "min_stable_total": 420,
             "min_stable_months": 6,
-            "min_active_days": 6,
-            "comeback_gap_days": 45,
-            "comeback_before_messages": 80,
-            "comeback_after_messages": 100,
-            "comeback_after_active_days": 2,
-            "trend_baseline_messages": 40,
-            "trend_delta_messages": 120,
+            "min_active_days": 10,
+            "comeback_gap_days": 60,
+            "comeback_before_messages": 300,
+            "comeback_after_messages": 500,
+            "comeback_after_active_days": 10,
+            "trend_baseline_messages": 60,
+            "trend_delta_messages": 240,
             "reply_samples": 3,
-            "initiative_days": 4,
-            "media_events": 80,
-            "session_messages": 40,
+            "initiative_days": 6,
+            "media_events": 120,
+            "session_messages": 60,
+            "mutual_min_total": MUTUALITY_MIN_MESSAGES,
         }
     return {
-        "min_person_total": 180,
-        "min_major_total": 320,
-        "min_stable_total": 300,
-        "min_stable_months": 4,
-        "min_active_days": 8,
-        "comeback_gap_days": 75,
-        "comeback_before_messages": 90,
-        "comeback_after_messages": 110,
-        "comeback_after_active_days": 2,
-        "trend_baseline_messages": 50,
-        "trend_delta_messages": 140,
+        "min_person_total": 260,
+        "min_major_total": 500,
+        "min_stable_total": 520,
+        "min_stable_months": 5,
+        "min_active_days": 12,
+        "comeback_gap_days": 90,
+        "comeback_before_messages": 300,
+        "comeback_after_messages": 550,
+        "comeback_after_active_days": 12,
+        "trend_baseline_messages": 80,
+        "trend_delta_messages": 300,
         "reply_samples": 3,
-        "initiative_days": 5,
-        "media_events": 90,
-        "session_messages": 45,
+        "initiative_days": 8,
+        "media_events": 140,
+        "session_messages": 70,
+        "mutual_min_total": MUTUALITY_MIN_MESSAGES,
     }
 
 
@@ -3760,12 +3762,23 @@ def _comeback_candidates(profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]
             if before_count < th["comeback_before_messages"] or after_count < th["comeback_after_messages"] or after_days < th["comeback_after_active_days"]:
                 continue
             gap_days = int(gap // 86400)
-            score = gap_days + min(400.0, after_count) + after_days * 20.0 + min(100.0, before_count * 0.25)
+            reactivation_delta = int(after_count - before_count)
+            reactivation_ratio = _safe_div(after_count, max(1, before_count))
+            score = (
+                min(900.0, after_count * 0.35)
+                + min(800.0, max(0, reactivation_delta) * 0.45)
+                + min(700.0, reactivation_ratio * 120.0)
+                + after_days * 25.0
+                + min(160.0, gap_days * 1.2)
+                + min(120.0, before_count * 0.08)
+            )
             evidence = {
                 "gap_days": gap_days,
                 "before_messages": int(before_count),
                 "after_messages": int(after_count),
                 "after_active_days": int(after_days),
+                "reactivation_delta": reactivation_delta,
+                "reactivation_ratio": float(round(reactivation_ratio, 4)),
                 "from_datetime": _ts_to_msk_datetime(prev_ts),
                 "to_datetime": _ts_to_msk_datetime(cur_ts),
             }
@@ -3883,9 +3896,10 @@ def _conversation_reply_rhythm(label: str, profiles: Dict[str, Dict[str, Any]], 
 
 def _conversation_mutual_dialog(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
     candidates = []
+    minimum_total = int(th.get("mutual_min_total", MUTUALITY_MIN_MESSAGES) or MUTUALITY_MIN_MESSAGES)
     for profile in profiles.values():
         total = int(profile.get("total_messages", 0) or 0)
-        if total < th["min_major_total"]:
+        if total < minimum_total:
             continue
         sent = int(profile.get("sent_messages", 0) or 0)
         recv = int(profile.get("received_messages", 0) or 0)
@@ -3895,6 +3909,7 @@ def _conversation_mutual_dialog(label: str, profiles: Dict[str, Dict[str, Any]],
             "sent_messages": sent,
             "received_messages": recv,
             "imbalance_ratio": float(round(imbalance, 4)),
+            "minimum_messages_required": minimum_total,
         }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)

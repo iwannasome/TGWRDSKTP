@@ -143,6 +143,10 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'После паузы'
     case 'after_active_days':
       return 'Активных дней после'
+    case 'reactivation_delta':
+      return 'Прирост после паузы'
+    case 'reactivation_ratio':
+      return 'Рост после паузы'
     case 'from_datetime':
       return 'С какого момента'
     case 'to_datetime':
@@ -213,7 +217,7 @@ export function formatEvidenceValue(key: string, value: unknown): string {
   if (key === 'density_per_hour' && Number.isFinite(n)) {
     return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/ч`
   }
-  if (key === 'change_ratio' && Number.isFinite(n)) {
+  if ((key === 'change_ratio' || key === 'reactivation_ratio') && Number.isFinite(n)) {
     return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}x`
   }
   if ((key === 'ratio' || key.endsWith('_ratio')) && Number.isFinite(n)) return formatPercent01(n)

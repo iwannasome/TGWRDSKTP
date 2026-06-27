@@ -123,7 +123,7 @@ async function generateExport() {
         peerId: 'user200001',
         peerName: 'Александра Очень Длинное Имя Для Проверки Переносов Интерфейса',
         startMs: Date.UTC(2025, 0, 1, 9, 0, 0),
-        count: 3400
+        count: 5200
       })
     },
     {
@@ -134,7 +134,7 @@ async function generateExport() {
         peerId: 'user200002',
         peerName: 'Maximilian LongName With Mixed Русский English Tokens',
         startMs: Date.UTC(2025, 3, 1, 23, 30, 0),
-        count: 3300
+        count: 5100
       })
     },
     {
@@ -166,22 +166,22 @@ async function generateExport() {
     {
       id: 300002,
       type: 'personal_chat',
-      name: 'Реальный камбэк',
+      name: 'Слишком короткая пауза для камбэка',
       messages: makeSegmentedMessages({
         peerId: 'user300002',
-        peerName: 'Реальный камбэк',
+        peerName: 'Слишком короткая пауза для камбэка',
         segments: [
           {
-            startMs: Date.UTC(2025, 0, 8, 11, 0, 0),
-            count: 260,
-            stepMinutes: 48,
-            textPrefix: 'активность до большой паузы'
+            startMs: Date.UTC(2025, 0, 1, 9, 0, 0),
+            count: 1408,
+            stepMinutes: 5,
+            textPrefix: 'активность до паузы на пятьдесят девять дней'
           },
           {
-            startMs: Date.UTC(2025, 9, 3, 18, 0, 0),
-            count: 340,
-            stepMinutes: 42,
-            textPrefix: 'общение вернулось после большой паузы'
+            startMs: Date.UTC(2025, 2, 6, 6, 15, 0),
+            count: 2640,
+            stepMinutes: 13,
+            textPrefix: 'много сообщений после короткой для камбэка паузы'
           }
         ]
       })
@@ -288,6 +288,29 @@ async function generateExport() {
             count: 700,
             stepMinutes: 80,
             textPrefix: 'история до выбранного года'
+          }
+        ]
+      })
+    },
+    {
+      id: 300008,
+      type: 'personal_chat',
+      name: 'Полина <3333',
+      messages: makeSegmentedMessages({
+        peerId: 'user300008',
+        peerName: 'Полина <3333',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 1, 1, 0, 0, 0),
+            count: 320,
+            stepMinutes: 20,
+            textPrefix: 'нормальное общение до длинной паузы'
+          },
+          {
+            startMs: Date.UTC(2025, 4, 11, 10, 20, 0),
+            count: 1800,
+            stepMinutes: 15,
+            textPrefix: 'после паузы переписка стала заметно активнее'
           }
         ]
       })
@@ -535,12 +558,15 @@ function assertReport(report) {
   }
 
   const required = [
-    ...assertPeriodInvariants('all_time', allTime, { total: 10246, activeChats: 10 }),
-    ...assertPeriodInvariants('year', year, { total: 9360, activeChats: 7 }),
+    ...assertPeriodInvariants('all_time', allTime, { total: 19414, activeChats: 11 }),
+    ...assertPeriodInvariants('year', year, { total: 18528, activeChats: 8 }),
     ...assertPersonAnalyticsInvariants(report?.people_analytics),
     ...assertInsightContract('all_time', allTime),
     ...assertInsightContract('year', year),
-    ['year.comeback_real_chat_wins', getInsightWinnerPeer(year, 'comeback') === 'user300002'],
+    ['all_time.comeback_stronger_reactivation_wins', getInsightWinnerPeer(allTime, 'comeback') === 'user300008'],
+    ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
+    ['year.comeback_stronger_reactivation_wins', getInsightWinnerPeer(year, 'comeback') === 'user300008'],
+    ['year.comeback_59_day_spike_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300002'],
     ['year.comeback_tiny_false_positive_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300003' && getInsightWinnerPeer(allTime, 'comeback') !== 'user300003'],
     ['year.closer_dialog_fixture', getInsightWinnerPeer(year, 'closer_dialog') === 'user300004'],
     ['year.faded_dialog_fixture', getInsightWinnerPeer(year, 'faded_dialog') === 'user300005'],
@@ -551,6 +577,10 @@ function assertReport(report) {
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
     ['top_10_people_by_mutuality', year?.top_10_people_by_mutuality?.length >= 2],
+    ['all_time.top_10_people_by_mutuality_5000_gate', (allTime?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
+    ['top_10_people_by_mutuality_5000_gate', (year?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
+    ['all_time.mutual_dialog_5000_gate', Number(allTime?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
+    ['year.mutual_dialog_5000_gate', Number(year?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
     ['top_longest_messages_sent', allTime?.top_longest_messages_sent?.length > 0],
     ['word_cloud', Object.keys(allTime?.word_cloud ?? {}).length > 0],
     ['achievements', report?.achievements?.length > 0],
