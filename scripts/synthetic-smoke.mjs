@@ -13,6 +13,7 @@ const outDir = join(workDir, 'out')
 const screenshotsDir = join(workDir, 'screenshots')
 const dbPath = join(outDir, 'tgwr.db')
 const selfId = 'user100000000'
+const SLIDE_COUNT = 22
 
 function isoDate(baseMs, index, stepMinutes = 37) {
   return new Date(baseMs + index * stepMinutes * 60_000).toISOString().replace('.000Z', '')
@@ -768,7 +769,7 @@ function runChrome(chrome, args, timeoutMs = 20_000) {
 }
 
 function allSlideTargets() {
-  return Array.from({ length: 21 }, (_, idx) => idx)
+  return Array.from({ length: SLIDE_COUNT }, (_, idx) => idx)
 }
 
 async function getBuiltAssets() {
@@ -791,7 +792,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         document.body.innerHTML = '<pre style="white-space:pre-wrap;padding:24px;color:#fca5a5;background:#111827;font:16px monospace">' + String(message).replace(/[<>&]/g, (ch) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch])) + '</pre>';
       }
       function runNavigationStress(root) {
-        const expected = '20';
+        const expected = '${SLIDE_COUNT - 1}';
         const deadline = Date.now() + 5000;
         for (let i = 0; i < 80; i += 1) {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
@@ -816,6 +817,19 @@ function renderHarnessHtml(report, assets, slideIndex) {
       function findButtonByText(text) {
         const buttons = Array.from(document.querySelectorAll('button'));
         return buttons.find((button) => (button.textContent || '').trim() === text) || null;
+      }
+      function prepareInsightExportCardCheck() {
+        const card = document.querySelector('[data-tgwr-insight-export-card]');
+        if (!card) return false;
+        const wrapper = card.closest('[aria-hidden="true"]') || card.parentElement;
+        if (!wrapper) return false;
+        wrapper.style.left = '0px';
+        wrapper.style.top = '0px';
+        wrapper.style.zIndex = '9999';
+        wrapper.style.pointerEvents = 'none';
+        wrapper.style.background = '#05070a';
+        document.body.setAttribute('data-insight-card-check', 'ok');
+        return true;
       }
       function runPeopleViewCheck() {
         const deadline = Date.now() + 7000;
@@ -845,7 +859,17 @@ function renderHarnessHtml(report, assets, slideIndex) {
             }
           }
 
-          if (view === 'people' && document.body.textContent.includes('Аналитика по человеку')) {
+          if (
+            view === 'people' &&
+            document.body.textContent.includes('Сигналы переписки') &&
+            document.body.textContent.includes('14 выводов по переписке')
+          ) {
+            if (new URLSearchParams(window.location.search).get('tgwr_insight_card_check') === '1') {
+              if (!prepareInsightExportCardCheck()) {
+                setTimeout(tick, 80);
+                return;
+              }
+            }
             document.body.setAttribute('data-people-check', 'ok');
             return;
           }
@@ -959,6 +983,7 @@ async function runScreenshots(report, options = {}) {
   const label = options.label ?? 'base'
   const targets = options.targets ?? [0, 1, 7, 10, 13, 18, 20]
   const viewport = options.viewport ?? { width: 1280, height: 900 }
+  const minScreenshotBytes = options.minScreenshotBytes ?? 25_000
   const screenshots = []
   const harness = await startHarnessServer(report)
 
@@ -984,7 +1009,7 @@ async function runScreenshots(report, options = {}) {
         throw new Error(`DOM check did not reach slides view for ${label} slide ${slideIndex + 1}`)
       }
 
-      if (!domRes.stdout.includes(`${slideIndex + 1} / 21`)) {
+      if (!domRes.stdout.includes(`${slideIndex + 1} / ${SLIDE_COUNT}`)) {
         throw new Error(`DOM check opened wrong slide for ${label} slide ${slideIndex + 1}`)
       }
 
@@ -1005,7 +1030,9 @@ async function runScreenshots(report, options = {}) {
       }
 
       const info = await stat(screenshotPath)
-      if (info.size < 25_000) throw new Error(`Screenshot looks too small: ${screenshotPath} (${info.size} bytes)`)
+      if (info.size < minScreenshotBytes) {
+        throw new Error(`Screenshot looks too small: ${screenshotPath} (${info.size} bytes, min ${minScreenshotBytes})`)
+      }
       screenshots.push({ label, slide: slideIndex + 1, path: screenshotPath, bytes: info.size })
     }
   } finally {
@@ -1071,10 +1098,10 @@ async function runPeopleViewSmoke(report) {
       throw new Error(`Chrome people view check failed: ${reason}`)
     }
     if (!res.stdout.includes('data-people-check="ok"') || !res.stdout.includes('data-tgwr-view="people"')) {
-      throw new Error('People view smoke did not reach people analytics')
+      throw new Error('People view smoke did not reach conversation insights')
     }
-    if (!res.stdout.includes('Аналитика по человеку')) {
-      throw new Error('People view smoke did not render the analytics heading')
+    if (!res.stdout.includes('Сигналы переписки') || !res.stdout.includes('14 выводов по переписке')) {
+      throw new Error('People view smoke did not render the conversation insights heading')
     }
 
     const screenshotPath = join(screenshotsDir, 'people-view.png')
@@ -1103,6 +1130,62 @@ async function runPeopleViewSmoke(report) {
   }
 }
 
+async function runInsightExportCardSmoke(report) {
+  const chrome = findChrome()
+  if (!chrome) {
+    console.log('insight_export_card=skipped chrome_not_found')
+    return
+  }
+
+  const harness = await startHarnessServer(report)
+  try {
+    const pageUrl = `${harness.origin}/?tgwr_people_check=1&tgwr_insight_card_check=1`
+    const res = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--virtual-time-budget=12000',
+      '--dump-dom',
+      pageUrl
+    ], 30_000)
+
+    if (res.code !== 0) {
+      const reason = res.stderr || res.stdout
+      throw new Error(`Chrome insight export card check failed: ${reason}`)
+    }
+    if (!res.stdout.includes('data-insight-card-check="ok"')) {
+      throw new Error('Insight export card smoke did not expose the export card')
+    }
+    if (!res.stdout.includes('data-tgwr-insight-export-card="true"')) {
+      throw new Error('Insight export card smoke did not render the card marker')
+    }
+
+    const screenshotPath = join(screenshotsDir, 'insight-export-card.png')
+    const shot = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      '--window-size=1080,1920',
+      '--virtual-time-budget=12000',
+      `--screenshot=${screenshotPath}`,
+      pageUrl
+    ], 30_000)
+
+    if (shot.code !== 0) {
+      const reason = shot.stderr || shot.stdout
+      throw new Error(`Chrome insight export card screenshot failed: ${reason}`)
+    }
+
+    const info = await stat(screenshotPath)
+    if (info.size < 80_000) throw new Error(`Insight export card screenshot looks too small: ${screenshotPath} (${info.size} bytes)`)
+
+    console.log(`insight_export_card=ok screenshot=${screenshotPath} bytes=${info.size}`)
+  } finally {
+    await new Promise((resolvePromise) => harness.server.close(resolvePromise))
+  }
+}
+
 async function main() {
   if (!existsSync(join(root, 'dist/renderer/index.html'))) {
     throw new Error('dist/renderer/index.html not found. Run npm run build first.')
@@ -1119,13 +1202,15 @@ async function main() {
     ...(await runScreenshots(report, {
       label: 'mobile',
       targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 13, 18],
-      viewport: { width: 390, height: 844 }
+      viewport: { width: 390, height: 844 },
+      minScreenshotBytes: 15_000
     })),
     ...(await runScreenshots(makeEmptyReport(report), { label: 'empty', targets: [1, 7, 13, 18] })),
     ...(await runScreenshots(makeExtremeReport(report), { label: 'extreme', targets: [1, 7, 10, 13, 18] }))
   ]
   await runNavigationStress(report)
   await runPeopleViewSmoke(report)
+  await runInsightExportCardSmoke(report)
 
   console.log(`synthetic_export=${exportDir}`)
   console.log(`db=${dbPath}`)

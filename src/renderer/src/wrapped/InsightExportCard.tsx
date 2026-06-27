@@ -25,6 +25,7 @@ export default function InsightExportCard({ insight, period, anonymize }: Props)
 
   return (
     <div
+      data-tgwr-insight-export-card="true"
       style={{ width: INSIGHT_EXPORT_W, height: INSIGHT_EXPORT_H }}
       className="relative overflow-hidden bg-[var(--tgwr-bg-0)] text-slate-50"
     >
