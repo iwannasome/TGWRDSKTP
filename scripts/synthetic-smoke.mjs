@@ -308,9 +308,9 @@ async function generateExport() {
           },
           {
             startMs: Date.UTC(2025, 4, 11, 10, 20, 0),
-            count: 1800,
+            count: 2280,
             stepMinutes: 15,
-            textPrefix: 'после паузы переписка стала заметно активнее'
+            textPrefix: 'сильный процент роста на меньшем общем объеме'
           }
         ]
       })
@@ -349,6 +349,29 @@ async function generateExport() {
             count: 400,
             stepMinutes: 35,
             textPrefix: 'красивый процент без достаточного объема'
+          }
+        ]
+      })
+    },
+    {
+      id: 300011,
+      type: 'personal_chat',
+      name: 'Крупный устойчивый камбэк',
+      messages: makeSegmentedMessages({
+        peerId: 'user300011',
+        peerName: 'Крупный устойчивый камбэк',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 0, 10, 9, 0, 0),
+            count: 800,
+            stepMinutes: 20,
+            textPrefix: 'большой активный диалог до паузы'
+          },
+          {
+            startMs: Date.UTC(2025, 4, 1, 9, 0, 0),
+            count: 3200,
+            stepMinutes: 10,
+            textPrefix: 'крупное устойчивое возвращение после паузы'
           }
         ]
       })
@@ -644,9 +667,21 @@ function assertReport(report) {
     ]
   }
 
+  const assertComebackQuality = (label, period) => {
+    const comeback = period?.conversation_insights?.comeback
+    const candidates = comeback?.candidates ?? []
+    return [
+      [`${label}.comeback_large_dialog_wins`, comeback?.winner?.peer_from_id === 'user300011'],
+      [`${label}.comeback_minimum_volume`, Number(comeback?.winner?.total_messages ?? 0) >= 2500 && Number(comeback?.evidence?.minimum_messages_required ?? 0) === 2500],
+      [`${label}.comeback_smaller_high_ratio_is_eligible`, candidates.some((candidate) => candidate?.peer_from_id === 'user300008')],
+      [`${label}.comeback_large_dialog_outranks_ratio`, candidates.findIndex((candidate) => candidate?.peer_from_id === 'user300011') < candidates.findIndex((candidate) => candidate?.peer_from_id === 'user300008')],
+      [`${label}.comeback_activity_evidence`, Number(comeback?.evidence?.total_active_days ?? 0) >= 20]
+    ]
+  }
+
   const required = [
-    ...assertPeriodInvariants('all_time', allTime, { total: 21874, activeChats: 13 }),
-    ...assertPeriodInvariants('year', year, { total: 20988, activeChats: 10 }),
+    ...assertPeriodInvariants('all_time', allTime, { total: 26354, activeChats: 14 }),
+    ...assertPeriodInvariants('year', year, { total: 25468, activeChats: 11 }),
     ...assertPersonAnalyticsInvariants(report?.people_analytics),
     ...assertInsightContract('all_time', allTime),
     ...assertInsightContract('year', year),
@@ -656,9 +691,9 @@ function assertReport(report) {
     ...assertLiveSessionQuality('year', year),
     ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, trendMessages: 1200, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
     ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, trendMessages: 1000, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
-    ['all_time.comeback_stronger_reactivation_wins', getInsightWinnerPeer(allTime, 'comeback') === 'user300008'],
+    ...assertComebackQuality('all_time', allTime),
+    ...assertComebackQuality('year', year),
     ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
-    ['year.comeback_stronger_reactivation_wins', getInsightWinnerPeer(year, 'comeback') === 'user300008'],
     ['year.comeback_59_day_spike_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300002'],
     ['year.comeback_tiny_false_positive_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300003' && getInsightWinnerPeer(allTime, 'comeback') !== 'user300003'],
     ['year.closer_dialog_fixture', getInsightWinnerPeer(year, 'closer_dialog') === 'user300004'],
@@ -1104,7 +1139,7 @@ async function runScreenshots(report, options = {}) {
   }
 
   const label = options.label ?? 'base'
-  const targets = options.targets ?? [0, 1, 7, 10, 13, 18, 20]
+  const targets = options.targets ?? [0, 1, 7, 8, 10, 13, 18, 20]
   const viewport = options.viewport ?? { width: 1280, height: 900 }
   const minScreenshotBytes = options.minScreenshotBytes ?? 25_000
   const screenshots = []

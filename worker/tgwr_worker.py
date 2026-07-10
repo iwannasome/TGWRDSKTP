@@ -3409,10 +3409,12 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
             "stable_coverage_percent": 65,
             "stable_score_percent": 45,
             "min_active_days": 10,
+            "comeback_min_total": 2500,
             "comeback_gap_days": 60,
             "comeback_before_messages": 300,
-            "comeback_after_messages": 500,
-            "comeback_after_active_days": 10,
+            "comeback_after_messages": 1000,
+            "comeback_after_active_days": 14,
+            "comeback_total_active_days": 20,
             "trend_min_total": 1000,
             "trend_baseline_messages": 200,
             "trend_delta_messages": 400,
@@ -3434,10 +3436,12 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
         "stable_coverage_percent": 60,
         "stable_score_percent": 40,
         "min_active_days": 12,
+        "comeback_min_total": 2500,
         "comeback_gap_days": 90,
         "comeback_before_messages": 300,
-        "comeback_after_messages": 550,
-        "comeback_after_active_days": 12,
+        "comeback_after_messages": 1200,
+        "comeback_after_active_days": 16,
+        "comeback_total_active_days": 22,
         "trend_min_total": 1200,
         "trend_baseline_messages": 250,
         "trend_delta_messages": 500,
@@ -3847,7 +3851,8 @@ def _comeback_candidates(profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]
     after_window = 45 * 86400
     for profile in profiles.values():
         total = int(profile.get("total_messages", 0) or 0)
-        if total < th["min_major_total"]:
+        total_active_days = int(profile.get("active_days", 0) or 0)
+        if total < th["comeback_min_total"] or total_active_days < th["comeback_total_active_days"]:
             continue
         timestamps = profile.get("timestamps") if isinstance(profile.get("timestamps"), list) else []
         if len(timestamps) < th["comeback_before_messages"] + th["comeback_after_messages"]:
@@ -3868,20 +3873,25 @@ def _comeback_candidates(profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]
             reactivation_delta = int(after_count - before_count)
             reactivation_ratio = _safe_div(after_count, max(1, before_count))
             score = (
-                min(900.0, after_count * 0.35)
-                + min(800.0, max(0, reactivation_delta) * 0.45)
-                + min(700.0, reactivation_ratio * 120.0)
-                + after_days * 25.0
-                + min(160.0, gap_days * 1.2)
-                + min(120.0, before_count * 0.08)
+                after_count * 0.55
+                + max(0, reactivation_delta) * 0.35
+                + min(5.0, reactivation_ratio) * 90.0
+                + after_days * 35.0
+                + min(10000, total) * 0.25
+                + min(180, total_active_days) * 8.0
+                + min(180.0, gap_days * 1.2)
             )
             evidence = {
                 "gap_days": gap_days,
                 "before_messages": int(before_count),
                 "after_messages": int(after_count),
                 "after_active_days": int(after_days),
+                "total_messages": total,
+                "total_active_days": total_active_days,
                 "reactivation_delta": reactivation_delta,
                 "reactivation_ratio": float(round(reactivation_ratio, 4)),
+                "minimum_messages_required": th["comeback_min_total"],
+                "minimum_after_messages": th["comeback_after_messages"],
                 "from_datetime": _ts_to_msk_datetime(prev_ts),
                 "to_datetime": _ts_to_msk_datetime(cur_ts),
             }

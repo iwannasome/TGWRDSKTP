@@ -131,6 +131,8 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Минимум сообщений'
     case 'active_days':
       return 'Активных дней'
+    case 'total_active_days':
+      return 'Всего активных дней'
     case 'active_months':
       return 'Активных месяцев'
     case 'observed_months':
@@ -149,6 +151,8 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'До паузы'
     case 'after_messages':
       return 'После паузы'
+    case 'minimum_after_messages':
+      return 'Минимум после паузы'
     case 'after_active_days':
       return 'Активных дней после'
     case 'reactivation_delta':
