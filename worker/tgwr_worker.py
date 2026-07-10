@@ -984,9 +984,9 @@ def html_looks_like_group_chat(files: List[str], sample_limit: int = 300) -> boo
 
 def build_candidates(
     export_dir: str, json_files: List[str], result_json_files: List[str], html_files: List[str]
-) -> Tuple[List[ChatCandidate], int]:
+) -> Tuple[List[ChatCandidate], Dict[str, int]]:
     candidates: List[ChatCandidate] = []
-    skipped = 0
+    skip_reasons: Counter[str] = Counter()
 
     json_groups: Dict[str, ChatCandidate] = {}
 
@@ -1006,10 +1006,11 @@ def build_candidates(
         name = name_val if isinstance(name_val, str) else (str(name_val) if name_val is not None else "")
         ctype = type_val if isinstance(type_val, str) else (str(type_val) if type_val is not None else "")
         if not isinstance(msgs_val, list):
+            skip_reasons["invalid_chat_shape"] += 1
             continue
 
         if ctype != "personal_chat":
-            skipped += 1
+            skip_reasons["non_personal_chat"] += 1
             continue
 
         export_chat_id = derive_export_chat_id(data, path, export_dir)
@@ -1035,7 +1036,7 @@ def build_candidates(
     for grp in json_groups.values():
         grp.json_files.sort()
         if grp.approx_msgs <= 0:
-            skipped += 1
+            skip_reasons["empty_chat"] += 1
             continue
         candidates.append(grp)
 
@@ -1067,10 +1068,11 @@ def build_candidates(
                     name = name_val if isinstance(name_val, str) else (str(name_val) if name_val is not None else "")
                     ctype = type_val if isinstance(type_val, str) else (str(type_val) if type_val is not None else "")
                     if not isinstance(msgs_val, list):
+                        skip_reasons["invalid_chat_shape"] += 1
                         continue
 
                     if ctype != "personal_chat":
-                        skipped += 1
+                        skip_reasons["non_personal_chat"] += 1
                         continue
 
                     cid = chat_obj.get("id")
@@ -1078,7 +1080,7 @@ def build_candidates(
                     msg_count = len(msgs_val)
 
                     if msg_count <= 0:
-                        skipped += 1
+                        skip_reasons["empty_chat"] += 1
                         continue
 
                     candidates.append(
@@ -1117,11 +1119,11 @@ def build_candidates(
             total += c
 
         if total <= 0:
-            skipped += 1
+            skip_reasons["empty_chat"] += 1
             continue
 
         if html_looks_like_group_chat(files):
-            skipped += 1
+            skip_reasons["html_group_detected"] += 1
             continue
 
         try:
@@ -1142,7 +1144,7 @@ def build_candidates(
             )
         )
 
-    return candidates, skipped
+    return candidates, dict(skip_reasons)
 
 
 def _candidate_identity_key(cand: ChatCandidate) -> Optional[str]:
@@ -1159,12 +1161,12 @@ def _candidate_identity_key(cand: ChatCandidate) -> Optional[str]:
     return None
 
 
-def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandidate], int]:
+def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandidate], Dict[str, int]]:
     candidates_sorted = sorted(candidates, key=lambda c: (-c.priority, normalize_name(c.name), c.export_chat_id))
     accepted: List[ChatCandidate] = []
     accepted_by_key: Dict[Tuple[str, str], List[ChatCandidate]] = {}
     accepted_by_identity: Dict[str, ChatCandidate] = {}
-    skipped_dupes = 0
+    skip_reasons: Counter[str] = Counter()
 
     for cand in candidates_sorted:
         if _CANCEL_EVENT.is_set():
@@ -1172,7 +1174,7 @@ def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandida
 
         identity_key = _candidate_identity_key(cand)
         if identity_key and identity_key in accepted_by_identity:
-            skipped_dupes += 1
+            skip_reasons["duplicate_by_id"] += 1
             continue
 
         nname = normalize_name(cand.name)
@@ -1181,6 +1183,9 @@ def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandida
 
         dup_found: Optional[ChatCandidate] = None
         for ex in accepted_by_key.get(key, []):
+            existing_identity = _candidate_identity_key(ex)
+            if identity_key and existing_identity and identity_key != existing_identity:
+                continue
             if counts_similar(cand.approx_msgs, ex.approx_msgs):
                 dup_found = ex
                 break
@@ -1204,10 +1209,10 @@ def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandida
                 drop = dup_found
 
         if keep is dup_found:
-            skipped_dupes += 1
+            skip_reasons["duplicate_by_name_and_size"] += 1
             continue
 
-        skipped_dupes += 1
+        skip_reasons["duplicate_by_name_and_size"] += 1
         try:
             accepted.remove(drop)
         except ValueError:
@@ -1224,7 +1229,7 @@ def dedupe_candidates(candidates: List[ChatCandidate]) -> Tuple[List[ChatCandida
         if keep_identity_key:
             accepted_by_identity[keep_identity_key] = keep
 
-    return accepted, skipped_dupes
+    return accepted, dict(skip_reasons)
 
 
 def calc_percent_units(unit_index: int, total_units: int, unit_fraction: float, start: int = 5, end: int = 90) -> int:
@@ -1631,18 +1636,20 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
 
     progress("scan_files", 3, "", "")
     preferred_self_from_id = extract_self_from_export(result_files)
-    candidates, skipped_chats = build_candidates(export_dir, json_files, result_files, html_files)
+    candidates, candidate_skip_reasons = build_candidates(export_dir, json_files, result_files, html_files)
     progress("scan_files", 5, "", "")
 
     if not candidates:
         raise RuntimeError("Не найдено данных для импорта: нет chat JSON, result.json chats.list, или messages*.html.")
 
-    accepted, skipped_dupes = dedupe_candidates(candidates)
+    accepted, dedupe_skip_reasons = dedupe_candidates(candidates)
 
     if not accepted:
         raise RuntimeError("После фильтрации и дедупликации не осталось чатов для импорта.")
 
-    skipped_total = int(skipped_chats + skipped_dupes)
+    skip_reasons: Counter[str] = Counter(candidate_skip_reasons)
+    skip_reasons.update(dedupe_skip_reasons)
+    skipped_total = int(sum(skip_reasons.values()))
 
     json_chats = sum(1 for c in accepted if c.source in ("json", "result"))
     html_chats = sum(1 for c in accepted if c.source == "html")
@@ -1739,12 +1746,18 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         progress("index_db", 90, "", "")
         year_options: List[Dict[str, int]] = []
         recommended_year: Optional[int] = None
+        direction_source = "unknown"
+        direction_confidence = "unknown"
+        direction_message_samples = 0
         try:
             ensure_schema(conn)
             self_from_id = resolve_self_from_id(conn, preferred_self_from_id)
             apply_direction_updates(conn, self_from_id)
             year_options = available_report_years(conn)
             recommended_year = recommend_report_year(year_options)
+            direction_source = "export_metadata" if preferred_self_from_id and canonical_self_from_id(preferred_self_from_id) == self_from_id else ("inferred" if self_from_id else "unknown")
+            direction_confidence = "high" if direction_source == "export_metadata" else ("medium" if direction_source == "inferred" else "unknown")
+            direction_message_samples = _count_messages_from_self_candidates(conn, self_from_id)
         except CancelledError:
             raise
         except Exception as e:
@@ -1776,6 +1789,18 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
                 "html_chats": int(html_chats),
                 "skipped_chats": int(skipped_total),
                 "unknown_html_chats": int(unknown_html_chats),
+                "skip_reasons": [
+                    {"reason": reason, "count": int(count)}
+                    for reason, count in sorted(skip_reasons.items())
+                    if count > 0
+                ],
+                "import_quality": {
+                    "direction_source": direction_source,
+                    "direction_confidence": direction_confidence,
+                    "direction_message_samples": int(direction_message_samples),
+                    "accepted_json_chats": int(json_chats),
+                    "accepted_html_chats": int(html_chats),
+                },
                 "available_years": year_options,
                 "recommended_year": recommended_year,
             }

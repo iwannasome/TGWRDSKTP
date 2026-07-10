@@ -24,6 +24,17 @@ type YearOption = {
   messages: number
 }
 
+type ImportSkipReason = {
+  reason: string
+  count: number
+}
+
+type ImportQuality = {
+  direction_source: string
+  direction_confidence: string
+  direction_message_samples: number
+}
+
 type ImportSummary = {
   chats: number
   messages: number
@@ -35,6 +46,8 @@ type ImportSummary = {
   unknown_html_chats?: number
   available_years?: YearOption[]
   recommended_year?: number
+  skip_reasons?: ImportSkipReason[]
+  import_quality?: ImportQuality
 }
 
 type ReportBuildState = {
@@ -85,6 +98,25 @@ function summaryFromExistingReport(prompt: ExistingReportPrompt): ImportSummary 
     available_years: yearState.years,
     recommended_year: yearState.selectedYear
   }
+}
+
+function skipReasonLabel(reason: string): string {
+  switch (reason) {
+    case 'non_personal_chat': return 'Группы и каналы'
+    case 'empty_chat': return 'Пустые чаты'
+    case 'html_group_detected': return 'HTML-группы'
+    case 'duplicate_by_id': return 'Дубликаты по Telegram ID'
+    case 'duplicate_by_name_and_size': return 'Дубликаты экспортов'
+    case 'invalid_chat_shape': return 'Неполные данные чата'
+    default: return reason.replaceAll('_', ' ')
+  }
+}
+
+function directionQualityLabel(quality?: ImportQuality): string {
+  if (!quality) return 'Нет диагностики'
+  if (quality.direction_source === 'export_metadata') return 'Направление сообщений подтверждено метаданными Telegram'
+  if (quality.direction_source === 'inferred') return 'Направление сообщений определено по структуре переписок'
+  return 'Не удалось уверенно определить направление сообщений'
 }
 
 function loadThemeFromStorage(): ThemeId {
@@ -441,6 +473,18 @@ export default function App(): JSX.Element {
       if (type === 'import_done') {
         const years = yearOptionsFrom(payload.available_years)
         const recommendedYear = typeof payload.recommended_year === 'number' ? payload.recommended_year : years[0]?.year
+        const skipReasons = Array.isArray(payload.skip_reasons)
+          ? payload.skip_reasons.flatMap((item) => {
+              if (!isRecord(item) || typeof item.reason !== 'string' || typeof item.count !== 'number') return []
+              return [{ reason: item.reason, count: Math.max(0, item.count) }]
+            })
+          : []
+        const rawQuality = isRecord(payload.import_quality) ? payload.import_quality : null
+        const importQuality: ImportQuality | undefined = rawQuality ? {
+          direction_source: typeof rawQuality.direction_source === 'string' ? rawQuality.direction_source : 'unknown',
+          direction_confidence: typeof rawQuality.direction_confidence === 'string' ? rawQuality.direction_confidence : 'unknown',
+          direction_message_samples: typeof rawQuality.direction_message_samples === 'number' ? rawQuality.direction_message_samples : 0
+        } : undefined
         const summary: ImportSummary = {
           chats: typeof payload.chats === 'number' ? payload.chats : 0,
           messages: typeof payload.messages === 'number' ? payload.messages : 0,
@@ -451,7 +495,9 @@ export default function App(): JSX.Element {
           skipped_chats: typeof payload.skipped_chats === 'number' ? payload.skipped_chats : undefined,
           unknown_html_chats: typeof payload.unknown_html_chats === 'number' ? payload.unknown_html_chats : undefined,
           available_years: years,
-          recommended_year: recommendedYear
+          recommended_year: recommendedYear,
+          skip_reasons: skipReasons,
+          import_quality: importQuality
         }
 
         setImportRunning(false)
@@ -861,6 +907,25 @@ export default function App(): JSX.Element {
                       Messages
                     </div>
                     <div className="mt-1 text-xl font-bold text-slate-100">{importSummary.messages}</div>
+                  </div>
+                  <div className="col-span-2 rounded-2xl border border-emerald-300/15 bg-emerald-400/[0.06] p-4">
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-emerald-100/75">
+                      Качество импорта
+                    </div>
+                    <div className="mt-2 text-sm font-semibold leading-relaxed text-slate-100">
+                      {directionQualityLabel(importSummary.import_quality)}
+                    </div>
+                    {importSummary.skip_reasons && importSummary.skip_reasons.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {importSummary.skip_reasons.map((item) => (
+                          <span key={item.reason} className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[12px] text-slate-200">
+                            {skipReasonLabel(item.reason)} · {item.count}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-[13px] text-slate-300/75">Чаты не пропускались.</div>
+                    )}
                   </div>
                   <div className="col-span-2 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                     <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
