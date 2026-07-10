@@ -157,7 +157,7 @@ async function generateExport() {
         peerName: 'Стабильный диалог',
         segments: Array.from({ length: 12 }, (_, month) => ({
           startMs: Date.UTC(2025, month, 5, 10, 0, 0),
-          count: 40,
+          count: 50,
           stepMinutes: 180,
           textPrefix: 'ровный стабильный контакт'
         }))
@@ -219,13 +219,13 @@ async function generateExport() {
         segments: [
           {
             startMs: Date.UTC(2025, 2, 1, 9, 0, 0),
-            count: 60,
+            count: 300,
             stepMinutes: 240,
             textPrefix: 'тихое начало года'
           },
           {
             startMs: Date.UTC(2025, 10, 1, 9, 0, 0),
-            count: 520,
+            count: 900,
             stepMinutes: 35,
             textPrefix: 'вторая половина стала заметно активнее'
           }
@@ -242,14 +242,14 @@ async function generateExport() {
         segments: [
           {
             startMs: Date.UTC(2025, 1, 1, 9, 0, 0),
-            count: 520,
+            count: 900,
             stepMinutes: 35,
             textPrefix: 'очень активное начало года'
           },
           {
             startMs: Date.UTC(2025, 11, 1, 9, 0, 0),
-            count: 60,
-            stepMinutes: 240,
+            count: 300,
+            stepMinutes: 120,
             textPrefix: 'к концу года стало тише'
           }
         ]
@@ -311,6 +311,44 @@ async function generateExport() {
             count: 1800,
             stepMinutes: 15,
             textPrefix: 'после паузы переписка стала заметно активнее'
+          }
+        ]
+      })
+    },
+    {
+      id: 300009,
+      type: 'personal_chat',
+      name: 'Ровные месяцы с большой дырой',
+      messages: makeSegmentedMessages({
+        peerId: 'user300009',
+        peerName: 'Ровные месяцы с большой дырой',
+        segments: [0, 1, 2, 9, 10, 11].map((month) => ({
+          startMs: Date.UTC(2025, month, 5, 10, 0, 0),
+          count: 100,
+          stepMinutes: 60,
+          textPrefix: 'активный месяц вокруг длинного провала'
+        }))
+      })
+    },
+    {
+      id: 300010,
+      type: 'personal_chat',
+      name: 'Красивый рост на маленькой базе',
+      messages: makeSegmentedMessages({
+        peerId: 'user300010',
+        peerName: 'Красивый рост на маленькой базе',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 2, 1, 9, 0, 0),
+            count: 100,
+            stepMinutes: 240,
+            textPrefix: 'маленькая ранняя база'
+          },
+          {
+            startMs: Date.UTC(2025, 10, 1, 9, 0, 0),
+            count: 400,
+            stepMinutes: 35,
+            textPrefix: 'красивый процент без достаточного объема'
           }
         ]
       })
@@ -580,9 +618,35 @@ function assertReport(report) {
     return checks
   }
 
+  const assertBehavioralInsightQuality = (label, period, thresholds) => {
+    const insights = period?.conversation_insights ?? {}
+    const stable = insights.stable_dialog
+    const closer = insights.closer_dialog
+    const faded = insights.faded_dialog
+    const reply = insights.reply_rhythm
+    const initiative = insights.contact_initiator
+    const restarter = insights.silence_restarter
+
+    return [
+      [`${label}.stable_dialog_fixture`, stable?.winner?.peer_from_id === 'user300001'],
+      [`${label}.stable_dialog_calendar_coverage`, Number(stable?.evidence?.coverage_ratio ?? 0) >= thresholds.stableCoverage && Number(stable?.evidence?.observed_months ?? 0) >= 12],
+      [`${label}.stable_dialog_gap_fixture_blocked`, !(stable?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
+      [`${label}.closer_dialog_minimum_volume`, Number(closer?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(closer?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
+      [`${label}.faded_dialog_minimum_volume`, Number(faded?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(faded?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
+      [`${label}.tiny_growth_fixture_blocked`, !(closer?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300010')],
+      [`${label}.reply_rhythm_samples`, Number(reply?.evidence?.reply_samples ?? 0) >= thresholds.replySamples && Number(reply?.evidence?.minimum_reply_samples ?? 0) === thresholds.replySamples],
+      [`${label}.contact_initiator_gap`, Number(initiative?.evidence?.contact_gap_seconds ?? 0) === 12 * 60 * 60],
+      [`${label}.contact_initiator_samples`, Number(initiative?.evidence?.contact_events ?? 0) >= thresholds.contactEvents && Number(initiative?.evidence?.minimum_contact_events ?? 0) === thresholds.contactEvents],
+      [`${label}.contact_initiator_dominance`, Number(initiative?.evidence?.dominance_ratio ?? 0) >= 0.6],
+      [`${label}.silence_restarter_gap`, Number(restarter?.evidence?.silence_gap_seconds ?? 0) === 7 * 24 * 60 * 60],
+      [`${label}.silence_restarter_samples`, Number(restarter?.evidence?.restart_events ?? 0) >= thresholds.restartEvents && Number(restarter?.evidence?.minimum_restart_events ?? 0) === thresholds.restartEvents],
+      [`${label}.silence_restarter_dominance`, Number(restarter?.evidence?.dominance_ratio ?? 0) >= 0.6]
+    ]
+  }
+
   const required = [
-    ...assertPeriodInvariants('all_time', allTime, { total: 19414, activeChats: 11 }),
-    ...assertPeriodInvariants('year', year, { total: 18528, activeChats: 8 }),
+    ...assertPeriodInvariants('all_time', allTime, { total: 21874, activeChats: 13 }),
+    ...assertPeriodInvariants('year', year, { total: 20988, activeChats: 10 }),
     ...assertPersonAnalyticsInvariants(report?.people_analytics),
     ...assertInsightContract('all_time', allTime),
     ...assertInsightContract('year', year),
@@ -590,13 +654,15 @@ function assertReport(report) {
     ...assertLongestSilenceQuality('year', year),
     ...assertLiveSessionQuality('all_time', allTime),
     ...assertLiveSessionQuality('year', year),
+    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, trendMessages: 1200, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
+    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, trendMessages: 1000, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
     ['all_time.comeback_stronger_reactivation_wins', getInsightWinnerPeer(allTime, 'comeback') === 'user300008'],
     ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
     ['year.comeback_stronger_reactivation_wins', getInsightWinnerPeer(year, 'comeback') === 'user300008'],
     ['year.comeback_59_day_spike_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300002'],
     ['year.comeback_tiny_false_positive_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300003' && getInsightWinnerPeer(allTime, 'comeback') !== 'user300003'],
     ['year.closer_dialog_fixture', getInsightWinnerPeer(year, 'closer_dialog') === 'user300004'],
-    ['year.faded_dialog_fixture', getInsightWinnerPeer(year, 'faded_dialog') === 'user300005'],
+    ['year.faded_dialog_fixture_eligible', (year?.conversation_insights?.faded_dialog?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300005')],
     ['year.media_bond_fixture', getInsightWinnerPeer(year, 'media_bond') === 'user300006'],
     ['all_time.total_messages', allTime?.total_messages > 4500],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],

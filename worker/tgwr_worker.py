@@ -2173,8 +2173,8 @@ def _period_span(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[s
     }
 
 
-def _bounded_month_keys(start_ts: int, end_ts: int) -> List[str]:
-    if start_ts <= 0 or end_ts <= start_ts or (end_ts - start_ts) > 370 * 86400 * 2:
+def _month_keys_for_span(start_ts: int, end_ts: int, maximum_months: int = 600) -> List[str]:
+    if start_ts <= 0 or end_ts <= start_ts:
         return []
     try:
         msk = _moscow_tzinfo()
@@ -2183,7 +2183,7 @@ def _bounded_month_keys(start_ts: int, end_ts: int) -> List[str]:
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
         keys: List[str] = []
-        while cur <= last:
+        while cur <= last and len(keys) < maximum_months:
             keys.append(cur.strftime("%Y-%m"))
             if cur.month == 12:
                 cur = cur.replace(year=cur.year + 1, month=1)
@@ -2192,6 +2192,12 @@ def _bounded_month_keys(start_ts: int, end_ts: int) -> List[str]:
         return keys
     except Exception:
         return []
+
+
+def _bounded_month_keys(start_ts: int, end_ts: int) -> List[str]:
+    if start_ts <= 0 or end_ts <= start_ts or (end_ts - start_ts) > 370 * 86400 * 2:
+        return []
+    return _month_keys_for_span(start_ts, end_ts)
 
 
 def _month_activity_extremes(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
@@ -3388,6 +3394,7 @@ SESSION_GAP_SECONDS = 30 * 60
 SESSION_MAX_DURATION_SECONDS = 12 * 60 * 60
 SESSION_MIN_DENSITY_PER_HOUR = 4.0
 SESSION_MIN_DIRECTION_MESSAGES = 8
+CONTACT_START_GAP_SECONDS = 12 * 60 * 60
 SILENCE_RESTART_SECONDS = 7 * 24 * 60 * 60
 MUTUALITY_MIN_MESSAGES = 5000
 
@@ -3399,15 +3406,22 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
             "min_major_total": 400,
             "min_stable_total": 420,
             "min_stable_months": 6,
+            "stable_coverage_percent": 65,
+            "stable_score_percent": 45,
             "min_active_days": 10,
             "comeback_gap_days": 60,
             "comeback_before_messages": 300,
             "comeback_after_messages": 500,
             "comeback_after_active_days": 10,
-            "trend_baseline_messages": 60,
-            "trend_delta_messages": 240,
-            "reply_samples": 3,
-            "initiative_days": 6,
+            "trend_min_total": 1000,
+            "trend_baseline_messages": 200,
+            "trend_delta_messages": 400,
+            "trend_ratio_percent": 200,
+            "trend_min_active_days": 20,
+            "reply_samples": 20,
+            "initiative_events": 10,
+            "initiative_dominance_percent": 60,
+            "silence_restart_events": 3,
             "media_events": 120,
             "session_messages": 30,
             "mutual_min_total": MUTUALITY_MIN_MESSAGES,
@@ -3417,15 +3431,22 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
         "min_major_total": 500,
         "min_stable_total": 520,
         "min_stable_months": 5,
+        "stable_coverage_percent": 60,
+        "stable_score_percent": 40,
         "min_active_days": 12,
         "comeback_gap_days": 90,
         "comeback_before_messages": 300,
         "comeback_after_messages": 550,
         "comeback_after_active_days": 12,
-        "trend_baseline_messages": 80,
-        "trend_delta_messages": 300,
-        "reply_samples": 3,
-        "initiative_days": 8,
+        "trend_min_total": 1200,
+        "trend_baseline_messages": 250,
+        "trend_delta_messages": 500,
+        "trend_ratio_percent": 200,
+        "trend_min_active_days": 24,
+        "reply_samples": 30,
+        "initiative_events": 12,
+        "initiative_dominance_percent": 60,
+        "silence_restart_events": 4,
         "media_events": 140,
         "session_messages": 40,
         "mutual_min_total": MUTUALITY_MIN_MESSAGES,
@@ -3592,6 +3613,8 @@ def _build_conversation_profiles(
             "first_by_day": {},
             "days_started_by_you": 0,
             "days_started_by_them": 0,
+            "contact_starts_by_you": 0,
+            "contact_starts_by_them": 0,
             "restart_by_you": 0,
             "restart_by_them": 0,
             "sessions": [],
@@ -3625,6 +3648,8 @@ def _build_conversation_profiles(
                 "first_by_day": {},
                 "days_started_by_you": 0,
                 "days_started_by_them": 0,
+                "contact_starts_by_you": 0,
+                "contact_starts_by_them": 0,
                 "restart_by_you": 0,
                 "restart_by_them": 0,
                 "sessions": [],
@@ -3659,6 +3684,11 @@ def _build_conversation_profiles(
             profile["media_counts"][bucket] += 1
 
         last_ts = profile.get("_last_ts")
+        if not isinstance(last_ts, int) or ts - last_ts >= CONTACT_START_GAP_SECONDS:
+            if is_out == 1:
+                profile["contact_starts_by_you"] = int(profile.get("contact_starts_by_you", 0) or 0) + 1
+            else:
+                profile["contact_starts_by_them"] = int(profile.get("contact_starts_by_them", 0) or 0) + 1
         if isinstance(last_ts, int) and ts > last_ts and ts - last_ts >= SILENCE_RESTART_SECONDS:
             if is_out == 1:
                 profile["restart_by_you"] = int(profile.get("restart_by_you", 0) or 0) + 1
@@ -3695,6 +3725,12 @@ def _build_conversation_profiles(
 
         profile["_last_ts"] = ts
 
+    bounded_period = start_ts > 0 and end_ts > start_ts and (end_ts - start_ts) <= 370 * 86400 * 2
+    period_first_messages = [int(profile["timestamps"][0]) for profile in profiles.values() if profile.get("timestamps")]
+    period_last_messages = [int(profile["timestamps"][-1]) for profile in profiles.values() if profile.get("timestamps")]
+    observed_period_start = max(start_ts, min(period_first_messages)) if bounded_period and period_first_messages else start_ts
+    observed_period_end = min(end_ts, max(period_last_messages) + 1) if bounded_period and period_last_messages else end_ts
+
     for profile in profiles.values():
         _finish_profile_session(profile)
         first_by_day = profile.get("first_by_day") if isinstance(profile.get("first_by_day"), dict) else {}
@@ -3710,18 +3746,31 @@ def _build_conversation_profiles(
         month_counts = profile.get("month_counts") if isinstance(profile.get("month_counts"), Counter) else Counter()
         sorted_months = sorted(month_counts)
         if sorted_months:
-            if start_ts > 0 and end_ts > start_ts and (end_ts - start_ts) <= 370 * 86400 * 2:
-                first_window = [m for m in sorted_months if int(m[5:7]) <= 6]
-                second_window = [m for m in sorted_months if int(m[5:7]) >= 7]
+            if bounded_period:
+                observed_months = _month_keys_for_span(observed_period_start, observed_period_end)
             else:
-                split = max(1, len(sorted_months) // 2)
-                first_window = sorted_months[:split]
-                second_window = sorted_months[split:]
-            profile["early_messages"] = int(sum(month_counts[m] for m in first_window))
-            profile["late_messages"] = int(sum(month_counts[m] for m in second_window))
+                observed_months = _month_keys_for_span(int(profile.get("first_ts", 0) or 0), int(profile.get("last_ts", 0) or 0) + 1)
+            if not observed_months:
+                observed_months = sorted_months
+            split = max(1, len(observed_months) // 2)
+            first_window = observed_months[:split]
+            second_window = observed_months[split:]
+            calendar_counts = [int(month_counts.get(month, 0) or 0) for month in observed_months]
+            profile["observed_months"] = len(observed_months)
+            profile["calendar_month_counts"] = calendar_counts
+            profile["coverage_ratio"] = float(_safe_div(sum(1 for count in calendar_counts if count > 0), len(calendar_counts)))
+            profile["early_messages"] = int(sum(month_counts.get(m, 0) for m in first_window))
+            profile["late_messages"] = int(sum(month_counts.get(m, 0) for m in second_window))
+            profile["early_months"] = len(first_window)
+            profile["late_months"] = len(second_window)
         else:
+            profile["observed_months"] = 0
+            profile["calendar_month_counts"] = []
+            profile["coverage_ratio"] = 0.0
             profile["early_messages"] = 0
             profile["late_messages"] = 0
+            profile["early_months"] = 0
+            profile["late_months"] = 0
 
     return profiles
 
@@ -3759,19 +3808,32 @@ def _conversation_stable_dialog(label: str, profiles: Dict[str, Dict[str, Any]],
         total = int(profile.get("total_messages", 0) or 0)
         active_months = int(profile.get("active_months", 0) or 0)
         active_days = int(profile.get("active_days", 0) or 0)
-        if total < th["min_stable_total"] or active_months < th["min_stable_months"]:
+        observed_months = int(profile.get("observed_months", 0) or 0)
+        coverage = float(profile.get("coverage_ratio", 0.0) or 0.0)
+        minimum_coverage = _safe_div(th["stable_coverage_percent"], 100)
+        if (
+            total < th["min_stable_total"]
+            or active_months < th["min_stable_months"]
+            or observed_months < th["min_stable_months"]
+            or coverage < minimum_coverage
+        ):
             continue
-        month_counts = profile.get("month_counts") if isinstance(profile.get("month_counts"), Counter) else Counter()
-        counts = [int(v) for v in month_counts.values() if int(v) > 0]
+        raw_counts = profile.get("calendar_month_counts")
+        counts = [int(v) for v in raw_counts] if isinstance(raw_counts, list) else []
         avg = _safe_div(sum(counts), len(counts)) if counts else 0.0
         variance = _safe_div(sum(abs(c - avg) for c in counts), max(1, len(counts) * avg)) if avg else 1.0
         stability = max(0.0, 1.0 - min(1.0, variance))
-        score = active_months * 12.0 + min(40.0, active_days) + stability * 30.0
+        if stability < _safe_div(th["stable_score_percent"], 100):
+            continue
+        score = coverage * 60.0 + stability * 60.0 + active_months * 8.0 + min(40.0, _safe_div(active_days, 2))
         evidence = {
             "total_messages": total,
             "active_months": active_months,
-            "active_days": active_days,
+            "coverage_ratio": float(round(coverage, 4)),
             "stability_ratio": float(round(stability, 4)),
+            "observed_months": observed_months,
+            "active_days": active_days,
+            "minimum_coverage_ratio": float(round(minimum_coverage, 4)),
         }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
@@ -3840,25 +3902,51 @@ def _conversation_trend(label: str, profiles: Dict[str, Dict[str, Any]], th: Dic
     candidates = []
     for profile in profiles.values():
         total = int(profile.get("total_messages", 0) or 0)
+        active_days = int(profile.get("active_days", 0) or 0)
         early = int(profile.get("early_messages", 0) or 0)
         late = int(profile.get("late_messages", 0) or 0)
-        if total < th["min_major_total"]:
+        early_months = int(profile.get("early_months", 0) or 0)
+        late_months = int(profile.get("late_months", 0) or 0)
+        if (
+            total < th["trend_min_total"]
+            or active_days < th["trend_min_active_days"]
+            or early_months <= 0
+            or late_months <= 0
+        ):
             continue
+        early_rate = _safe_div(early, early_months)
+        late_rate = _safe_div(late, late_months)
+        minimum_ratio = _safe_div(th["trend_ratio_percent"], 100)
         if kind == "closer_dialog":
-            if early < th["trend_baseline_messages"] or late - early < th["trend_delta_messages"] or _safe_div(late, max(1, early)) < 2.4:
+            ratio = _safe_div(late_rate, max(0.01, early_rate))
+            if (
+                early < th["trend_baseline_messages"]
+                or late < th["trend_baseline_messages"]
+                or late - early < th["trend_delta_messages"]
+                or ratio < minimum_ratio
+            ):
                 continue
-            ratio = _safe_div(late, max(1, early))
-            score = (late - early) + ratio * 40.0
+            score = (late - early) * 0.6 + (late_rate - early_rate) * 4.0 + min(5000, total) * 0.08 + active_days
         else:
-            if late < th["trend_baseline_messages"] or early - late < th["trend_delta_messages"] or _safe_div(early, max(1, late)) < 2.4:
+            ratio = _safe_div(early_rate, max(0.01, late_rate))
+            if (
+                early < th["trend_baseline_messages"]
+                or late < th["trend_baseline_messages"]
+                or early - late < th["trend_delta_messages"]
+                or ratio < minimum_ratio
+            ):
                 continue
-            ratio = _safe_div(early, max(1, late))
-            score = (early - late) + ratio * 40.0
+            score = (early - late) * 0.6 + (early_rate - late_rate) * 4.0 + min(5000, total) * 0.08 + active_days
         evidence = {
             "early_messages": early,
             "late_messages": late,
+            "change_ratio": float(round(_safe_div(late_rate, max(0.01, early_rate)), 4)),
+            "total_messages": total,
+            "minimum_messages_required": th["trend_min_total"],
+            "early_monthly_rate": float(round(early_rate, 4)),
+            "late_monthly_rate": float(round(late_rate, 4)),
             "change_messages": int(late - early),
-            "change_ratio": float(round(_safe_div(late, max(1, early)), 4)),
+            "active_days": active_days,
         }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
@@ -3938,14 +4026,18 @@ def _conversation_reply_rhythm(label: str, profiles: Dict[str, Dict[str, Any]], 
             continue
         if median <= 10 * 60:
             rhythm = "fast"
-            score = 100000 - median + samples * 10
         elif median <= 6 * 60 * 60:
             rhythm = "measured"
-            score = 50000 - abs(median - 60 * 60) + samples * 10
         else:
             rhythm = "slow"
-            score = median + samples * 10
-        evidence = {"median_reply_seconds": median, "reply_samples": samples, "rhythm": rhythm}
+        score = min(2000, samples) * 2.0 + min(10000, total) * 0.1
+        evidence = {
+            "median_reply_seconds": median,
+            "reply_samples": samples,
+            "minimum_reply_samples": th["reply_samples"],
+            "total_messages": total,
+            "rhythm": rhythm,
+        }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
     return _make_insight("reply_rhythm", label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "not_enough_reply_samples")
@@ -3980,22 +4072,47 @@ def _conversation_initiative(label: str, profiles: Dict[str, Dict[str, Any]], th
         if total < th["min_person_total"]:
             continue
         if kind == "contact_initiator":
-            them = int(profile.get("days_started_by_them", 0) or 0)
-            you = int(profile.get("days_started_by_you", 0) or 0)
-            initiated = them + you
-            if initiated < th["initiative_days"]:
+            them = int(profile.get("contact_starts_by_them", 0) or 0)
+            you = int(profile.get("contact_starts_by_you", 0) or 0)
+            events = them + you
+            minimum_events = th["initiative_events"]
+            if events < minimum_events:
                 continue
-            ratio = _safe_div(them, initiated)
-            score = them * 10.0 + ratio * 100.0
-            evidence = {"days_started_by_them": them, "days_started_by_you": you, "initiated_days": initiated, "them_ratio": float(round(ratio, 4))}
+            dominance = _safe_div(max(them, you), events)
+            if dominance < _safe_div(th["initiative_dominance_percent"], 100):
+                continue
+            dominant_side = "them" if them > you else "you"
+            score = events * 10.0 + (dominance - 0.5) * 200.0 + min(5000, total) * 0.02
+            evidence = {
+                "contact_starts_by_them": them,
+                "contact_starts_by_you": you,
+                "contact_events": events,
+                "minimum_contact_events": minimum_events,
+                "dominant_side": dominant_side,
+                "dominance_ratio": float(round(dominance, 4)),
+                "contact_gap_seconds": CONTACT_START_GAP_SECONDS,
+            }
         else:
             them = int(profile.get("restart_by_them", 0) or 0)
             you = int(profile.get("restart_by_you", 0) or 0)
-            if them + you <= 0 or them <= 0:
+            events = them + you
+            minimum_events = th["silence_restart_events"]
+            if events < minimum_events:
                 continue
-            ratio = _safe_div(them, them + you)
-            score = them * 30.0 + ratio * 100.0
-            evidence = {"restarts_by_them": them, "restarts_by_you": you, "them_ratio": float(round(ratio, 4))}
+            dominance = _safe_div(max(them, you), events)
+            if dominance < _safe_div(th["initiative_dominance_percent"], 100):
+                continue
+            dominant_side = "them" if them > you else "you"
+            score = events * 30.0 + (dominance - 0.5) * 200.0 + min(5000, total) * 0.02
+            evidence = {
+                "restarts_by_them": them,
+                "restarts_by_you": you,
+                "restart_events": events,
+                "minimum_restart_events": minimum_events,
+                "dominant_side": dominant_side,
+                "dominance_ratio": float(round(dominance, 4)),
+                "silence_gap_seconds": SILENCE_RESTART_SECONDS,
+            }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
     reason = "not_enough_initiated_days" if kind == "contact_initiator" else "not_enough_silence_restarts"

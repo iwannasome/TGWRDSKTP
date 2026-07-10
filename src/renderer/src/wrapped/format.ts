@@ -127,10 +127,18 @@ export function formatInsightEvidenceLabel(key: string): string {
   switch (key) {
     case 'total_messages':
       return 'Сообщений'
+    case 'minimum_messages_required':
+      return 'Минимум сообщений'
     case 'active_days':
       return 'Активных дней'
     case 'active_months':
       return 'Активных месяцев'
+    case 'observed_months':
+      return 'Месяцев в окне'
+    case 'coverage_ratio':
+      return 'Покрытие месяцев'
+    case 'minimum_coverage_ratio':
+      return 'Минимальное покрытие'
     case 'balance_ratio':
       return 'Баланс'
     case 'stability_ratio':
@@ -155,6 +163,10 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Раньше'
     case 'late_messages':
       return 'Позже'
+    case 'early_monthly_rate':
+      return 'Раньше в месяц'
+    case 'late_monthly_rate':
+      return 'Позже в месяц'
     case 'change_messages':
       return 'Изменение'
     case 'change_ratio':
@@ -183,6 +195,8 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Медианный ответ'
     case 'reply_samples':
       return 'Замеров'
+    case 'minimum_reply_samples':
+      return 'Минимум замеров'
     case 'rhythm':
       return 'Ритм'
     case 'sent_messages':
@@ -203,6 +217,26 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Возвратов собеседником'
     case 'restarts_by_you':
       return 'Возвратов тобой'
+    case 'contact_starts_by_them':
+      return 'Контактов начато собеседником'
+    case 'contact_starts_by_you':
+      return 'Контактов начато тобой'
+    case 'contact_events':
+      return 'Отдельных контактов'
+    case 'minimum_contact_events':
+      return 'Минимум контактов'
+    case 'restart_events':
+      return 'Возвратов после тишины'
+    case 'minimum_restart_events':
+      return 'Минимум возвратов'
+    case 'dominant_side':
+      return 'Чаще начинал'
+    case 'dominance_ratio':
+      return 'Доля ведущей стороны'
+    case 'contact_gap_seconds':
+      return 'Пауза между контактами'
+    case 'silence_gap_seconds':
+      return 'Порог тишины'
     case 'media_total':
       return 'Медиа'
     case 'top_media_type':
@@ -225,6 +259,9 @@ export function formatEvidenceValue(key: string, value: unknown): string {
   }
   if ((key === 'change_ratio' || key === 'reactivation_ratio') && Number.isFinite(n)) {
     return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}x`
+  }
+  if ((key === 'early_monthly_rate' || key === 'late_monthly_rate') && Number.isFinite(n)) {
+    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/мес.`
   }
   if ((key === 'ratio' || key.endsWith('_ratio')) && Number.isFinite(n)) return formatPercent01(n)
   if (key.endsWith('_seconds') && Number.isFinite(n)) return formatSecondsHuman(n)
@@ -249,6 +286,9 @@ export function formatEvidenceValue(key: string, value: unknown): string {
       rare: 'редкий'
     }
     return labels[value] ?? value
+  }
+  if (key === 'dominant_side' && typeof value === 'string') {
+    return value === 'them' ? 'собеседник' : value === 'you' ? 'ты' : value
   }
   if (typeof value === 'number' && Number.isFinite(value)) return formatInt(value)
   if (typeof value === 'string' && value.length > 0) return value
