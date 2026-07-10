@@ -188,6 +188,14 @@ function handleWorkerStdoutChunk(text: string): void {
     }
 
     emitToRenderer(parsed)
+    if (
+      process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' &&
+      isPlainObject(parsed) &&
+      parsed.type === 'pong'
+    ) {
+      console.log('tgwr_packaged_worker_smoke=ok')
+      setTimeout(() => app.quit(), 50)
+    }
   }
 }
 
@@ -226,17 +234,37 @@ function attachWorker(proc: ChildProcessWithoutNullStreams): void {
 function startWorker(): void {
   if (workerProc) return
 
-  const scriptPath = app.isPackaged
-  ? join(process.resourcesPath, 'worker', 'tgwr_worker.py')
-  : join(process.cwd(), 'worker', 'tgwr_worker.py')
-
-
-  const mkArgs = (cmd: string): string[] => {
-    if (process.platform === 'win32' && cmd === 'py') return ['-3', '-u', scriptPath]
-    return ['-u', scriptPath]
+  type LaunchCandidate = {
+    command: string
+    args: string[]
+    label: string
+    cwd: string
   }
 
-  const candidates: string[] = process.platform === 'win32' ? ['py', 'python'] : ['python', 'python3']
+  const candidates: LaunchCandidate[] = []
+  let diagnosticPath = ''
+
+  if (app.isPackaged) {
+    const executableName = process.platform === 'win32' ? 'tgwr-worker.exe' : 'tgwr-worker'
+    const bundledPath = join(process.resourcesPath, 'worker-bin', `${process.platform}-${process.arch}`, executableName)
+    diagnosticPath = bundledPath
+    if (!existsSync(bundledPath)) {
+      emitStatus('fail', `В установленном приложении отсутствует встроенный worker: ${executableName}`)
+      emitHost('error', 'Bundled worker is missing', { platform: process.platform, arch: process.arch })
+      return
+    }
+    candidates.push({ command: bundledPath, args: [], label: 'bundled', cwd: dirname(bundledPath) })
+  } else {
+    const scriptPath = join(process.cwd(), 'worker', 'tgwr_worker.py')
+    diagnosticPath = scriptPath
+    const pythonCommands = process.platform === 'win32' ? ['py', 'python'] : ['python', 'python3']
+    for (const command of pythonCommands) {
+      const args = process.platform === 'win32' && command === 'py'
+        ? ['-3', '-u', scriptPath]
+        : ['-u', scriptPath]
+      candidates.push({ command, args, label: command, cwd: process.cwd() })
+    }
+  }
 
   const tried: string[] = []
 
@@ -244,16 +272,18 @@ function startWorker(): void {
     if (idx >= candidates.length) {
       emitStatus(
         'fail',
-        `Python not found (tried: ${tried.join(', ')}). Install Python 3 and ensure it is on PATH.`
+        app.isPackaged
+          ? 'Не удалось запустить встроенный модуль анализа. Переустанови TGWR.'
+          : `Python not found (tried: ${tried.join(', ')}). Install Python 3 and ensure it is on PATH.`
       )
       return
     }
 
-    const cmd = candidates[idx]
-    tried.push(cmd)
+    const candidate = candidates[idx]
+    tried.push(candidate.label)
 
-    const proc = spawn(cmd, mkArgs(cmd), {
-      cwd: process.cwd(),
+    const proc = spawn(candidate.command, candidate.args, {
+      cwd: candidate.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true
     })
@@ -265,9 +295,9 @@ function startWorker(): void {
         return
       }
 
-      emitStatus('fail', `Failed to start worker via "${cmd}": ${err.message}`)
+      emitStatus('fail', `Failed to start worker via "${candidate.label}": ${err.message}`)
       emitHost('error', 'Worker spawn error', {
-        cmd,
+        command: candidate.label,
         message: err.message
       })
     }
@@ -278,21 +308,21 @@ function startWorker(): void {
       proc.removeListener('error', onError)
 
       workerProc = proc
-      workerCommandUsed = cmd
+      workerCommandUsed = candidate.label
 
       attachWorker(proc)
 
-      emitStatus('ok', `Worker started (${cmd})`)
+      emitStatus('ok', app.isPackaged ? 'Встроенный модуль анализа запущен' : `Worker started (${candidate.label})`)
       emitHost('info', 'Worker connected', {
-        cmd: workerCommandUsed ?? cmd,
-        scriptPath
+        command: workerCommandUsed ?? candidate.label,
+        packaged: app.isPackaged
       })
 
       sendToWorker({ cmd: 'ping' })
     })
   }
 
-  emitHost('info', 'Starting worker…', { script: scriptPath })
+  emitHost('info', 'Starting worker…', { packaged: app.isPackaged, target: basename(diagnosticPath) })
   trySpawn(0)
 }
 

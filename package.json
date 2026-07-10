@@ -1,7 +1,7 @@
 {
   "name": "tgwr",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TGWR by IWS — fully local Telegram Wrapped desktop app",
   "author": {
     "name": "iwannasome",
@@ -21,14 +21,19 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
-    "verify": "npm run typecheck && npm run test:synthetic && npm run pack",
+    "verify": "npm run typecheck && npm run test:synthetic && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run app:smoke",
 
-    "pack": "npm run build && node scripts/electron-builder-safe.mjs --dir",
-    "dist:win": "npm run build && node scripts/electron-builder-safe.mjs --win nsis",
-    "dist:win:portable": "npm run build && node scripts/electron-builder-safe.mjs --win portable",
-    "dist:mac": "npm run build && node scripts/electron-builder-safe.mjs --mac dmg",
-    "dist:linux": "npm run build && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm",
-    "dist:current": "npm run build && node scripts/electron-builder-safe.mjs"
+    "worker:build": "node scripts/build-worker.mjs",
+    "worker:smoke": "node scripts/worker-binary-smoke.mjs",
+    "release:prepare": "npm run build && npm run worker:build && npm run worker:smoke",
+    "pack": "npm run release:prepare && npm run pack:app",
+    "pack:app": "node scripts/electron-builder-safe.mjs --dir",
+    "app:smoke": "node scripts/packaged-app-smoke.mjs",
+    "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis",
+    "dist:win:portable": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win portable",
+    "dist:mac": "npm run release:prepare && node scripts/electron-builder-safe.mjs --mac dmg",
+    "dist:linux": "npm run release:prepare && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm",
+    "dist:current": "npm run release:prepare && node scripts/electron-builder-safe.mjs"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",
@@ -64,13 +69,9 @@
     ],
     "extraResources": [
       {
-        "from": "worker",
-        "to": "worker",
-        "filter": [
-          "**/*",
-          "!**/__pycache__/**",
-          "!**/*.pyc"
-        ]
+        "from": "worker-bin",
+        "to": "worker-bin",
+        "filter": ["**/*"]
       }
     ],
     "asar": true,
