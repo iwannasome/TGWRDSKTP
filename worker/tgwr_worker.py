@@ -1,5 +1,6 @@
 
 import json
+import math
 import os
 import re
 import sqlite3
@@ -14,7 +15,8 @@ from html import unescape
 from html.parser import HTMLParser
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
+REPORT_SCHEMA_VERSION = 2
 
 _STDOUT_LOCK = threading.Lock()
 _CANCEL_EVENT = threading.Event()
@@ -1735,10 +1737,14 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
             raise CancelledError()
 
         progress("index_db", 90, "", "")
+        year_options: List[Dict[str, int]] = []
+        recommended_year: Optional[int] = None
         try:
             ensure_schema(conn)
             self_from_id = resolve_self_from_id(conn, preferred_self_from_id)
             apply_direction_updates(conn, self_from_id)
+            year_options = available_report_years(conn)
+            recommended_year = recommend_report_year(year_options)
         except CancelledError:
             raise
         except Exception as e:
@@ -1770,6 +1776,8 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
                 "html_chats": int(html_chats),
                 "skipped_chats": int(skipped_total),
                 "unknown_html_chats": int(unknown_html_chats),
+                "available_years": year_options,
+                "recommended_year": recommended_year,
             }
         )
 
@@ -1965,20 +1973,41 @@ def _period_where_clause(start_ts: int, end_ts: int) -> Tuple[str, Tuple[Any, ..
 
 
 def infer_report_year(conn: sqlite3.Connection) -> Optional[int]:
+    return recommend_report_year(available_report_years(conn))
+
+
+def available_report_years(conn: sqlite3.Connection) -> List[Dict[str, int]]:
     try:
-        row = conn.execute(
+        rows = conn.execute(
             f"SELECT CAST(strftime('%Y', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch') AS INTEGER) AS y, COUNT(*) AS cnt "
             "FROM messages "
             "WHERE is_service = 0 AND date_ts > 0 "
             "GROUP BY y "
-            "ORDER BY y DESC "
-            "LIMIT 1;"
-        ).fetchone()
-        if row is None or row[0] is None:
-            return None
-        return int(row[0])
+            "HAVING y IS NOT NULL "
+            "ORDER BY y DESC;"
+        ).fetchall()
+        return [
+            {"year": int(row[0]), "messages": int(row[1] or 0)}
+            for row in rows
+            if row[0] is not None
+        ]
     except Exception:
+        return []
+
+
+def recommend_report_year(years: List[Dict[str, int]]) -> Optional[int]:
+    if not years:
         return None
+
+    maximum = max(int(item.get("messages", 0) or 0) for item in years)
+    meaningful_floor = max(100, int(maximum * 0.10))
+    for item in sorted(years, key=lambda value: int(value.get("year", 0) or 0), reverse=True):
+        year = int(item.get("year", 0) or 0)
+        messages = int(item.get("messages", 0) or 0)
+        if year > 0 and messages >= meaningful_floor:
+            return year
+
+    return int(max(years, key=lambda item: int(item.get("messages", 0) or 0)).get("year", 0) or 0) or None
 
 
 def _count_messages(conn: sqlite3.Connection, start_ts: int, end_ts: int, where_extra: str = "", params_extra: Tuple[Any, ...] = ()) -> int:
@@ -2855,20 +2884,6 @@ def _media_insights(conn: sqlite3.Connection, start_ts: int, end_ts: int, media:
     }
 
 
-def _deleted_messages_count(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> int:
-    base, p = _period_where_clause(start_ts, end_ts)
-    patterns = [
-        "%deleted%",
-        "%удал%",
-        "%сообщение удал%",
-        "%message was deleted%",
-    ]
-    cond = " OR ".join(["LOWER(text) LIKE ?" for _ in patterns])
-    sql = f"SELECT COUNT(*) FROM messages WHERE is_service = 1 AND text IS NOT NULL AND ({cond}) AND {base};"
-    row = conn.execute(sql, tuple(x.lower() for x in patterns) + p).fetchone()
-    return int(row[0] or 0) if row else 0
-
-
 def _pick_person_by_metric(people: Dict[str, Dict[str, Any]], key: str, reverse: bool = True) -> Optional[Dict[str, Any]]:
     if not people:
         return None
@@ -3326,12 +3341,25 @@ def _top_10_people_by_time_span(people: Dict[str, Dict[str, Any]]) -> List[Dict[
     return out
 
 
+def _adaptive_mutuality_minimum(people: Dict[str, Any], floor: int = 500) -> int:
+    totals = sorted(
+        int(person.get("total_messages", 0) or 0)
+        for person in people.values()
+        if isinstance(person, dict) and int(person.get("total_messages", 0) or 0) >= floor
+    )
+    if not totals:
+        return floor
+    percentile_index = int(round((len(totals) - 1) * 0.75))
+    return max(floor, min(MUTUALITY_MIN_MESSAGES, totals[percentile_index]))
+
+
 def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Mutuality = minimal imbalance |sent-recv| / total,
-    BUT only for very large conversations: total_messages >= 5000.
+    only among conversations with enough evidence for this archive.
     """
     rows: List[Dict[str, Any]] = []
+    minimum_messages = _adaptive_mutuality_minimum(people)
 
     for it in people.values():
         if not isinstance(it, dict):
@@ -3341,7 +3369,7 @@ def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
         recv = int(it.get("received_messages") or 0)
         total = int(it.get("total_messages") or (sent + recv) or 0)
 
-        if total < MUTUALITY_MIN_MESSAGES:
+        if total < minimum_messages:
             continue
 
         abs_diff = abs(sent - recv)
@@ -3361,7 +3389,7 @@ def _top_10_people_by_mutuality(people: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "imbalance_ratio": float(ratio),
                 "symmetry_percent": float(max(0.0, 1.0 - ratio) * 100.0),
                 "active_days": int(it.get("active_days", 0) or 0),
-                "minimum_messages_required": MUTUALITY_MIN_MESSAGES,
+                "minimum_messages_required": minimum_messages,
             }
         )
 
@@ -3468,7 +3496,7 @@ def _insight_title(kind: str, label: str) -> str:
         "night_companion": "Ночной собеседник",
         "day_anchor": "Дневной якорь",
         "alive_dialog": "Самый живой диалог",
-        "longest_live_session": "Самая длинная живая сессия",
+        "longest_live_session": "Самая длинная плотная сессия",
         "reply_rhythm": "Ритм ответов",
         "mutual_dialog": "Самый взаимный диалог",
         "contact_initiator": "Кто чаще начинал контакт",
@@ -3784,22 +3812,35 @@ def _best_candidates(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _conversation_main_person(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
+    eligible = [
+        profile
+        for profile in profiles.values()
+        if int(profile.get("total_messages", 0) or 0) >= th["min_major_total"]
+    ]
+    maximum_total = max((int(profile.get("total_messages", 0) or 0) for profile in eligible), default=1)
+    maximum_days = max((int(profile.get("active_days", 0) or 0) for profile in eligible), default=1)
+    maximum_months = max((int(profile.get("active_months", 0) or 0) for profile in eligible), default=1)
+
     candidates = []
-    for profile in profiles.values():
+    for profile in eligible:
         total = int(profile.get("total_messages", 0) or 0)
-        if total < th["min_major_total"]:
-            continue
         active_days = int(profile.get("active_days", 0) or 0)
         active_months = int(profile.get("active_months", 0) or 0)
         sent = int(profile.get("sent_messages", 0) or 0)
         recv = int(profile.get("received_messages", 0) or 0)
         balance = 1.0 - min(1.0, _safe_div(abs(sent - recv), max(1, total)))
-        score = min(45.0, _safe_div(total, 80)) + min(25.0, active_days * 1.3) + min(20.0, active_months * 2.2) + balance * 10.0
+        volume_component = _safe_div(math.log1p(total), math.log1p(maximum_total))
+        days_component = _safe_div(active_days, maximum_days)
+        months_component = _safe_div(active_months, maximum_months)
+        score = (volume_component * 45.0) + (days_component * 25.0) + (months_component * 20.0) + (balance * 10.0)
         evidence = {
             "total_messages": total,
             "active_days": active_days,
             "active_months": active_months,
             "balance_ratio": float(round(balance, 4)),
+            "volume_component": float(round(volume_component, 4)),
+            "active_days_component": float(round(days_component, 4)),
+            "active_months_component": float(round(months_component, 4)),
         }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
@@ -3967,14 +4008,26 @@ def _conversation_trend(label: str, profiles: Dict[str, Dict[str, Any]], th: Dic
 def _conversation_time_person(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int], kind: str) -> Dict[str, Any]:
     candidates = []
     field = "night_messages" if kind == "night_companion" else "day_messages"
+    total_messages = sum(int(profile.get("total_messages", 0) or 0) for profile in profiles.values())
+    total_in_window = sum(int(profile.get(field, 0) or 0) for profile in profiles.values())
+    baseline_ratio = _safe_div(total_in_window, total_messages)
     for profile in profiles.values():
         total = int(profile.get("total_messages", 0) or 0)
         value = int(profile.get(field, 0) or 0)
         if total < th["min_person_total"] or value < max(30, th["min_person_total"] // 3):
             continue
         ratio = _safe_div(value, total)
-        score = value + ratio * 120.0
-        evidence = {"messages": value, "total_messages": total, "ratio": float(round(ratio, 4))}
+        lift = ratio - baseline_ratio
+        if lift < 0.03:
+            continue
+        score = lift * 700.0 + math.log1p(value) * 18.0 + ratio * 40.0
+        evidence = {
+            "messages": value,
+            "total_messages": total,
+            "ratio": float(round(ratio, 4)),
+            "archive_baseline_ratio": float(round(baseline_ratio, 4)),
+            "lift_vs_archive": float(round(lift, 4)),
+        }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
     return _make_insight(kind, label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "not_enough_time_profile_activity")
@@ -4022,8 +4075,7 @@ def _conversation_sessions(label: str, profiles: Dict[str, Dict[str, Any]], th: 
         if best_session is not None:
             candidates.append(best_session)
     ordered = _best_candidates(candidates)
-    confidence = CONFIDENCE_EXACT if kind == "longest_live_session" else CONFIDENCE_BEHAVIORAL
-    return _make_insight(kind, label, confidence, ordered[0] if ordered else None, ordered, "not_enough_live_sessions")
+    return _make_insight(kind, label, CONFIDENCE_BEHAVIORAL, ordered[0] if ordered else None, ordered, "not_enough_live_sessions")
 
 
 def _conversation_reply_rhythm(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
@@ -4055,7 +4107,7 @@ def _conversation_reply_rhythm(label: str, profiles: Dict[str, Dict[str, Any]], 
 
 def _conversation_mutual_dialog(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
     candidates = []
-    minimum_total = int(th.get("mutual_min_total", MUTUALITY_MIN_MESSAGES) or MUTUALITY_MIN_MESSAGES)
+    minimum_total = _adaptive_mutuality_minimum(profiles, floor=int(th.get("min_major_total", 500) or 500))
     for profile in profiles.values():
         total = int(profile.get("total_messages", 0) or 0)
         if total < minimum_total:
@@ -4131,6 +4183,13 @@ def _conversation_initiative(label: str, profiles: Dict[str, Dict[str, Any]], th
 
 def _conversation_media_bond(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int]) -> Dict[str, Any]:
     candidates = []
+    archive_messages = sum(int(profile.get("total_messages", 0) or 0) for profile in profiles.values())
+    archive_media = 0
+    for profile in profiles.values():
+        media_counts = profile.get("media_counts") if isinstance(profile.get("media_counts"), Counter) else Counter()
+        archive_media += int(sum(media_counts.values()))
+    archive_ratio = _safe_div(archive_media, archive_messages)
+
     for profile in profiles.values():
         total = int(profile.get("total_messages", 0) or 0)
         media_counts = profile.get("media_counts") if isinstance(profile.get("media_counts"), Counter) else Counter()
@@ -4139,12 +4198,15 @@ def _conversation_media_bond(label: str, profiles: Dict[str, Dict[str, Any]], th
             continue
         top_media_type, top_count = media_counts.most_common(1)[0] if media_counts else ("", 0)
         ratio = _safe_div(media_total, total)
-        score = media_total + ratio * 200.0
+        lift = ratio - archive_ratio
+        score = math.log1p(media_total) * 55.0 + max(0.0, lift) * 600.0
         evidence = {
             "media_total": media_total,
             "top_media_type": top_media_type,
             "top_media_count": int(top_count),
             "media_ratio": float(round(ratio, 4)),
+            "archive_media_ratio": float(round(archive_ratio, 4)),
+            "media_lift_vs_archive": float(round(lift, 4)),
         }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
@@ -4199,7 +4261,6 @@ def _achievements(all_time: Dict[str, Any]) -> List[Dict[str, Any]]:
     if isinstance(st, dict):
         streak = int(st.get("length_days", 0) or 0)
     chats_total = int(all_time.get("total_chats_personal", 0) or 0)
-    edited = int(all_time.get("edited_messages_count", 0) or 0)
     media_total = 0
     mc = all_time.get("media_counts")
     if isinstance(mc, dict):
@@ -4216,12 +4277,12 @@ def _achievements(all_time: Dict[str, Any]) -> List[Dict[str, Any]]:
         }
 
     out: List[Dict[str, Any]] = []
-    out.append(ach("night_chatter", "Ночной червь", "Пишешь ночью чаще многих.", night_ratio >= 0.25, int(min(100, night_ratio * 400))))
-    out.append(ach("early_bird", "Ранняя пташка", "Утро начинается с сообщений.", int(all_time.get("messages_06_08", 0) or 0) >= 50, int(min(100, _safe_div(int(all_time.get("messages_06_08", 0) or 0), 50) * 100))))
-    out.append(ach("speed_responder", "Быстрый гонзалес", "Отвечаешь очень быстро.", 0 < median_reply <= 300, 100 if 0 < median_reply <= 300 else int(max(0, 100 - _safe_div(median_reply, 3600) * 25))))
-    out.append(ach("ignorer", "Игнорщик", "Иногда ответы могут подождать.", median_reply >= 2 * 24 * 3600, int(min(100, _safe_div(median_reply, 2 * 24 * 3600) * 100))))
-    out.append(ach("sticker_boss", "Стикерчел", "Стикеры — твой язык.", stickers >= 100, int(min(100, _safe_div(stickers, 100) * 100))))
-    out.append(ach("emoji_master", "Эмодзичел", "Эмодзи в каждом втором сообщении.", emojis_total >= 300, int(min(100, _safe_div(emojis_total, 300) * 100))))
+    out.append(ach("night_chatter", "После полуночи", "Не менее четверти сообщений пришлись на период с 00:00 до 05:59.", night_ratio >= 0.25, int(min(100, night_ratio * 400))))
+    out.append(ach("early_bird", "Раннее утро", "Не менее 50 сообщений отправлено с 06:00 до 08:59.", int(all_time.get("messages_06_08", 0) or 0) >= 50, int(min(100, _safe_div(int(all_time.get("messages_06_08", 0) or 0), 50) * 100))))
+    out.append(ach("speed_responder", "Быстрый ответ", "Медианное время ответа не превышает пяти минут.", 0 < median_reply <= 300, 100 if 0 < median_reply <= 300 else int(max(0, 100 - _safe_div(median_reply, 3600) * 25))))
+    out.append(ach("ignorer", "Неспешный ответ", "Медианное время ответа составляет не менее двух дней.", median_reply >= 2 * 24 * 3600, int(min(100, _safe_div(median_reply, 2 * 24 * 3600) * 100))))
+    out.append(ach("sticker_boss", "Стикерный язык", "В переписках отправлено не менее 100 стикеров.", stickers >= 100, int(min(100, _safe_div(stickers, 100) * 100))))
+    out.append(ach("emoji_master", "Эмодзи-ритм", "В переписках отправлено не менее 300 эмодзи.", emojis_total >= 300, int(min(100, _safe_div(emojis_total, 300) * 100))))
     out.append(ach("longreader", "Лонгрид", "Любишь длинные сообщения.", int(all_time.get("average_msg_length_sent_chars", 0) or 0) >= 120, int(min(100, _safe_div(int(all_time.get("average_msg_length_sent_chars", 0) or 0), 120) * 100))))
     out.append(ach("wall_of_text", "Стены текста", "Однажды ты написал целую стену текста.", longest_len >= 1000, int(min(100, _safe_div(longest_len, 1000) * 100))))
     out.append(ach("media_magnet", "Медиа магнат", "Медиа-контент летит рекой.", media_total >= 500, int(min(100, _safe_div(media_total, 500) * 100))))
@@ -4231,8 +4292,6 @@ def _achievements(all_time: Dict[str, Any]) -> List[Dict[str, Any]]:
     out.append(ach("ultra_active", "Ultra Active", "Очень много сообщений.", total_msgs >= 20000, int(min(100, _safe_div(total_msgs, 20000) * 100))))
     out.append(ach("consistent", "Постоялец", "Стабильная активность по дням.", int(all_time.get("active_days_count", 0) or 0) >= 200, int(min(100, _safe_div(int(all_time.get("active_days_count", 0) or 0), 200) * 100))))
 
-    if len(out) < 15:
-        out.append(ach("placeholder", "Achievement", "(placeholder)", False, 0))
     return out
 
 
@@ -4259,14 +4318,13 @@ def _slides_data(report: Dict[str, Any]) -> Dict[str, Any]:
         {"id": "s13_emojis", "title": "Top emojis", "data": {"all_time": all_time.get("top_emojis"), "year": year.get("top_emojis")}},
         {"id": "s14_media", "title": "Media", "data": {"all_time": all_time.get("media_counts"), "year": year.get("media_counts")}},
         {"id": "s15_edits", "title": "Edits", "data": {"all_time": all_time.get("edited_messages_count"), "year": year.get("edited_messages_count")}},
-        {"id": "s16_deleted", "title": "Deletions", "data": {"all_time": all_time.get("deleted_messages_count"), "year": year.get("deleted_messages_count")}},
         {"id": "s17_day_person", "title": "Day person", "data": {"all_time": all_time.get("day_person"), "year": year.get("day_person")}},
         {"id": "s18_night_person", "title": "Night person", "data": {"all_time": all_time.get("night_person"), "year": year.get("night_person")}},
         {"id": "s19_achievements", "title": "Achievements", "data": {"achievements": report.get("achievements")}},
         {"id": "s20_meta", "title": "Meta", "data": report.get("meta")},
     ]
 
-    return {"version": 1, "slides": slides}
+    return {"version": 2, "slides": slides}
 
 
 def _compute_period_metrics(
@@ -4285,7 +4343,6 @@ def _compute_period_metrics(
     recv = _count_messages(conn, start_ts, end_ts, "AND is_service = 0 AND is_out = 0")
     service_total = _count_messages(conn, start_ts, end_ts, "AND is_service = 1")
     edited = _count_messages(conn, start_ts, end_ts, "AND is_service = 0 AND is_edited = 1")
-    deleted = _deleted_messages_count(conn, start_ts, end_ts)
 
     most_day = _most_active_group(conn, start_ts, end_ts, f"date((date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch')", "day")
     most_month = _most_active_group(conn, start_ts, end_ts, f"strftime('%Y-%m', (date_ts + {MSK_OFFSET_SECONDS}), 'unixepoch')", "month")
@@ -4429,7 +4486,6 @@ def _compute_period_metrics(
         "media_counts": media,
         **media_extra,
         "edited_messages_count": int(edited),
-        "deleted_messages_count": int(deleted),
         "median_reply_time_to_others_seconds": int(median_reply),
         "qualified_median_reply_3000_seconds": int(qualified_median_3000),
         "who_you_reply_fastest": fastest,
@@ -4472,7 +4528,7 @@ def _compute_period_metrics(
     metrics.update(textm)
     return metrics
 
-def do_build_report(db_path: str) -> None:
+def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
     if _CANCEL_EVENT.is_set():
         raise CancelledError()
 
@@ -4516,7 +4572,12 @@ def do_build_report(db_path: str) -> None:
 
         progress("compute_metrics", 6, "period_bounds", "")
         msk = _moscow_tzinfo()
-        inferred_year = infer_report_year(conn)
+        year_options = available_report_years(conn)
+        available_year_values = {int(item["year"]) for item in year_options}
+        if requested_year is not None and requested_year not in available_year_values:
+            raise RuntimeError(f"В базе нет сообщений за {requested_year} год")
+
+        inferred_year = requested_year if requested_year is not None else recommend_report_year(year_options)
         if inferred_year is None:
             now_msk = datetime.now(msk)
             year_used = int(now_msk.year - 1)
@@ -4585,9 +4646,11 @@ def do_build_report(db_path: str) -> None:
         achievements = _achievements(metrics_all)
 
         report: Dict[str, Any] = {
+            "schema_version": REPORT_SCHEMA_VERSION,
             "meta": {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "msk_year_used": int(year_used),
+                "available_years": year_options,
                 "self_from_id": self_from_id,
             },
             "periods": {
@@ -4638,12 +4701,12 @@ def do_build_report(db_path: str) -> None:
             pass
 
 
-def start_report_thread(db_path: str) -> None:
+def start_report_thread(db_path: str, requested_year: Optional[int] = None) -> None:
     global _REPORT_BUSY, _REPORT_THREAD
 
     def _runner() -> None:
         try:
-            do_build_report(db_path)
+            do_build_report(db_path, requested_year=requested_year)
         except CancelledError:
             mark_report_idle()
             return
@@ -4705,13 +4768,17 @@ def handle_command(cmd_obj: Any) -> None:
 
     if cmd == "build_report":
         db_path = cmd_obj.get("db_path")
+        requested_year = cmd_obj.get("year")
         if not isinstance(db_path, str) or not db_path:
             write_json({"type": "report_error", "message": "build_report: db_path must be a non-empty string"})
             return
         if not os.path.isfile(db_path):
             write_json({"type": "report_error", "message": "DB path does not exist"})
             return
-        start_report_thread(db_path=db_path)
+        if requested_year is not None and (isinstance(requested_year, bool) or not isinstance(requested_year, int)):
+            write_json({"type": "report_error", "message": "build_report: year must be an integer"})
+            return
+        start_report_thread(db_path=db_path, requested_year=requested_year)
         return
 
     write_json({"type": "error", "message": f"unknown_cmd: {cmd}"})

@@ -19,6 +19,11 @@ type ImportProgress = {
   message?: string
 }
 
+type YearOption = {
+  year: number
+  messages: number
+}
+
 type ImportSummary = {
   chats: number
   messages: number
@@ -28,6 +33,8 @@ type ImportSummary = {
   html_chats?: number
   skipped_chats?: number
   unknown_html_chats?: number
+  available_years?: YearOption[]
+  recommended_year?: number
 }
 
 type ReportBuildState = {
@@ -39,6 +46,45 @@ type ReportBuildState = {
 type ExistingReportPrompt = {
   db_path: string
   report_path: string
+  report: unknown
+}
+
+function yearOptionsFrom(value: unknown): YearOption[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (!isRecord(item)) return null
+      const year = typeof item.year === 'number' ? item.year : Number(item.year)
+      const messages = typeof item.messages === 'number' ? item.messages : Number(item.messages)
+      if (!Number.isInteger(year) || year < 2000 || year > 2200) return null
+      return { year, messages: Number.isFinite(messages) ? Math.max(0, messages) : 0 }
+    })
+    .filter((item): item is YearOption => item !== null)
+    .sort((a, b) => b.year - a.year)
+}
+
+function reportYearState(value: unknown): { years: YearOption[]; selectedYear?: number } {
+  if (!isRecord(value)) return { years: [] }
+  const meta = isRecord(value.meta) ? value.meta : {}
+  const years = yearOptionsFrom(meta.available_years)
+  const rawSelected = meta.msk_year_used
+  const selectedYear = typeof rawSelected === 'number' && Number.isInteger(rawSelected) ? rawSelected : undefined
+  return { years, selectedYear }
+}
+
+function summaryFromExistingReport(prompt: ExistingReportPrompt): ImportSummary {
+  const report = isRecord(prompt.report) ? prompt.report : {}
+  const periods = isRecord(report.periods) ? report.periods : {}
+  const allTime = isRecord(periods.all_time) ? periods.all_time : {}
+  const yearState = reportYearState(report)
+  return {
+    chats: typeof allTime.total_chats_personal === 'number' ? allTime.total_chats_personal : 0,
+    messages: typeof allTime.total_messages === 'number' ? allTime.total_messages : 0,
+    db_path: prompt.db_path,
+    db_size_bytes: 0,
+    available_years: yearState.years,
+    recommended_year: yearState.selectedYear
+  }
 }
 
 function loadThemeFromStorage(): ThemeId {
@@ -122,6 +168,8 @@ export default function App(): JSX.Element {
   const [reportPath, setReportPath] = useState<string | null>(null)
   const [report, setReport] = useState<unknown | null>(null)
   const [reportAvailable, setReportAvailable] = useState(false)
+  const [availableYears, setAvailableYears] = useState<YearOption[]>([])
+  const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined)
   const [existingReportPrompt, setExistingReportPrompt] = useState<ExistingReportPrompt | null>(null)
   const [existingReportError, setExistingReportError] = useState<string | null>(null)
 
@@ -142,9 +190,9 @@ export default function App(): JSX.Element {
     setPeriod((p) => (p === 'all_time' ? 'year' : 'all_time'))
   }, [])
 
-  const loadReport = useCallback(async (dbPathArg?: string, isStartup = false): Promise<boolean> => {
+  const loadReport = useCallback(async (isStartup = false): Promise<boolean> => {
     try {
-      const res = await window.tgwr.loadReport(dbPathArg)
+      const res = await window.tgwr.loadReport()
 
       if (typeof res?.db_path === 'string' && res.db_path) {
         setDbPath(res.db_path)
@@ -194,6 +242,9 @@ export default function App(): JSX.Element {
       setDbPath(res.db_path)
       setReportPath(res.report_path)
       setReport(parsedReport) // Передаем именно объект!
+      const yearState = reportYearState(parsedReport)
+      setAvailableYears(yearState.years)
+      setSelectedYear(yearState.selectedYear)
       setReportAvailable(true)
       setView('slides')
 
@@ -219,11 +270,11 @@ export default function App(): JSX.Element {
 
     const checkExistingReport = async () => {
       if (isScreenshotMode()) {
-        void loadReport(undefined, true)
+        void loadReport(true)
         return
       }
 
-      const res = await window.tgwr.loadReport(undefined)
+      const res = await window.tgwr.loadReport()
       if (cancelled) return
 
       if (typeof res?.db_path === 'string' && res.db_path) {
@@ -237,7 +288,8 @@ export default function App(): JSX.Element {
         setReportAvailable(true)
         setExistingReportPrompt({
           db_path: res.db_path,
-          report_path: res.report_path
+          report_path: res.report_path,
+          report: res.report
         })
       }
     }
@@ -254,17 +306,46 @@ export default function App(): JSX.Element {
     if (!prompt) return
     setExistingReportError(null)
     setExistingReportPrompt(null)
-    void loadReport(prompt.db_path)
+    void loadReport()
   }, [existingReportPrompt, loadReport])
 
-  const onCreateFreshReport = useCallback(async () => {
+  const onResetExistingReport = useCallback(async () => {
     const prompt = existingReportPrompt
     if (!prompt) return
 
     setExistingReportError(null)
-    const res = await window.tgwr.deleteReport(prompt.db_path)
+    const res = await window.tgwr.resetReport()
     if (!res.ok) {
-      setExistingReportError(res.error ?? 'Не удалось удалить старый report.json')
+      setExistingReportError(res.error ?? 'Не удалось подготовить новый отчёт')
+      return
+    }
+
+    const summary = summaryFromExistingReport(prompt)
+    const yearState = reportYearState(prompt.report)
+    setExistingReportPrompt(null)
+    setReport(null)
+    setReportAvailable(false)
+    setReportPath(res.report_path)
+    setDbPath(res.db_path)
+    setImportSummary(summary)
+    setAvailableYears(yearState.years)
+    setSelectedYear(yearState.selectedYear ?? yearState.years[0]?.year)
+    setReportBuild({ running: false })
+    setView('setup')
+  }, [existingReportPrompt])
+
+  const onDeleteAllData = useCallback(async () => {
+    const confirmed = window.confirm(
+      'Удалить локальную базу переписок и готовый отчёт? Это действие нельзя отменить.'
+    )
+    if (!confirmed) return
+
+    setExistingReportError(null)
+    const res = await window.tgwr.deleteAllData()
+    if (!res.ok) {
+      const message = res.error ?? 'Не удалось удалить локальные данные'
+      setExistingReportError(message)
+      setImportError(message)
       return
     }
 
@@ -274,9 +355,11 @@ export default function App(): JSX.Element {
     setReportPath(res.report_path)
     setDbPath(res.db_path)
     setImportSummary(null)
+    setAvailableYears([])
+    setSelectedYear(undefined)
     setReportBuild({ running: false })
     setView('setup')
-  }, [existingReportPrompt])
+  }, [])
 
   // Subscribe to worker events
   useEffect(() => {
@@ -356,6 +439,8 @@ export default function App(): JSX.Element {
       }
 
       if (type === 'import_done') {
+        const years = yearOptionsFrom(payload.available_years)
+        const recommendedYear = typeof payload.recommended_year === 'number' ? payload.recommended_year : years[0]?.year
         const summary: ImportSummary = {
           chats: typeof payload.chats === 'number' ? payload.chats : 0,
           messages: typeof payload.messages === 'number' ? payload.messages : 0,
@@ -364,7 +449,9 @@ export default function App(): JSX.Element {
           json_chats: typeof payload.json_chats === 'number' ? payload.json_chats : undefined,
           html_chats: typeof payload.html_chats === 'number' ? payload.html_chats : undefined,
           skipped_chats: typeof payload.skipped_chats === 'number' ? payload.skipped_chats : undefined,
-          unknown_html_chats: typeof payload.unknown_html_chats === 'number' ? payload.unknown_html_chats : undefined
+          unknown_html_chats: typeof payload.unknown_html_chats === 'number' ? payload.unknown_html_chats : undefined,
+          available_years: years,
+          recommended_year: recommendedYear
         }
 
         setImportRunning(false)
@@ -373,6 +460,8 @@ export default function App(): JSX.Element {
         setImportError(null)
         setImportSummary(summary)
         setDbPath(summary.db_path)
+        setAvailableYears(years)
+        setSelectedYear(recommendedYear)
         return
       }
 
@@ -381,8 +470,7 @@ export default function App(): JSX.Element {
         reportBuildRunningRef.current = false
         const rp = typeof payload.report_path === 'string' ? payload.report_path : null
         if (rp) setReportPath(rp)
-        const doneDbPath = typeof payload.db_path === 'string' ? payload.db_path : (dbPath ?? undefined)
-        void loadReport(doneDbPath)
+        void loadReport()
         return
       }
 
@@ -430,7 +518,7 @@ export default function App(): JSX.Element {
 
     const doPing = () => {
       try {
-        window.tgwr.sendWorker({ cmd: 'ping' })
+        window.tgwr.pingWorker()
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         setWorkerError(`Ping failed: ${msg}`)
@@ -461,7 +549,7 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !!dbPath && !importRunning && !reportBuild.running
+  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !importRunning && !reportBuild.running
 
   const onPickExportDir = useCallback(async () => {
     const dir = await window.tgwr.pickExportDir()
@@ -472,13 +560,15 @@ export default function App(): JSX.Element {
     setReport(null)
     setReportPath(null)
     setReportAvailable(false)
+    setAvailableYears([])
+    setSelectedYear(undefined)
     setReportBuild({ running: false })
   }, [])
 
   const onStartImport = useCallback(() => {
     if (importRunningRef.current || reportBuildRunningRef.current || workerStatus.status !== 'ok') return
     const dir = exportDir.trim()
-    if (!dir || !dbPath) return
+    if (!dir) return
 
     importRunningRef.current = true
     setImportRunning(true)
@@ -490,30 +580,26 @@ export default function App(): JSX.Element {
     setReportAvailable(false)
 
     try {
-      window.tgwr.sendWorker({
-        cmd: 'import_export',
-        mode: 'desktop',
-        export_dir: dir,
-        db_path: dbPath
-      })
+      window.tgwr.importExport(dir)
     } catch (err) {
       importRunningRef.current = false
       setImportRunning(false)
       setImportProgress(undefined)
       setImportError(err instanceof Error ? err.message : String(err))
     }
-  }, [dbPath, exportDir, workerStatus.status])
+  }, [exportDir, workerStatus.status])
 
-  const canBuildReport = !!dbPath && !!importSummary && !reportBuild.running && !importRunning
+  const canBuildReport = !!importSummary && !!selectedYear && !reportBuild.running && !importRunning
   const canOpenReport = reportAvailable && !reportBuild.running && !importRunning
 
-  const onBuildReport = useCallback(() => {
-    if (!dbPath || !importSummary || importRunningRef.current || reportBuildRunningRef.current) return
+  const requestReportBuild = useCallback((year: number) => {
+    if (importRunningRef.current || reportBuildRunningRef.current) return
     reportBuildRunningRef.current = true
     setReportAvailable(false)
     setReportBuild({ running: true, progress: { stage: 'compute_metrics', current: 0, total: 1 } })
     try {
-      window.tgwr.sendWorker({ cmd: 'build_report', db_path: dbPath })
+      setSelectedYear(year)
+      window.tgwr.buildReport(year)
     } catch (err) {
       reportBuildRunningRef.current = false
       setReportBuild({
@@ -521,7 +607,17 @@ export default function App(): JSX.Element {
         error: err instanceof Error ? err.message : String(err)
       })
     }
-  }, [dbPath, importSummary])
+  }, [])
+
+  const onBuildReport = useCallback(() => {
+    if (!importSummary || !selectedYear) return
+    requestReportBuild(selectedYear)
+  }, [importSummary, requestReportBuild, selectedYear])
+
+  const onYearChange = useCallback((year: number) => {
+    if (year === selectedYear || reportBuildRunningRef.current) return
+    requestReportBuild(year)
+  }, [requestReportBuild, selectedYear])
 
   const mainContent = useMemo(() => {
     if (report && view === 'slides') {
@@ -534,6 +630,11 @@ export default function App(): JSX.Element {
           onOpenPeople={() => setView('people')}
           theme={theme}
           onThemeChange={setTheme}
+          availableYears={availableYears}
+          selectedYear={selectedYear}
+          onYearChange={onYearChange}
+          yearBuildRunning={reportBuild.running}
+          yearBuildError={reportBuild.error}
         />
       )
     }
@@ -638,7 +739,7 @@ export default function App(): JSX.Element {
                 disabled={!canOpenReport}
                 onClick={() => {
                   if (!canOpenReport) return
-                  void loadReport(dbPath ?? undefined)
+                  void loadReport()
                 }}
                 className={[
                   'rounded-full border px-4 py-2 text-sm font-semibold transition',
@@ -648,6 +749,14 @@ export default function App(): JSX.Element {
                 ].join(' ')}
               >
                 Открыть wrapped
+              </button>
+              <button
+                type="button"
+                disabled={importRunning || reportBuild.running || (!reportAvailable && !importSummary)}
+                onClick={onDeleteAllData}
+                className="rounded-full border border-red-400/20 bg-red-500/[0.08] px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Удалить локальные данные
               </button>
             </div>
 
@@ -684,6 +793,29 @@ export default function App(): JSX.Element {
                   </button>
                 </div>
               </div>
+
+              {availableYears.length > 0 ? (
+                <label className="mt-4 block rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
+                  <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                    Год Wrapped
+                  </span>
+                  <select
+                    value={selectedYear ?? ''}
+                    disabled={reportBuild.running}
+                    onChange={(event) => setSelectedYear(Number(event.target.value))}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-[#0a111d] px-3 py-2.5 text-sm font-semibold text-slate-100 outline-none focus:border-[rgba(var(--tgwr-accent2-rgb),0.45)]"
+                  >
+                    {availableYears.map((item) => (
+                      <option key={item.year} value={item.year}>
+                        {item.year} · {item.messages.toLocaleString('ru-RU')} сообщений
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-2 block text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.82)]">
+                    Можно выбрать любой год, найденный в экспорте. Раздел «За всё время» останется доступен внутри Wrapped.
+                  </span>
+                </label>
+              ) : null}
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                 <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.66)]">
@@ -810,7 +942,7 @@ export default function App(): JSX.Element {
                   disabled={!canOpenReport}
                   onClick={() => {
                     if (!canOpenReport) return
-                    void loadReport(dbPath ?? undefined)
+                    void loadReport()
                   }}
                   className={[
                     'rounded-full border px-4 py-2 text-sm font-semibold transition',
@@ -836,7 +968,7 @@ export default function App(): JSX.Element {
               </div>
               <div className="mt-3 text-2xl font-bold text-slate-100">Что открыть при запуске?</div>
               <div className="mt-3 text-sm leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                TGWR by IWS нашел существующий report.json. Можно продолжить со старым Wrapped или удалить его и собрать новый отчет.
+                Можно открыть готовый Wrapped, пересобрать только отчёт из уже импортированной базы или полностью стереть локальные данные.
               </div>
 
               <div className="mt-5 rounded-xl border border-white/10 bg-black/25 p-4">
@@ -854,13 +986,20 @@ export default function App(): JSX.Element {
                 </div>
               ) : null}
 
-              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
                 <button
                   type="button"
-                  onClick={onCreateFreshReport}
+                  onClick={onDeleteAllData}
                   className="rounded-full border border-red-400/25 bg-red-500/10 px-5 py-2.5 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
                 >
-                  Создать новый и удалить старый
+                  Стереть все данные
+                </button>
+                <button
+                  type="button"
+                  onClick={onResetExistingReport}
+                  className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                >
+                  Пересобрать отчёт
                 </button>
                 <button
                   type="button"
@@ -876,6 +1015,7 @@ export default function App(): JSX.Element {
       </div>
     )
   }, [
+    availableYears,
     canBuildReport,
     canImport,
     canOpenReport,
@@ -889,16 +1029,20 @@ export default function App(): JSX.Element {
     importSummary,
     loadReport,
     onBuildReport,
-    onCreateFreshReport,
+    onDeleteAllData,
     onOpenExistingReport,
     onPickExportDir,
+    onResetExistingReport,
     onStartImport,
+    onYearChange,
     period,
     report,
+    reportAvailable,
     reportBuild.error,
     reportBuild.progress,
     reportBuild.running,
     reportPath,
+    selectedYear,
     theme,
     togglePeriod,
     view,

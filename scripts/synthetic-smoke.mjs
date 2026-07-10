@@ -13,7 +13,7 @@ const outDir = join(workDir, 'out')
 const screenshotsDir = join(workDir, 'screenshots')
 const dbPath = join(outDir, 'tgwr.db')
 const selfId = 'user100000000'
-const SLIDE_COUNT = 22
+const SLIDE_COUNT = 14
 
 function isoDate(baseMs, index, stepMinutes = 37) {
   return new Date(baseMs + index * stepMinutes * 60_000).toISOString().replace('.000Z', '')
@@ -705,10 +705,10 @@ function assertReport(report) {
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
     ['top_10_people_by_mutuality', year?.top_10_people_by_mutuality?.length >= 2],
-    ['all_time.top_10_people_by_mutuality_5000_gate', (allTime?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
-    ['top_10_people_by_mutuality_5000_gate', (year?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
-    ['all_time.mutual_dialog_5000_gate', Number(allTime?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
-    ['year.mutual_dialog_5000_gate', Number(year?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
+    ['all_time.top_10_people_by_mutuality_adaptive_gate', (allTime?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.minimum_messages_required ?? 0) >= 500 && Number(person?.minimum_messages_required ?? 0) <= 5000 && Number(person?.total_messages ?? 0) >= Number(person?.minimum_messages_required ?? 0))],
+    ['top_10_people_by_mutuality_adaptive_gate', (year?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.minimum_messages_required ?? 0) >= 500 && Number(person?.minimum_messages_required ?? 0) <= 5000 && Number(person?.total_messages ?? 0) >= Number(person?.minimum_messages_required ?? 0))],
+    ['all_time.mutual_dialog_adaptive_gate', Number(allTime?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= Number(allTime?.conversation_insights?.mutual_dialog?.evidence?.minimum_messages_required ?? 0)],
+    ['year.mutual_dialog_adaptive_gate', Number(year?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= Number(year?.conversation_insights?.mutual_dialog?.evidence?.minimum_messages_required ?? 0)],
     ['top_longest_messages_sent', allTime?.top_longest_messages_sent?.length > 0],
     ['word_cloud', Object.keys(allTime?.word_cloud ?? {}).length > 0],
     ['achievements', report?.achievements?.length > 0],
@@ -1077,10 +1077,15 @@ function renderHarnessHtml(report, assets, slideIndex) {
       window.__TGWR_REPORT__ = ${JSON.stringify(report)};
       window.tgwr = {
         onWorkerEvent: () => () => {},
-        sendWorker: () => {},
+        pingWorker: () => {},
+        importExport: () => {},
+        buildReport: () => {},
+        cancelWorker: () => {},
         pickExportDir: async () => null,
         pickOutputDir: async () => null,
         writeOutputFile: async () => ({ ok: true, path: '' }),
+        resetReport: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted: true }),
+        deleteAllData: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted_files: 2 }),
         loadReport: async () => ({
           ok: true,
           db_path: ${JSON.stringify(dbPath)},
@@ -1167,7 +1172,10 @@ async function runScreenshots(report, options = {}) {
         throw new Error(`DOM check did not reach slides view for ${label} slide ${slideIndex + 1}`)
       }
 
-      if (!domRes.stdout.includes(`${slideIndex + 1} / ${SLIDE_COUNT}`)) {
+      const totalMatch = domRes.stdout.match(/data-tgwr-slide-total="(\d+)"/)
+      const renderedTotal = Number(totalMatch?.[1] ?? 0)
+      const renderedIndex = Math.min(slideIndex, Math.max(0, renderedTotal - 1))
+      if (renderedTotal <= 0 || !domRes.stdout.includes(`${renderedIndex + 1} / ${renderedTotal}`)) {
         throw new Error(`DOM check opened wrong slide for ${label} slide ${slideIndex + 1}`)
       }
 
@@ -1354,17 +1362,17 @@ async function main() {
   const report = JSON.parse(await readFile(reportPath, 'utf8'))
   assertReport(report)
   const baseTargets = process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? allSlideTargets() : undefined
-  const expandedMobileTargets = [0, 1, 2, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18]
+  const expandedMobileTargets = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
   const screenshots = [
     ...(await runScreenshots(report, { label: 'base', targets: baseTargets })),
     ...(await runScreenshots(report, {
       label: 'mobile',
-      targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 13, 18],
+      targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 9, 13],
       viewport: { width: 390, height: 844 },
       minScreenshotBytes: 15_000
     })),
-    ...(await runScreenshots(makeEmptyReport(report), { label: 'empty', targets: [1, 7, 13, 18] })),
-    ...(await runScreenshots(makeExtremeReport(report), { label: 'extreme', targets: [1, 7, 10, 13, 18] }))
+    ...(await runScreenshots(makeEmptyReport(report), { label: 'empty', targets: [0, 1, 2, 3] })),
+    ...(await runScreenshots(makeExtremeReport(report), { label: 'extreme', targets: [1, 6, 9, 11, 13] }))
   ]
   await runNavigationStress(report)
   await runPeopleViewSmoke(report)
