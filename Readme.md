@@ -1,246 +1,149 @@
+# TGWR by IWS
 
+> Приватный Telegram Wrapped, который работает на компьютере пользователя и не отправляет переписки в сеть.
 
+TGWR импортирует официальный экспорт Telegram Desktop, собирает персональную историю за выбранный год или за всё время, объясняет выводы цифрами и экспортирует результат в PNG/PDF.
 
-# 📊 TGWR by IWS
+Текущая версия: **0.2.0**.
 
-> **Telegram Wrapped для обычных людей. Полностью локально. Без серверов.**
+## Что умеет TGWR
 
-**TGWR by IWS** — это десктопное приложение, которое анализирует официальный экспорт Telegram Desktop и собирает персональный Wrapped за год или за всё время. Внутри есть story deck, подробный Explore по людям, 14 понятных conversation insights и экспорт отдельных инсайтов в PNG-карточки с аккуратным IWS-водяным знаком.
+- полностью локально импортирует JSON и HTML из Telegram Desktop;
+- анализирует личные диалоги, не смешивая их с группами и каналами;
+- предлагает последний достаточно наполненный год и позволяет выбрать другой;
+- динамически собирает историю максимум из 14 содержательных слайдов;
+- показывает до четырёх сильных conversation insights без пустых «победителей»;
+- ограничивает повтор одного человека в featured-истории;
+- оставляет все 14 аналитических сигналов в разделе «Люди»;
+- экспортирует весь Wrapped в PNG/PDF и отдельный insight в вертикальную PNG-карточку;
+- перед экспортом показывает точный Share Preview;
+- умеет скрыть имена, фрагменты сообщений и точные даты;
+- объясняет, какие чаты были пропущены при импорте и почему;
+- различает пересборку отчёта и полное удаление локальной базы.
 
-Вся магия происходит **строго локально** на твоем компьютере с помощью Python-воркера. Ни один байт твоей личной переписки не уходит в интернет.
+## Быстрый пользовательский путь
 
----
+1. В Telegram Desktop открой `Настройки → Продвинутые настройки → Экспорт данных из Telegram`.
+2. Выбери личные чаты и машиночитаемый JSON. HTML тоже поддерживается, но JSON надёжнее передаёт ID и направление сообщений.
+3. Запусти установленный TGWR и выбери папку экспорта.
+4. Проверь сводку импорта и выбери год.
+5. Открой Wrapped, Explore или экспорт.
 
-## ✨ Фичи
-* **Абсолютная приватность:** импорт, анализ и экспорт работают локально на компьютере.
-* **14 conversation insights:** главный человек, стабильный диалог, камбэк, сближение, затухание, ночной собеседник, взаимность, медиа-связь и другие выводы с confidence label.
-* **Проверяемые доказательства:** Explore показывает победителя, кандидатов, пороги качества и evidence-цифры, а не просто красивый текст.
-* **Год и всё время:** `year` и `all_time` считаются отдельно, без деградации режима “за всё время”.
-* **Story deck:** слайды для шаринга с обновленным people-first нарративом и `TGWR by IWS` брендингом.
-* **Кастомизация:** 3 встроенные цветовые темы (Neon, Cyber, Midnight).
-* **Удобный экспорт:** Wrapped можно сохранить в `PNG` постранично или `PDF`; отдельный insight можно экспортировать как 9:16 PNG-карточку.
+В установленной версии **не нужно отдельно устанавливать Node.js или Python**. Python worker заранее собирается в нативный бинарник под Windows, macOS или Linux и поставляется внутри приложения.
 
----
+## Приватность и локальные данные
 
-## 📦 Шаг 1. Подготовка (Что нужно установить)
+- исходный Telegram Export читается локально;
+- нормализованные сообщения хранятся в `tgwr.db` внутри стандартного каталога `userData` Electron;
+- готовый отчёт хранится рядом в `report.json`;
+- приложение не содержит телеметрии, загрузки переписок или удалённой аналитики;
+- renderer не получает прямой доступ к Node.js, произвольным путям базы или произвольным worker-командам;
+- запись PNG/PDF разрешена только в папку, выбранную пользователем в текущем сеансе.
 
-Для запуска проекта в режиме разработчика тебе понадобятся:
-1. [Node.js](https://nodejs.org/) (версия 20.19 или выше; Node 22 LTS тоже подходит).
-2. [Python](https://www.python.org/downloads/) (версия 3.9 или выше).
-3. Пакетный менеджер `npm` (идет вместе с Node.js) или `yarn`/`pnpm`.
+Действия с данными разделены намеренно:
 
----
+- **«Пересобрать отчёт»** удаляет только `report.json`, сохраняя импортированную базу;
+- **«Стереть все данные»** удаляет `tgwr.db`, `tgwr.db-wal`, `tgwr.db-shm` и `report.json`.
 
-## 🗂 Шаг 2. Как получить данные из Telegram
+## Продуктовые ограничения версии 0.2
 
-TGWR работает с официальным бэкапом Telegram Desktop.
+- интерфейс и правила времени ориентированы на русскоязычную версию;
+- календарные метрики считаются по московскому времени UTC+3;
+- два служебных Telegram ID владельца проекта намеренно исключены из people-аналитики;
+- группы и каналы не участвуют в персональных рейтингах;
+- поведенческие insights являются объяснимыми эвристиками, а не психологическими диагнозами;
+- installer без подписи ОС может показывать предупреждение до подключения сертификатов релиза.
 
-1. Открой **Telegram Desktop** на компьютере.
-2. Перейди в `Настройки` → `Продвинутые настройки` → `Экспорт данных из Telegram`.
-3. Отметь **Личные чаты**. Текущая версия TGWR строит персональную статистику по личным диалогам; групповые чаты импортом пропускаются.
-4. **ВАЖНО:** В самом низу выбери формат **Машиночитаемый JSON**.
-5. Нажми «Экспортировать» и дождись завершения.
+## Запуск из исходников
 
----
+Для разработки нужны:
 
-## 🚀 Шаг 3. Запуск проекта
+- Node.js `20.19+` (рекомендуется Node 22);
+- npm `10+`;
+- Python `3.9+`.
 
-Так как под капотом работает связка `Electron (Node.js) + React` и `Python`, запуск немного отличается в зависимости от твоей операционной системы. 
-
-### 🐳 Docker (Windows / macOS / Linux)
-
-Этот способ удобен для проверки проекта на любом компьютере, где установлен Docker: приложение запускается внутри контейнера, а окно Electron открывается через браузер с помощью noVNC.
-
-1. Склонируй репозиторий и перейди в папку проекта:
 ```bash
-git clone <ссылка_на_репозиторий>
-cd tgwr
+git clone https://github.com/iwannasome/TGWRDSKTP.git
+cd TGWRDSKTP
+npm ci
+npm run dev
 ```
 
-2. Запусти через Docker Compose:
+Dev-режим запускает `worker/tgwr_worker.py` через системный Python. PyInstaller для обычной разработки не требуется.
+
+## Проверка и сборка
+
+Полный `verify` дополнительно собирает нативный worker, поэтому сначала подготовь Python-окружение.
+
+macOS/Linux:
+
 ```bash
-docker compose up --build
-```
-
-Если Docker пишет, что команды `docker compose` нет, используй старый вариант:
-```bash
-docker-compose up --build
-```
-
-3. Открой в браузере:
-```text
-http://localhost:6080/vnc.html?autoconnect=1&resize=scale
-```
-
-Папка `out/docker-data` на компьютере видна внутри приложения как `/data` — туда удобно положить экспорт Telegram. Папка `out/docker-output` видна как `/output` — туда можно сохранять PNG/PDF. Папка `out/` уже игнорируется git.
-
-Если нужно запустить без Compose, собери образ вручную:
-```bash
-docker build -t tgwr-docker:local .
-```
-
-Windows CMD:
-```bash
-docker run --rm -p 6080:6080 -v "%cd%/out/docker-data:/data" -v "%cd%/out/docker-output:/output" tgwr-docker:local
+python3 -m venv .venv
+.venv/bin/python -m pip install -r worker/requirements-build.txt
+npm run verify
 ```
 
 Windows PowerShell:
+
 ```powershell
-docker run --rm -p 6080:6080 -v "${PWD}/out/docker-data:/data" -v "${PWD}/out/docker-output:/output" tgwr-docker:local
-```
-
-macOS/Linux:
-```bash
-docker run --rm -p 6080:6080 -v "$PWD/out/docker-data:/data" -v "$PWD/out/docker-output:/output" tgwr-docker:local
-```
-
-### 🪟 Windows
-1. Склонируй репозиторий и перейди в папку проекта:
-```bash
-git clone <ссылка_на_репозиторий>
-cd tgwr
-
-```
-
-2. Установи зависимости Node.js:
-```bash
-npm install
-
-```
-
-
-3. Убедись, что Python добавлен в переменные среды (PATH). Проверить можно командой:
-```bash
-python --version
-
-```
-
-
-4. Запусти приложение в режиме разработчика:
-```bash
-npm run dev
-
-```
-
-
-
-### 🍎 macOS
-
-1. Открой терминал, склонируй репозиторий и перейди в него:
-```bash
-git clone <ссылка_на_репозиторий>
-cd tgwr
-
-```
-
-
-2. Установи зависимости:
-```bash
-npm install
-
-```
-
-
-3. В macOS Python 3 обычно вызывается командой `python3`. Наш Electron-скрипт умеет это распознавать, но на всякий случай убедись, что он установлен:
-```bash
-python3 --version
-
-```
-
-
-4. Запусти приложение:
-```bash
-npm run dev
-
-```
-
-
-
-### 🐧 Linux
-
-1. Склонируй проект:
-```bash
-git clone <ссылка_на_репозиторий>
-cd tgwr
-
-```
-
-
-2. Установи Node.js зависимости:
-```bash
-npm install
-
-```
-
-
-3. Убедись, что у тебя установлен `python3` (например, через `sudo apt install python3` для Ubuntu/Debian).
-4. Запусти проект:
-```bash
-npm run dev
-
-```
-
-
-
-*(При запуске `npm run dev` Electron сам поднимет Python-воркер в фоновом режиме. Тебе нужно будет только указать путь к папке `DataExport...` в интерфейсе программы).*
-
----
-
-## 📦 Сборка релизов
-
-```bash
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r worker\requirements-build.txt
 npm run verify
+```
+
+Основные команды:
+
+```bash
+npm run typecheck       # TypeScript
+npm run test:worker     # анонимизированные import fixtures
+npm run test:synthetic  # полный synthetic report и browser smoke при наличии Chrome
+npm run worker:build    # PyInstaller binary текущей ОС/архитектуры
+npm run worker:smoke    # JSONL ping замороженному worker
+npm run pack            # распакованное Electron-приложение
+npm run verify          # весь локальный release gate
+```
+
+Установщики:
+
+```bash
 npm run dist:win
 npm run dist:mac
 npm run dist:linux
 ```
 
-Текущие targets:
-* Windows: `NSIS .exe`
-* macOS: `.dmg`
-* Linux: `.AppImage`, `.deb`, `.rpm`
+PyInstaller не выполняет кросс-компиляцию. Windows worker собирается на Windows, macOS worker — отдельно на Intel и ARM64, Linux worker — на Linux. Именно так устроена GitHub Actions matrix.
 
-Для сборки `.deb`/`.rpm` на Fedora/RHEL-подобных системах может понадобиться совместимость `libcrypt.so.1` для `fpm`:
+Подробный релизный процесс описан в [docs/RELEASING.md](docs/RELEASING.md).
+
+## Docker/noVNC
+
+Docker остаётся способом разработки и удалённой проверки интерфейса:
 
 ```bash
-sudo dnf install libxcrypt-compat
+docker compose up --build
 ```
 
-Кросс-сборка зависит от ОС и окружения electron-builder. Для релизного пайплайна лучше собирать Windows на Windows, macOS на macOS, Linux на Linux.
-
----
-
-## 🛠 Технологический стек
-
-* **Frontend UI:** React, TypeScript, TailwindCSS, Framer Motion, HTML-to-Image.
-* **Backend / Host:** Electron, Vite.
-* **Data Processing (Worker):** Python 3, SQLite3, IPC JSONL Protocol.
-
----
-<br/>
-<br/>
-
-<div align="center">
+После запуска открой:
 
 ```text
- /$$$$$$        /$$      /$$        /$$$$$$ 
-|_  $$_/       | $$  /$ | $$       /$$__  $$
-   | $$        | $$ /$$$| $$      | $$  \__/
-   | $$        | $$/$$ $$ $$      |  $$$$$$ 
-   | $$        | $$$$_  $$$$       \____  $$
-   | $$        | $$$/ \  $$$       /$$  \ $$
-  /$$$$$$      | $$/   \  $$      |  $$$$$$/
- |______/      |__/     \__/       \______/ 
-                                               
-```                                            
-                                               
+http://localhost:6080/vnc.html?autoconnect=1&resize=scale
+```
 
+- `out/docker-data` доступен контейнеру как `/data`;
+- `out/docker-output` доступен как `/output`.
 
+## Архитектура
 
-```text
-   TGWR_by_IWS_v0.1.0 
-```    
-                           
-      ✧ ᴍᴀᴅᴇ ʙʏ IWANNASOME ꜰᴇᴀᴛ. dvunya ꜰᴇᴀᴛ TeMyCh ✧
-      
-</div>
+- Electron main process — окно, безопасный IPC, data lifecycle и запуск worker;
+- React + TypeScript — setup, Wrapped, Details, People и Share Preview;
+- Python + SQLite — импорт, нормализация, метрики и `report.json`;
+- JSONL по stdin/stdout — локальный протокол Electron ↔ worker;
+- PyInstaller — нативный worker для конечного пользователя;
+- electron-builder — NSIS, DMG, AppImage, DEB и RPM;
+- GitHub Actions — fixtures, browser smoke и нативная package/release matrix.
+
+## Автор
+
+TGWR / Telegram Wrapped создан **iwannasome**.
+
+Авторский канал: [IWANNASOME](https://t.me/shizikjke).

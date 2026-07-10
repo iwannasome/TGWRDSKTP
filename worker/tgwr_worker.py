@@ -367,7 +367,9 @@ def dedupe_existing_messages_by_msg_id(conn: sqlite3.Connection) -> int:
         return 0
 
 
+# Product decision for the current Russian-first release: calendar metrics use MSK (UTC+3).
 MSK_OFFSET_SECONDS = 3 * 60 * 60
+# Owner-required exclusions. Keep these IDs unless the product owner explicitly changes the rule.
 BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
 MAX_INFERRED_REPLY_SECONDS = 7 * 24 * 60 * 60
 PERSON_ANALYTICS_LIMIT = 50
