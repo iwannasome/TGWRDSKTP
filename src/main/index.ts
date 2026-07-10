@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync, constants as fsConstants, promises as fsp } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -16,6 +16,11 @@ const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
 const IPC_DELETE_REPORT = 'tgwr:delete-report' as const
+
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+}
 
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
@@ -386,9 +391,22 @@ async function computeDbPath(): Promise<{ db_path: string; location: 'exe' | 'us
 
 function isSafeFilename(name: string): boolean {
   if (name.trim().length === 0) return false
+  if (name !== basename(name)) return false
   if (name.includes('..')) return false
   if (name.includes('/') || name.includes('\\')) return false
   return true
+}
+
+function isAllowedOutputFilename(name: string): boolean {
+  if (!isSafeFilename(name)) return false
+  const ext = extname(name).toLowerCase()
+  return ext === '.png' || ext === '.pdf'
+}
+
+function isPathInsideDir(parentDir: string, childPath: string): boolean {
+  const parent = resolve(parentDir)
+  const child = resolve(childPath)
+  return child === parent || child.startsWith(parent.endsWith(sep) ? parent : `${parent}${sep}`)
 }
 
 ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
@@ -426,7 +444,7 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
     const bytesAny = payload.bytes as unknown
 
     if (dirPath.trim().length === 0) return { ok: false, error: 'dir_path is required' }
-    if (!isSafeFilename(filename)) return { ok: false, error: 'Unsafe filename' }
+    if (!isAllowedOutputFilename(filename)) return { ok: false, error: 'Unsafe filename or unsupported extension' }
 
     let bytes: Uint8Array
     try {
@@ -454,7 +472,10 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
     }
 
     await fsp.mkdir(dirPath, { recursive: true })
-    const outPath = join(dirPath, filename)
+    const outPath = resolve(dirPath, filename)
+    if (!isPathInsideDir(dirPath, outPath)) {
+      return { ok: false, error: 'Output path escaped selected directory' }
+    }
     await fsp.writeFile(outPath, Buffer.from(bytes))
     return { ok: true, path: outPath }
   } catch (err) {

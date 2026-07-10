@@ -12,17 +12,16 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
 
   return (
     <SlideFrame
-      kicker="IW$"
+      kicker="TGWR Reply"
       title={<span className="tgwr-gradient-text font-semibold">Кому отвечаешь быстрее всех</span>}
-      subtitle="Парни она мне написала!"
+      subtitle="Диалог, где твоя медиана ответа самая короткая."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
-          // Мгновенно фиксируем позицию и видимость при экспорте
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: exporting ? 0 : 0.06 }}
-          className="rounded-[44px] border border-white/10 bg-white/5 p-10"
+          className="tgwr-telegram-panel rounded-[30px] p-10"
         >
           <div className="break-words text-[22px] font-semibold leading-tight text-slate-100 [overflow-wrap:anywhere]">{champ?.name ?? '—'}</div>
 
@@ -48,25 +47,25 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
 
           {champ ? (
             <div className="mt-7 grid grid-cols-4 gap-4">
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">быстрее обычного</div>
                 <div className="mt-2 text-[18px] font-bold text-slate-50">
                   <AnimatedNumber value={Math.max(0, champ.deltaVsGlobalSeconds)} exporting={exporting} duration={0.62} delay={0.28} format={formatSecondsHuman} />
                 </div>
               </div>
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">ответов в расчете</div>
                 <div className="mt-2 text-[22px] font-bold text-slate-50">
                   <AnimatedNumber value={champ.samples} exporting={exporting} duration={0.62} delay={0.32} />
                 </div>
               </div>
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">сообщений в чате</div>
                 <div className="mt-2 text-[22px] font-bold text-slate-50">
                   <AnimatedNumber value={champ.totalMessages} exporting={exporting} duration={0.62} delay={0.36} />
                 </div>
               </div>
-              <div className="tgwr-info-card rounded-2xl border border-white/10 bg-black/15 px-4 py-4">
+              <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">минимум для чата</div>
                 <div className="mt-2 text-[22px] font-bold text-slate-50">
                   <AnimatedNumber value={champ.minimumMessagesRequired} exporting={exporting} duration={0.62} delay={0.4} />
@@ -77,7 +76,7 @@ export default function Slide09FastestReplyPerson({ report, period, exporting }:
 
           {!champ && (
             <div className="mt-8 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-              Нужны reply_to_msg_id + self_from_id, чтобы считать ответы.
+              Пока не хватает связанных ответов, чтобы построить этот рейтинг.
             </div>
           )}
         </motion.div>

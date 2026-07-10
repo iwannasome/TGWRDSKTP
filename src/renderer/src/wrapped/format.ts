@@ -78,3 +78,223 @@ export function ellipsize(text: string, max = 120): string {
   if (t.length <= max) return t
   return `${t.slice(0, Math.max(0, max - 1))}…`
 }
+
+export type InsightConfidenceLike = 'exact' | 'behavioral' | 'heuristic' | string
+
+export function formatInsightConfidence(value: InsightConfidenceLike): string {
+  switch (value) {
+    case 'exact':
+      return 'точно посчитано'
+    case 'behavioral':
+      return 'поведенческий вывод'
+    case 'heuristic':
+      return 'легкая эвристика'
+    default:
+      return 'поведенческий вывод'
+  }
+}
+
+export function formatPeriodHuman(period: 'year' | 'all_time'): string {
+  return period === 'all_time' ? 'за все время' : 'за год'
+}
+
+export function formatInsightNoWinnerReason(reason: string | null): string {
+  switch (reason) {
+    case null:
+      return ''
+    case 'not_enough_large_dialogs':
+      return 'Недостаточно крупных диалогов для честного вывода.'
+    case 'not_enough_stable_dialogs':
+      return 'Нет диалога, который прошел пороги стабильности.'
+    case 'no_sustained_comeback_after_quality_gates':
+      return 'Нет камбэка с достаточной активностью до и после паузы.'
+    case 'no_meaningful_growth_after_quality_gates':
+      return 'Нет роста, который проходит фильтр маленькой базы.'
+    case 'no_meaningful_fade_after_quality_gates':
+      return 'Нет заметного затухания после реальной активности.'
+    case 'not_enough_reply_samples':
+      return 'Недостаточно ответов для надежного ритма.'
+    case 'not_enough_media_events':
+      return 'Недостаточно медиа-сообщений.'
+    case 'missing_insight':
+      return 'Этот отчет был создан старой версией TGWR.'
+    default:
+      return 'Недостаточно данных для честного вывода.'
+  }
+}
+
+export function formatInsightEvidenceLabel(key: string): string {
+  switch (key) {
+    case 'total_messages':
+      return 'Сообщений'
+    case 'minimum_messages_required':
+      return 'Минимум сообщений'
+    case 'active_days':
+      return 'Активных дней'
+    case 'total_active_days':
+      return 'Всего активных дней'
+    case 'active_months':
+      return 'Активных месяцев'
+    case 'observed_months':
+      return 'Месяцев в окне'
+    case 'coverage_ratio':
+      return 'Покрытие месяцев'
+    case 'minimum_coverage_ratio':
+      return 'Минимальное покрытие'
+    case 'balance_ratio':
+      return 'Баланс'
+    case 'stability_ratio':
+      return 'Стабильность'
+    case 'gap_days':
+      return 'Пауза'
+    case 'before_messages':
+      return 'До паузы'
+    case 'after_messages':
+      return 'После паузы'
+    case 'minimum_after_messages':
+      return 'Минимум после паузы'
+    case 'after_active_days':
+      return 'Активных дней после'
+    case 'reactivation_delta':
+      return 'Прирост после паузы'
+    case 'reactivation_ratio':
+      return 'Рост после паузы'
+    case 'from_datetime':
+      return 'С какого момента'
+    case 'to_datetime':
+      return 'Возврат'
+    case 'early_messages':
+      return 'Раньше'
+    case 'late_messages':
+      return 'Позже'
+    case 'early_monthly_rate':
+      return 'Раньше в месяц'
+    case 'late_monthly_rate':
+      return 'Позже в месяц'
+    case 'change_messages':
+      return 'Изменение'
+    case 'change_ratio':
+      return 'Мультипликатор'
+    case 'messages':
+      return 'Сообщений'
+    case 'ratio':
+      return 'Доля'
+    case 'message_count':
+      return 'Сообщений в сессии'
+    case 'duration_seconds':
+      return 'Длительность'
+    case 'density_per_hour':
+      return 'Плотность'
+    case 'observed_max_gap_seconds':
+      return 'Максимальный разрыв'
+    case 'session_gap_limit_seconds':
+      return 'Допустимый разрыв'
+    case 'maximum_session_seconds':
+      return 'Лимит сессии'
+    case 'start_datetime':
+      return 'Старт'
+    case 'end_datetime':
+      return 'Финиш'
+    case 'median_reply_seconds':
+      return 'Медианный ответ'
+    case 'reply_samples':
+      return 'Замеров'
+    case 'minimum_reply_samples':
+      return 'Минимум замеров'
+    case 'rhythm':
+      return 'Ритм'
+    case 'sent_messages':
+      return 'Отправлено'
+    case 'received_messages':
+      return 'Получено'
+    case 'imbalance_ratio':
+      return 'Дисбаланс'
+    case 'days_started_by_them':
+      return 'Начато собеседником'
+    case 'days_started_by_you':
+      return 'Начато тобой'
+    case 'initiated_days':
+      return 'Дней с первым сообщением'
+    case 'them_ratio':
+      return 'Доля собеседника'
+    case 'restarts_by_them':
+      return 'Возвратов собеседником'
+    case 'restarts_by_you':
+      return 'Возвратов тобой'
+    case 'contact_starts_by_them':
+      return 'Контактов начато собеседником'
+    case 'contact_starts_by_you':
+      return 'Контактов начато тобой'
+    case 'contact_events':
+      return 'Отдельных контактов'
+    case 'minimum_contact_events':
+      return 'Минимум контактов'
+    case 'restart_events':
+      return 'Возвратов после тишины'
+    case 'minimum_restart_events':
+      return 'Минимум возвратов'
+    case 'dominant_side':
+      return 'Чаще начинал'
+    case 'dominance_ratio':
+      return 'Доля ведущей стороны'
+    case 'contact_gap_seconds':
+      return 'Пауза между контактами'
+    case 'silence_gap_seconds':
+      return 'Порог тишины'
+    case 'media_total':
+      return 'Медиа'
+    case 'top_media_type':
+      return 'Главный тип'
+    case 'top_media_count':
+      return 'Главного типа'
+    case 'media_ratio':
+      return 'Доля медиа'
+    default:
+      return key
+        .replaceAll('_', ' ')
+        .replace(/^\w/, (char) => char.toUpperCase())
+  }
+}
+
+export function formatEvidenceValue(key: string, value: unknown): string {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (key === 'density_per_hour' && Number.isFinite(n)) {
+    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/ч`
+  }
+  if ((key === 'change_ratio' || key === 'reactivation_ratio') && Number.isFinite(n)) {
+    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}x`
+  }
+  if ((key === 'early_monthly_rate' || key === 'late_monthly_rate') && Number.isFinite(n)) {
+    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/мес.`
+  }
+  if ((key === 'ratio' || key.endsWith('_ratio')) && Number.isFinite(n)) return formatPercent01(n)
+  if (key.endsWith('_seconds') && Number.isFinite(n)) return formatSecondsHuman(n)
+  if (key.endsWith('_days') && Number.isFinite(n)) return `${formatInt(n)} дн.`
+  if (key === 'top_media_type' && typeof value === 'string') {
+    const labels: Record<string, string> = {
+      photo: 'фото',
+      video: 'видео',
+      voice: 'голосовые',
+      sticker: 'стикеры',
+      gif: 'GIF',
+      file: 'файлы',
+      other: 'другое'
+    }
+    return labels[value] ?? value
+  }
+  if (key === 'rhythm' && typeof value === 'string') {
+    const labels: Record<string, string> = {
+      fast: 'быстрый',
+      measured: 'размеренный',
+      slow: 'медленный',
+      rare: 'редкий'
+    }
+    return labels[value] ?? value
+  }
+  if (key === 'dominant_side' && typeof value === 'string') {
+    return value === 'them' ? 'собеседник' : value === 'you' ? 'ты' : value
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) return formatInt(value)
+  if (typeof value === 'string' && value.length > 0) return value
+  return '—'
+}

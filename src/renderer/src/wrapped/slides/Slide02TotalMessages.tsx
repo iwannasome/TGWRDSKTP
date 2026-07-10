@@ -23,23 +23,21 @@ export default function Slide02TotalMessages({
 
   return (
     <SlideFrame
-      kicker="IW$"
-      title={<span className="tgwr-gradient-text font-semibold">Твои сообщения</span>}
-      subtitle="Куча интересного впереди: смотри, впитывай и вспоминай."
-      footerHint={exporting ? undefined : "Toggle влияет на все слайды."}
+      kicker="TGWR Stats"
+      title={<span className="tgwr-gradient-text font-semibold">Сколько ты переписывался</span>}
+      subtitle="Главная цифра Wrapped: общий объем диалогов за выбранный период."
+      footerHint={exporting ? undefined : 'Переключатель периода меняет все слайды.'}
     >
       <div className="flex h-full flex-col justify-between">
         <div>
-          {/* Переключатель периодов: теперь снова КНОПКИ и без выделения текста */}
-          <div className="inline-flex select-none items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+          <div className="inline-flex select-none items-center gap-2 rounded-full border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.58)] p-1 shadow-[0_14px_34px_rgba(0,0,0,0.18)]">
             <button
               type="button"
-              // Возвращаем клик только если мы не в режиме экспорта
               onClick={period === 'all_time' || exporting ? undefined : onPeriodToggle}
               className={[
                 'rounded-full px-4 py-2 text-sm font-semibold transition',
                 period === 'all_time'
-                  ? 'bg-white/10 text-slate-50 cursor-default'
+                  ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-slate-50 cursor-default'
                   : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
               ].join(' ')}
             >
@@ -51,7 +49,7 @@ export default function Slide02TotalMessages({
               className={[
                 'rounded-full px-4 py-2 text-sm font-semibold transition',
                 period === 'year'
-                  ? 'bg-white/10 text-slate-50 cursor-default'
+                  ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-slate-50 cursor-default'
                   : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
               ].join(' ')}
             >
@@ -68,7 +66,7 @@ export default function Slide02TotalMessages({
               initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: exporting ? 0 : 0.08 }}
-              className="mt-5 text-[110px] font-bold leading-none"
+              className="mt-5 text-[116px] font-bold leading-none"
             >
               <AnimatedNumber
                 value={total}
@@ -87,7 +85,7 @@ export default function Slide02TotalMessages({
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.36, delay: exporting ? 0 : 0.24 }}
-            className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
+            className="tgwr-info-card tgwr-telegram-panel rounded-[26px] px-6 py-5"
           >
             <div className="text-[13px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               В активный день
@@ -106,7 +104,7 @@ export default function Slide02TotalMessages({
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.36, delay: exporting ? 0 : 0.3 }}
-            className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-6 py-5"
+            className="tgwr-info-card tgwr-telegram-panel rounded-[26px] px-6 py-5"
           >
             <div className="text-[13px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Самый тихий месяц

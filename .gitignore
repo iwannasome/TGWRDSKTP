@@ -9,6 +9,7 @@ node_modules/
 dist/
 release/
 out/
+.tmp/
 .vite/
 *.tsbuildinfo
 *.AppImage
@@ -90,6 +91,16 @@ desktop.ini
 # Local agent/tooling state
 .agents/
 .codex/
+.agent-sync/
+.claude/
+INIT.md
+hooks/
+skills/
+templates/
+
+# Local agent/tooling scripts copied from external workflow repos
+scripts/check_consistency.py
+scripts/extract_changelog.py
 
 # Old local/manual IPC probes
 test-ipc.js

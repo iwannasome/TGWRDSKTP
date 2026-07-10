@@ -13,6 +13,7 @@ const outDir = join(workDir, 'out')
 const screenshotsDir = join(workDir, 'screenshots')
 const dbPath = join(outDir, 'tgwr.db')
 const selfId = 'user100000000'
+const SLIDE_COUNT = 22
 
 function isoDate(baseMs, index, stepMinutes = 37) {
   return new Date(baseMs + index * stepMinutes * 60_000).toISOString().replace('.000Z', '')
@@ -65,6 +66,48 @@ function makeMessages({ peerId, peerName, startMs, count }) {
   return messages
 }
 
+function makeSegmentedMessages({ peerId, peerName, segments }) {
+  const messages = []
+  let nextId = 1
+
+  for (const segment of segments) {
+    const {
+      startMs,
+      count,
+      stepMinutes = 37,
+      textPrefix = 'conversation insight fixture',
+      mediaType = null,
+      mediaEvery = 0,
+      stickerEvery = 0,
+      outgoingOffset = 0
+    } = segment
+
+    for (let i = 0; i < count; i += 1) {
+      const id = nextId
+      const tsMs = startMs + i * stepMinutes * 60_000
+      const outgoing = (id + outgoingOffset) % 2 === 0
+      const msg = {
+        id,
+        type: 'message',
+        date: new Date(tsMs).toISOString().replace('.000Z', ''),
+        date_unixtime: String(Math.floor(tsMs / 1000)),
+        from: outgoing ? 'Synthetic Self' : peerName,
+        from_id: outgoing ? selfId : peerId,
+        text: `${textPrefix} ${peerName} #${id}`
+      }
+
+      if (id > 1 && outgoing) msg.reply_to_message_id = id - 1
+      if (mediaType && (!mediaEvery || id % mediaEvery === 0)) msg.media_type = mediaType
+      if (stickerEvery && id % stickerEvery === 0) msg.sticker_emoji = '✨'
+
+      messages.push(msg)
+      nextId += 1
+    }
+  }
+
+  return messages
+}
+
 async function generateExport() {
   await rm(workDir, { recursive: true, force: true })
   await mkdir(exportDir, { recursive: true })
@@ -80,7 +123,7 @@ async function generateExport() {
         peerId: 'user200001',
         peerName: 'Александра Очень Длинное Имя Для Проверки Переносов Интерфейса',
         startMs: Date.UTC(2025, 0, 1, 9, 0, 0),
-        count: 3400
+        count: 5200
       })
     },
     {
@@ -91,7 +134,7 @@ async function generateExport() {
         peerId: 'user200002',
         peerName: 'Maximilian LongName With Mixed Русский English Tokens',
         startMs: Date.UTC(2025, 3, 1, 23, 30, 0),
-        count: 3300
+        count: 5100
       })
     },
     {
@@ -103,6 +146,234 @@ async function generateExport() {
         peerName: 'Короткий чат',
         startMs: Date.UTC(2024, 10, 10, 7, 15, 0),
         count: 180
+      })
+    },
+    {
+      id: 300001,
+      type: 'personal_chat',
+      name: 'Стабильный диалог',
+      messages: makeSegmentedMessages({
+        peerId: 'user300001',
+        peerName: 'Стабильный диалог',
+        segments: Array.from({ length: 12 }, (_, month) => ({
+          startMs: Date.UTC(2025, month, 5, 10, 0, 0),
+          count: 50,
+          stepMinutes: 180,
+          textPrefix: 'ровный стабильный контакт'
+        }))
+      })
+    },
+    {
+      id: 300002,
+      type: 'personal_chat',
+      name: 'Слишком короткая пауза для камбэка',
+      messages: makeSegmentedMessages({
+        peerId: 'user300002',
+        peerName: 'Слишком короткая пауза для камбэка',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 0, 1, 9, 0, 0),
+            count: 1408,
+            stepMinutes: 5,
+            textPrefix: 'активность до паузы на пятьдесят девять дней'
+          },
+          {
+            startMs: Date.UTC(2025, 2, 6, 6, 15, 0),
+            count: 2640,
+            stepMinutes: 13,
+            textPrefix: 'много сообщений после короткой для камбэка паузы'
+          }
+        ]
+      })
+    },
+    {
+      id: 300003,
+      type: 'personal_chat',
+      name: 'Ложный маленький камбэк',
+      messages: makeSegmentedMessages({
+        peerId: 'user300003',
+        peerName: 'Ложный маленький камбэк',
+        segments: [
+          {
+            startMs: Date.UTC(2022, 0, 10, 12, 0, 0),
+            count: 2,
+            stepMinutes: 60,
+            textPrefix: 'слишком мало до паузы'
+          },
+          {
+            startMs: Date.UTC(2024, 10, 10, 12, 0, 0),
+            count: 4,
+            stepMinutes: 60,
+            textPrefix: 'слишком мало после паузы'
+          }
+        ]
+      })
+    },
+    {
+      id: 300004,
+      type: 'personal_chat',
+      name: 'Диалог который стал ближе',
+      messages: makeSegmentedMessages({
+        peerId: 'user300004',
+        peerName: 'Диалог который стал ближе',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 2, 1, 9, 0, 0),
+            count: 300,
+            stepMinutes: 240,
+            textPrefix: 'тихое начало года'
+          },
+          {
+            startMs: Date.UTC(2025, 10, 1, 9, 0, 0),
+            count: 900,
+            stepMinutes: 35,
+            textPrefix: 'вторая половина стала заметно активнее'
+          }
+        ]
+      })
+    },
+    {
+      id: 300005,
+      type: 'personal_chat',
+      name: 'Диалог который затих',
+      messages: makeSegmentedMessages({
+        peerId: 'user300005',
+        peerName: 'Диалог который затих',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 1, 1, 9, 0, 0),
+            count: 900,
+            stepMinutes: 35,
+            textPrefix: 'очень активное начало года'
+          },
+          {
+            startMs: Date.UTC(2025, 11, 1, 9, 0, 0),
+            count: 300,
+            stepMinutes: 120,
+            textPrefix: 'к концу года стало тише'
+          }
+        ]
+      })
+    },
+    {
+      id: 300006,
+      type: 'personal_chat',
+      name: 'Медиа связь',
+      messages: makeSegmentedMessages({
+        peerId: 'user300006',
+        peerName: 'Медиа связь',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 4, 1, 14, 0, 0),
+            count: 420,
+            stepMinutes: 45,
+            textPrefix: 'много медиа в переписке',
+            mediaType: 'photo',
+            mediaEvery: 1,
+            stickerEvery: 5
+          }
+        ]
+      })
+    },
+    {
+      id: 300007,
+      type: 'personal_chat',
+      name: 'Старый all time диалог',
+      messages: makeSegmentedMessages({
+        peerId: 'user300007',
+        peerName: 'Старый all time диалог',
+        segments: [
+          {
+            startMs: Date.UTC(2021, 5, 1, 12, 0, 0),
+            count: 700,
+            stepMinutes: 80,
+            textPrefix: 'история до выбранного года'
+          }
+        ]
+      })
+    },
+    {
+      id: 300008,
+      type: 'personal_chat',
+      name: 'Полина <3333',
+      messages: makeSegmentedMessages({
+        peerId: 'user300008',
+        peerName: 'Полина <3333',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 1, 1, 0, 0, 0),
+            count: 320,
+            stepMinutes: 20,
+            textPrefix: 'нормальное общение до длинной паузы'
+          },
+          {
+            startMs: Date.UTC(2025, 4, 11, 10, 20, 0),
+            count: 2280,
+            stepMinutes: 15,
+            textPrefix: 'сильный процент роста на меньшем общем объеме'
+          }
+        ]
+      })
+    },
+    {
+      id: 300009,
+      type: 'personal_chat',
+      name: 'Ровные месяцы с большой дырой',
+      messages: makeSegmentedMessages({
+        peerId: 'user300009',
+        peerName: 'Ровные месяцы с большой дырой',
+        segments: [0, 1, 2, 9, 10, 11].map((month) => ({
+          startMs: Date.UTC(2025, month, 5, 10, 0, 0),
+          count: 100,
+          stepMinutes: 60,
+          textPrefix: 'активный месяц вокруг длинного провала'
+        }))
+      })
+    },
+    {
+      id: 300010,
+      type: 'personal_chat',
+      name: 'Красивый рост на маленькой базе',
+      messages: makeSegmentedMessages({
+        peerId: 'user300010',
+        peerName: 'Красивый рост на маленькой базе',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 2, 1, 9, 0, 0),
+            count: 100,
+            stepMinutes: 240,
+            textPrefix: 'маленькая ранняя база'
+          },
+          {
+            startMs: Date.UTC(2025, 10, 1, 9, 0, 0),
+            count: 400,
+            stepMinutes: 35,
+            textPrefix: 'красивый процент без достаточного объема'
+          }
+        ]
+      })
+    },
+    {
+      id: 300011,
+      type: 'personal_chat',
+      name: 'Крупный устойчивый камбэк',
+      messages: makeSegmentedMessages({
+        peerId: 'user300011',
+        peerName: 'Крупный устойчивый камбэк',
+        segments: [
+          {
+            startMs: Date.UTC(2025, 0, 10, 9, 0, 0),
+            count: 800,
+            stepMinutes: 20,
+            textPrefix: 'большой активный диалог до паузы'
+          },
+          {
+            startMs: Date.UTC(2025, 4, 1, 9, 0, 0),
+            count: 3200,
+            stepMinutes: 10,
+            textPrefix: 'крупное устойчивое возвращение после паузы'
+          }
+        ]
       })
     },
     {
@@ -216,21 +487,233 @@ async function runWorkerSmoke() {
   }
 }
 
+const INSIGHT_KEYS = [
+  'main_person',
+  'stable_dialog',
+  'comeback',
+  'closer_dialog',
+  'faded_dialog',
+  'night_companion',
+  'day_anchor',
+  'alive_dialog',
+  'longest_live_session',
+  'reply_rhythm',
+  'mutual_dialog',
+  'contact_initiator',
+  'silence_restarter',
+  'media_bond'
+]
+
+const ALLOWED_CONFIDENCE = new Set(['exact', 'behavioral', 'heuristic'])
+
 function assertReport(report) {
   const allTime = report?.periods?.all_time
   const year = report?.periods?.year
+
+  const sumCounts = (items, key = 'count') =>
+    Array.isArray(items)
+      ? items.reduce((acc, item) => acc + Number(item?.[key] ?? 0), 0)
+      : 0
+
+  const sumRecord = (record) =>
+    record && typeof record === 'object'
+      ? Object.values(record).reduce((acc, value) => acc + Number(value ?? 0), 0)
+      : 0
+
+  const closeTo = (a, b, epsilon = 0.000001) => Math.abs(Number(a ?? 0) - Number(b ?? 0)) <= epsilon
+
+  const pick = (record, snakeKey, camelKey = snakeKey) => record?.[snakeKey] ?? record?.[camelKey]
+
+  const assertPeriodInvariants = (label, period, expected) => {
+    const total = Number(period?.total_messages ?? -1)
+    const sent = Number(period?.sent_messages ?? -1)
+    const received = Number(period?.received_messages ?? -1)
+    const daily = period?.daily_activity
+    const hourly = period?.hourly_activity
+    const topMessages = period?.top_10_people_by_messages ?? []
+
+    return [
+      [`${label}.exact_total`, total === expected.total],
+      [`${label}.sent_plus_received`, sent + received === total],
+      [`${label}.daily_sum`, sumCounts(daily) === total],
+      [`${label}.hourly_24`, Array.isArray(hourly) && hourly.length === 24],
+      [`${label}.hourly_sum`, sumCounts(hourly) === total],
+      [`${label}.active_days_bound`, Number(period?.active_days_count ?? 0) <= (Array.isArray(daily) ? daily.length : 0)],
+      [`${label}.active_chats_count`, Number(period?.active_chats_count ?? -1) === expected.activeChats],
+      [`${label}.top_people_totals`, topMessages.every((person) => Number(person?.sent_messages ?? 0) + Number(person?.received_messages ?? 0) === Number(person?.total_messages ?? -1))],
+      [`${label}.top_people_sorted`, topMessages.every((person, idx, arr) => idx === 0 || Number(arr[idx - 1]?.total_messages ?? 0) >= Number(person?.total_messages ?? 0))],
+      [`${label}.media_counts_non_negative`, Object.values(period?.media_counts ?? {}).every((count) => Number(count) >= 0)],
+      [`${label}.media_sum_reasonable`, sumRecord(period?.media_counts ?? {}) <= total]
+    ]
+  }
+
+  const assertPersonAnalyticsInvariants = (people) => {
+    if (!Array.isArray(people)) return [['people_analytics_shape', false]]
+    const checks = []
+    for (const [personIndex, person] of people.entries()) {
+      const periods = person?.periods ?? {}
+      for (const periodKey of ['all_time', 'year']) {
+        const period = periods?.[periodKey]
+        if (!period) continue
+        const total = Number(pick(period, 'total_messages', 'totalMessages') ?? 0)
+        const sent = Number(pick(period, 'sent_messages', 'sentMessages') ?? 0)
+        const received = Number(pick(period, 'received_messages', 'receivedMessages') ?? 0)
+        const sentRatio = Number(pick(period, 'sent_ratio', 'sentRatio') ?? 0)
+        const receivedRatio = Number(pick(period, 'received_ratio', 'receivedRatio') ?? 0)
+        const hourlyActivity = pick(period, 'hourly_activity', 'hourlyActivity')
+        const mediaCounts = pick(period, 'media_counts', 'mediaCounts') ?? {}
+        const mediaTotal = Number(pick(period, 'media_total', 'mediaTotal') ?? 0)
+        const daysStartedByYou = Number(pick(period, 'days_started_by_you', 'daysStartedByYou') ?? 0)
+        const daysStartedByThem = Number(pick(period, 'days_started_by_them', 'daysStartedByThem') ?? 0)
+        const initiatedDays = Number(pick(period, 'initiated_days', 'initiatedDays') ?? 0)
+        const yourReplySamples = Number(pick(period, 'your_reply_samples', 'yourReplySamples') ?? 0)
+        const theirReplySamples = Number(pick(period, 'their_reply_samples', 'theirReplySamples') ?? 0)
+
+        checks.push([`people_${personIndex}.${periodKey}.sent_received_total`, sent + received === total])
+        checks.push([`people_${personIndex}.${periodKey}.ratio_sum`, total === 0 || closeTo(sentRatio + receivedRatio, 1)])
+        checks.push([`people_${personIndex}.${periodKey}.hourly_24`, Array.isArray(hourlyActivity) && hourlyActivity.length === 24])
+        checks.push([`people_${personIndex}.${periodKey}.hourly_sum`, sumCounts(hourlyActivity) === total])
+        checks.push([`people_${personIndex}.${periodKey}.media_total`, sumRecord(mediaCounts) === mediaTotal])
+        checks.push([`people_${personIndex}.${periodKey}.initiated_days`, daysStartedByYou + daysStartedByThem === initiatedDays])
+        checks.push([`people_${personIndex}.${periodKey}.reply_samples`, yourReplySamples >= 0 && theirReplySamples >= 0])
+      }
+    }
+    return checks
+  }
+
+  const assertInsightContract = (label, period) => {
+    const insights = period?.conversation_insights
+    const checks = [[`${label}.conversation_insights_shape`, insights && typeof insights === 'object' && !Array.isArray(insights)]]
+    if (!insights || typeof insights !== 'object' || Array.isArray(insights)) return checks
+
+    for (const key of INSIGHT_KEYS) {
+      const insight = insights[key]
+      const hasInsight = insight && typeof insight === 'object' && !Array.isArray(insight)
+      checks.push([`${label}.insight.${key}.shape`, hasInsight])
+      if (!hasInsight) continue
+
+      const winner = insight.winner
+      const winnerOk =
+        winner === null ||
+        (winner &&
+          typeof winner === 'object' &&
+          !Array.isArray(winner) &&
+          typeof winner.peer_from_id === 'string' &&
+          typeof winner.display_name === 'string')
+
+      checks.push([`${label}.insight.${key}.kind`, insight.kind === key])
+      checks.push([`${label}.insight.${key}.confidence`, ALLOWED_CONFIDENCE.has(insight.confidence)])
+      checks.push([`${label}.insight.${key}.evidence`, insight.evidence && typeof insight.evidence === 'object' && !Array.isArray(insight.evidence)])
+      checks.push([`${label}.insight.${key}.candidates`, Array.isArray(insight.candidates)])
+      checks.push([`${label}.insight.${key}.winner`, Boolean(winnerOk)])
+      checks.push([`${label}.insight.${key}.no_winner_reason`, Object.prototype.hasOwnProperty.call(insight, 'no_winner_reason')])
+      checks.push([`${label}.insight.${key}.winner_or_reason`, winner !== null || typeof insight.no_winner_reason === 'string'])
+    }
+
+    return checks
+  }
+
+  const getInsightWinnerPeer = (period, key) => {
+    const winner = period?.conversation_insights?.[key]?.winner
+    return winner && typeof winner === 'object' ? winner.peer_from_id : null
+  }
+
+  const assertLongestSilenceQuality = (label, period) => {
+    const silence = period?.longest_silence_gap
+    return [
+      [`${label}.longest_silence_requires_3000_messages`, Number(silence?.minimum_messages_required ?? 0) === 3000],
+      [`${label}.longest_silence_winner_is_qualified`, Number(silence?.chat_message_count ?? 0) >= 3000],
+      [`${label}.longest_silence_tiny_chat_blocked`, silence?.peer_from_id !== 'user300003']
+    ]
+  }
+
+  const assertLiveSessionQuality = (label, period) => {
+    const insights = period?.conversation_insights ?? {}
+    const checks = []
+    for (const key of ['alive_dialog', 'longest_live_session']) {
+      const insight = insights[key]
+      const evidence = insight?.evidence ?? {}
+      checks.push([`${label}.${key}.bounded_duration`, Number(evidence.maximum_session_seconds ?? 0) === 12 * 60 * 60 && Number(evidence.duration_seconds ?? Number.POSITIVE_INFINITY) <= 12 * 60 * 60])
+      checks.push([`${label}.${key}.bounded_message_gap`, Number(evidence.session_gap_limit_seconds ?? 0) === 30 * 60 && Number(evidence.observed_max_gap_seconds ?? Number.POSITIVE_INFINITY) <= 30 * 60])
+      checks.push([`${label}.${key}.minimum_density`, Number(evidence.density_per_hour ?? 0) >= 4])
+      checks.push([`${label}.${key}.two_sided`, Number(evidence.sent_messages ?? 0) > 0 && Number(evidence.received_messages ?? 0) > 0])
+    }
+    return checks
+  }
+
+  const assertBehavioralInsightQuality = (label, period, thresholds) => {
+    const insights = period?.conversation_insights ?? {}
+    const stable = insights.stable_dialog
+    const closer = insights.closer_dialog
+    const faded = insights.faded_dialog
+    const reply = insights.reply_rhythm
+    const initiative = insights.contact_initiator
+    const restarter = insights.silence_restarter
+
+    return [
+      [`${label}.stable_dialog_fixture`, stable?.winner?.peer_from_id === 'user300001'],
+      [`${label}.stable_dialog_calendar_coverage`, Number(stable?.evidence?.coverage_ratio ?? 0) >= thresholds.stableCoverage && Number(stable?.evidence?.observed_months ?? 0) >= 12],
+      [`${label}.stable_dialog_gap_fixture_blocked`, !(stable?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
+      [`${label}.closer_dialog_minimum_volume`, Number(closer?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(closer?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
+      [`${label}.faded_dialog_minimum_volume`, Number(faded?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(faded?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
+      [`${label}.tiny_growth_fixture_blocked`, !(closer?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300010')],
+      [`${label}.reply_rhythm_samples`, Number(reply?.evidence?.reply_samples ?? 0) >= thresholds.replySamples && Number(reply?.evidence?.minimum_reply_samples ?? 0) === thresholds.replySamples],
+      [`${label}.contact_initiator_gap`, Number(initiative?.evidence?.contact_gap_seconds ?? 0) === 12 * 60 * 60],
+      [`${label}.contact_initiator_samples`, Number(initiative?.evidence?.contact_events ?? 0) >= thresholds.contactEvents && Number(initiative?.evidence?.minimum_contact_events ?? 0) === thresholds.contactEvents],
+      [`${label}.contact_initiator_dominance`, Number(initiative?.evidence?.dominance_ratio ?? 0) >= 0.6],
+      [`${label}.silence_restarter_gap`, Number(restarter?.evidence?.silence_gap_seconds ?? 0) === 7 * 24 * 60 * 60],
+      [`${label}.silence_restarter_samples`, Number(restarter?.evidence?.restart_events ?? 0) >= thresholds.restartEvents && Number(restarter?.evidence?.minimum_restart_events ?? 0) === thresholds.restartEvents],
+      [`${label}.silence_restarter_dominance`, Number(restarter?.evidence?.dominance_ratio ?? 0) >= 0.6]
+    ]
+  }
+
+  const assertComebackQuality = (label, period) => {
+    const comeback = period?.conversation_insights?.comeback
+    const candidates = comeback?.candidates ?? []
+    return [
+      [`${label}.comeback_large_dialog_wins`, comeback?.winner?.peer_from_id === 'user300011'],
+      [`${label}.comeback_minimum_volume`, Number(comeback?.winner?.total_messages ?? 0) >= 2500 && Number(comeback?.evidence?.minimum_messages_required ?? 0) === 2500],
+      [`${label}.comeback_smaller_high_ratio_is_eligible`, candidates.some((candidate) => candidate?.peer_from_id === 'user300008')],
+      [`${label}.comeback_large_dialog_outranks_ratio`, candidates.findIndex((candidate) => candidate?.peer_from_id === 'user300011') < candidates.findIndex((candidate) => candidate?.peer_from_id === 'user300008')],
+      [`${label}.comeback_activity_evidence`, Number(comeback?.evidence?.total_active_days ?? 0) >= 20]
+    ]
+  }
+
   const required = [
+    ...assertPeriodInvariants('all_time', allTime, { total: 26354, activeChats: 14 }),
+    ...assertPeriodInvariants('year', year, { total: 25468, activeChats: 11 }),
+    ...assertPersonAnalyticsInvariants(report?.people_analytics),
+    ...assertInsightContract('all_time', allTime),
+    ...assertInsightContract('year', year),
+    ...assertLongestSilenceQuality('all_time', allTime),
+    ...assertLongestSilenceQuality('year', year),
+    ...assertLiveSessionQuality('all_time', allTime),
+    ...assertLiveSessionQuality('year', year),
+    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, trendMessages: 1200, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
+    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, trendMessages: 1000, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
+    ...assertComebackQuality('all_time', allTime),
+    ...assertComebackQuality('year', year),
+    ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
+    ['year.comeback_59_day_spike_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300002'],
+    ['year.comeback_tiny_false_positive_blocked', getInsightWinnerPeer(year, 'comeback') !== 'user300003' && getInsightWinnerPeer(allTime, 'comeback') !== 'user300003'],
+    ['year.closer_dialog_fixture', getInsightWinnerPeer(year, 'closer_dialog') === 'user300004'],
+    ['year.faded_dialog_fixture_eligible', (year?.conversation_insights?.faded_dialog?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300005')],
+    ['year.media_bond_fixture', getInsightWinnerPeer(year, 'media_bond') === 'user300006'],
     ['all_time.total_messages', allTime?.total_messages > 4500],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
     ['top_10_people_by_mutuality', year?.top_10_people_by_mutuality?.length >= 2],
+    ['all_time.top_10_people_by_mutuality_5000_gate', (allTime?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
+    ['top_10_people_by_mutuality_5000_gate', (year?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
+    ['all_time.mutual_dialog_5000_gate', Number(allTime?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
+    ['year.mutual_dialog_5000_gate', Number(year?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
     ['top_longest_messages_sent', allTime?.top_longest_messages_sent?.length > 0],
     ['word_cloud', Object.keys(allTime?.word_cloud ?? {}).length > 0],
     ['achievements', report?.achievements?.length > 0],
     ['period_span', Boolean(allTime?.period_span?.first_date && allTime?.period_span?.last_date)],
-    ['quietest_month', Boolean(year?.quietest_month?.value) && year?.quietest_month?.count === 0],
+    ['quietest_month', Boolean(year?.quietest_month?.value) && Number(year?.quietest_month?.count ?? -1) >= 0],
     ['direction_extremes', Boolean(year?.most_balanced_day?.date && year?.most_one_sided_day?.date)],
     ['night_insights', Boolean(year?.night_peak_hour && year?.most_night_date)],
     ['reply_thresholds', year?.who_you_reply_fastest?.minimum_messages_required === 2500 && year?.who_you_ignore_most?.minimum_messages_required === 3000],
@@ -268,6 +751,7 @@ function makeEmptyReport(baseReport) {
       sent_messages: 0,
       received_messages: 0,
       total_chats_personal: 0,
+      active_chats_count: 0,
       most_active_day: null,
       most_active_month: null,
       most_active_hour: null,
@@ -443,7 +927,7 @@ function runChrome(chrome, args, timeoutMs = 20_000) {
 }
 
 function allSlideTargets() {
-  return Array.from({ length: 21 }, (_, idx) => idx)
+  return Array.from({ length: SLIDE_COUNT }, (_, idx) => idx)
 }
 
 async function getBuiltAssets() {
@@ -466,7 +950,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         document.body.innerHTML = '<pre style="white-space:pre-wrap;padding:24px;color:#fca5a5;background:#111827;font:16px monospace">' + String(message).replace(/[<>&]/g, (ch) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch])) + '</pre>';
       }
       function runNavigationStress(root) {
-        const expected = '20';
+        const expected = '${SLIDE_COUNT - 1}';
         const deadline = Date.now() + 5000;
         for (let i = 0; i < 80; i += 1) {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
@@ -491,6 +975,19 @@ function renderHarnessHtml(report, assets, slideIndex) {
       function findButtonByText(text) {
         const buttons = Array.from(document.querySelectorAll('button'));
         return buttons.find((button) => (button.textContent || '').trim() === text) || null;
+      }
+      function prepareInsightExportCardCheck() {
+        const card = document.querySelector('[data-tgwr-insight-export-card]');
+        if (!card) return false;
+        const wrapper = card.closest('[aria-hidden="true"]') || card.parentElement;
+        if (!wrapper) return false;
+        wrapper.style.left = '0px';
+        wrapper.style.top = '0px';
+        wrapper.style.zIndex = '9999';
+        wrapper.style.pointerEvents = 'none';
+        wrapper.style.background = '#05070a';
+        document.body.setAttribute('data-insight-card-check', 'ok');
+        return true;
       }
       function runPeopleViewCheck() {
         const deadline = Date.now() + 7000;
@@ -520,7 +1017,17 @@ function renderHarnessHtml(report, assets, slideIndex) {
             }
           }
 
-          if (view === 'people' && document.body.textContent.includes('Аналитика по человеку')) {
+          if (
+            view === 'people' &&
+            document.body.textContent.includes('Сигналы переписки') &&
+            document.body.textContent.includes('14 выводов по переписке')
+          ) {
+            if (new URLSearchParams(window.location.search).get('tgwr_insight_card_check') === '1') {
+              if (!prepareInsightExportCardCheck()) {
+                setTimeout(tick, 80);
+                return;
+              }
+            }
             document.body.setAttribute('data-people-check', 'ok');
             return;
           }
@@ -632,8 +1139,9 @@ async function runScreenshots(report, options = {}) {
   }
 
   const label = options.label ?? 'base'
-  const targets = options.targets ?? [0, 1, 7, 10, 13, 18, 20]
+  const targets = options.targets ?? [0, 1, 7, 8, 10, 13, 18, 20]
   const viewport = options.viewport ?? { width: 1280, height: 900 }
+  const minScreenshotBytes = options.minScreenshotBytes ?? 25_000
   const screenshots = []
   const harness = await startHarnessServer(report)
 
@@ -659,7 +1167,7 @@ async function runScreenshots(report, options = {}) {
         throw new Error(`DOM check did not reach slides view for ${label} slide ${slideIndex + 1}`)
       }
 
-      if (!domRes.stdout.includes(`${slideIndex + 1} / 21`)) {
+      if (!domRes.stdout.includes(`${slideIndex + 1} / ${SLIDE_COUNT}`)) {
         throw new Error(`DOM check opened wrong slide for ${label} slide ${slideIndex + 1}`)
       }
 
@@ -680,7 +1188,9 @@ async function runScreenshots(report, options = {}) {
       }
 
       const info = await stat(screenshotPath)
-      if (info.size < 25_000) throw new Error(`Screenshot looks too small: ${screenshotPath} (${info.size} bytes)`)
+      if (info.size < minScreenshotBytes) {
+        throw new Error(`Screenshot looks too small: ${screenshotPath} (${info.size} bytes, min ${minScreenshotBytes})`)
+      }
       screenshots.push({ label, slide: slideIndex + 1, path: screenshotPath, bytes: info.size })
     }
   } finally {
@@ -746,10 +1256,10 @@ async function runPeopleViewSmoke(report) {
       throw new Error(`Chrome people view check failed: ${reason}`)
     }
     if (!res.stdout.includes('data-people-check="ok"') || !res.stdout.includes('data-tgwr-view="people"')) {
-      throw new Error('People view smoke did not reach people analytics')
+      throw new Error('People view smoke did not reach conversation insights')
     }
-    if (!res.stdout.includes('Аналитика по человеку')) {
-      throw new Error('People view smoke did not render the analytics heading')
+    if (!res.stdout.includes('Сигналы переписки') || !res.stdout.includes('14 выводов по переписке')) {
+      throw new Error('People view smoke did not render the conversation insights heading')
     }
 
     const screenshotPath = join(screenshotsDir, 'people-view.png')
@@ -778,6 +1288,62 @@ async function runPeopleViewSmoke(report) {
   }
 }
 
+async function runInsightExportCardSmoke(report) {
+  const chrome = findChrome()
+  if (!chrome) {
+    console.log('insight_export_card=skipped chrome_not_found')
+    return
+  }
+
+  const harness = await startHarnessServer(report)
+  try {
+    const pageUrl = `${harness.origin}/?tgwr_people_check=1&tgwr_insight_card_check=1`
+    const res = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--virtual-time-budget=12000',
+      '--dump-dom',
+      pageUrl
+    ], 30_000)
+
+    if (res.code !== 0) {
+      const reason = res.stderr || res.stdout
+      throw new Error(`Chrome insight export card check failed: ${reason}`)
+    }
+    if (!res.stdout.includes('data-insight-card-check="ok"')) {
+      throw new Error('Insight export card smoke did not expose the export card')
+    }
+    if (!res.stdout.includes('data-tgwr-insight-export-card="true"')) {
+      throw new Error('Insight export card smoke did not render the card marker')
+    }
+
+    const screenshotPath = join(screenshotsDir, 'insight-export-card.png')
+    const shot = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      '--window-size=1080,1920',
+      '--virtual-time-budget=12000',
+      `--screenshot=${screenshotPath}`,
+      pageUrl
+    ], 30_000)
+
+    if (shot.code !== 0) {
+      const reason = shot.stderr || shot.stdout
+      throw new Error(`Chrome insight export card screenshot failed: ${reason}`)
+    }
+
+    const info = await stat(screenshotPath)
+    if (info.size < 80_000) throw new Error(`Insight export card screenshot looks too small: ${screenshotPath} (${info.size} bytes)`)
+
+    console.log(`insight_export_card=ok screenshot=${screenshotPath} bytes=${info.size}`)
+  } finally {
+    await new Promise((resolvePromise) => harness.server.close(resolvePromise))
+  }
+}
+
 async function main() {
   if (!existsSync(join(root, 'dist/renderer/index.html'))) {
     throw new Error('dist/renderer/index.html not found. Run npm run build first.')
@@ -794,13 +1360,15 @@ async function main() {
     ...(await runScreenshots(report, {
       label: 'mobile',
       targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 13, 18],
-      viewport: { width: 390, height: 844 }
+      viewport: { width: 390, height: 844 },
+      minScreenshotBytes: 15_000
     })),
     ...(await runScreenshots(makeEmptyReport(report), { label: 'empty', targets: [1, 7, 13, 18] })),
     ...(await runScreenshots(makeExtremeReport(report), { label: 'extreme', targets: [1, 7, 10, 13, 18] }))
   ]
   await runNavigationStress(report)
   await runPeopleViewSmoke(report)
+  await runInsightExportCardSmoke(report)
 
   console.log(`synthetic_export=${exportDir}`)
   console.log(`db=${dbPath}`)

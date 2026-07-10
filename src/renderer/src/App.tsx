@@ -564,21 +564,32 @@ export default function App(): JSX.Element {
 
     return (
       <div className="relative h-full w-full overflow-auto px-4 py-4 sm:px-6 lg:px-8">
-        <div className="mx-auto grid min-h-full w-full max-w-[1360px] gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <aside className="flex min-h-[220px] flex-col justify-between rounded-2xl border border-white/10 bg-black/25 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl lg:sticky lg:top-4 lg:h-[calc(100vh-32px)]">
+        <div className="mx-auto grid min-h-full w-full max-w-[1360px] gap-5 lg:grid-cols-[330px_minmax(0,1fr)]">
+          <aside className="flex min-h-[220px] flex-col justify-between rounded-[24px] border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.58)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.30)] backdrop-blur-xl lg:sticky lg:top-4 lg:h-[calc(100vh-32px)]">
             <div>
-              <div className="text-[12px] font-semibold uppercase tracking-[0.24em] text-[rgba(var(--tgwr-muted-rgb),0.82)]">
-                TGWR v0.1.0
+              <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.22)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-3 py-1.5 text-[12px] font-semibold text-sky-100">
+                TGWR by IWS · v0.1.0 · local
               </div>
-              <div className="mt-3 text-[34px] font-black leading-none text-slate-100">TGWR</div>
-              <div className="mt-3 max-w-[240px] text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.88)]">
-                Локальный desktop-анализатор Telegram Export с генерацией Wrapped.
+              <div className="mt-5 text-[34px] font-semibold leading-tight text-slate-50">Telegram Wrapped без облака</div>
+              <div className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)]">
+                Выбери экспорт Telegram Desktop, TGWR by IWS соберет приватный recap на твоем компьютере и сразу откроет story deck.
               </div>
 
-              <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <div className="mt-6 grid gap-2">
+                {['Выбери экспорт', 'Проанализируй локально', 'Открой Wrapped'].map((label, idx) => (
+                  <div key={label} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.16)] text-[12px] font-bold text-sky-100">
+                      {idx + 1}
+                    </div>
+                    <div className="min-w-0 text-[13px] font-semibold text-slate-100">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                    Анализатор
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
+                    Worker
                   </div>
                   <div
                     className={[
@@ -602,7 +613,7 @@ export default function App(): JSX.Element {
             </div>
 
             <div className="mt-6 border-t border-white/10 pt-4 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
-              <div className="font-semibold uppercase tracking-[0.18em]">TG Канал</div>
+              <div className="font-semibold uppercase tracking-[0.16em]">Авторский канал</div>
               <a
                 href="https://t.me/shizikjke"
                 target="_blank"
@@ -615,12 +626,12 @@ export default function App(): JSX.Element {
           </aside>
 
           <main className="min-w-0 py-1 lg:py-4">
-            <div className="mb-5 flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 backdrop-blur-xl">
+            <div className="mb-5 flex flex-wrap items-end justify-between gap-4 rounded-[24px] border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.46)] px-5 py-4 backdrop-blur-xl">
               <div>
-                <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                  Desktop workspace
+                <div className="text-[13px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  Private recap workspace
                 </div>
-                <div className="mt-1 text-2xl font-bold text-slate-100">Импорт, генерация и просмотр</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-50">Собери Telegram Wrapped</div>
               </div>
               <button
                 type="button"
@@ -641,12 +652,13 @@ export default function App(): JSX.Element {
             </div>
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)]">
-              <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+              <section className="rounded-[24px] border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.50)] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.24)]">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <div className="text-[16px] font-semibold text-slate-100">Импорт Telegram Export</div>
+                  <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-3 py-1 text-[12px] font-semibold text-sky-100">Шаг 1</div>
+                  <div className="mt-3 text-[18px] font-semibold text-slate-50">Выбери Telegram Export</div>
                   <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                    Выбери папку где находится экспорт из Telegram Desktop.
+                    Подойдет папка с `result.json` или HTML-файлами из Telegram Desktop.
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -668,14 +680,14 @@ export default function App(): JSX.Element {
                         : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.7)]'
                     ].join(' ')}
                   >
-                    Импортировать
+                    Анализировать локально
                   </button>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="text-[13px] font-medium tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                  Путь до папки экспорта
+              <div className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.66)]">
+                  Техническая деталь · папка экспорта
                 </div>
                 <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-[13px] text-slate-100/90">{exportDir || '—'}</div>
               </div>
@@ -706,20 +718,20 @@ export default function App(): JSX.Element {
 
               {importSummary ? (
                 <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                       Chats
                     </div>
                     <div className="mt-1 text-xl font-bold text-slate-100">{importSummary.chats}</div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                       Messages
                     </div>
                     <div className="mt-1 text-xl font-bold text-slate-100">{importSummary.messages}</div>
                   </div>
-                  <div className="col-span-2 rounded-xl border border-white/10 bg-black/20 p-4">
-                    <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                  <div className="col-span-2 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                       DB path
                     </div>
                     <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-[13px] text-slate-100/90">{importSummary.db_path}</div>
@@ -731,11 +743,12 @@ export default function App(): JSX.Element {
               ) : null}
               </section>
 
-              <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)]">
+              <section className="rounded-[24px] border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.50)] p-5 shadow-[0_24px_72px_rgba(0,0,0,0.24)]">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <div className="text-[16px] font-semibold text-slate-100">Генерация отчета</div>
-                  <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Сбор метрик и создание Wrapped.</div>
+                  <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent2-rgb),0.18)] bg-[rgba(var(--tgwr-accent2-rgb),0.10)] px-3 py-1 text-[12px] font-semibold text-violet-100">Шаг 2</div>
+                  <div className="mt-3 text-[18px] font-semibold text-slate-50">Сгенерируй приватный отчет</div>
+                  <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Python worker посчитает метрики и соберет story deck локально.</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
@@ -749,7 +762,7 @@ export default function App(): JSX.Element {
                         : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.7)]'
                     ].join(' ')}
                   >
-                    Сгенерировать wrapped
+                    Собрать Wrapped
                   </button>
                 </div>
               </div>
@@ -778,16 +791,19 @@ export default function App(): JSX.Element {
                 </div>
               ) : null}
 
-              <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="text-[13px] font-semibold tracking-normal text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                  Путь до отчёта
+              <div className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.66)]">
+                  Техническая деталь · report.json
                 </div>
                 <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-[13px] text-slate-100/90">{reportPath || '—'}</div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-                <div className="text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-                  Если отчет уже существует — TGWR попробует открыть его при запуске.
+                <div>
+                  <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[12px] font-semibold text-slate-100">Шаг 3</div>
+                  <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+                    Когда отчет готов, открой Wrapped как Telegram Story.
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -820,7 +836,7 @@ export default function App(): JSX.Element {
               </div>
               <div className="mt-3 text-2xl font-bold text-slate-100">Что открыть при запуске?</div>
               <div className="mt-3 text-sm leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                TGWR нашел существующий report.json. Можно продолжить со старым Wrapped или удалить его и собрать новый отчет.
+                TGWR by IWS нашел существующий report.json. Можно продолжить со старым Wrapped или удалить его и собрать новый отчет.
               </div>
 
               <div className="mt-5 rounded-xl border border-white/10 bg-black/25 p-4">

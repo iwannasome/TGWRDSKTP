@@ -1,4 +1,6 @@
-# Запуск TGWRDSKTP через Docker
+# Запуск TGWR by IWS через Docker
+
+Docker-режим нужен для проверки приложения в контейнере. Electron открывается через noVNC в браузере, а пользовательские данные монтируются в локальные папки `out/`.
 
 ## 1. Клонировать репозиторий
 
@@ -7,63 +9,70 @@ git clone https://github.com/iwannasome/TGWRDSKTP.git
 cd TGWRDSKTP
 ```
 
-## 2. Собрать Docker-образ
+## 2. Запустить через Docker Compose
 
 ```bash
-docker build --no-cache -t tgwr-desktop .
-```
-## 3. Подготовить папки для данных
-
-```bash 
-mkdir -p data output
+docker compose up --build
 ```
 
-Папка data нужна для экспорта Telegram Desktop.
-Папка output нужна для сохранения результата работы приложения.
-
-## 4. Запустить контейнер
+Если установлен старый Compose:
 
 ```bash
-  docker run -d \
-  --name tgwr \
-  --security-opt seccomp=unconfined \
-  --cap-add=SYS_ADMIN \
-  -p 6080:6080 \
-  -v "$PWD/data:/data" \
-  -v "$PWD/output:/output" \
-  -v tgwr_config:/home/node/.config \
-  tgwr-desktop
+docker-compose up --build
 ```
 
-## 5. Открыть приложение
-
-После запуска открой в браузере:
+## 3. Открыть приложение
 
 ```text
-http://127.0.0.1:6080/vnc.html?autoconnect=1
+http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale
 ```
 
-## 6. Папки внутри приложения
+## 4. Папки внутри приложения
 
-Если приложение просит выбрать папку с экспортом Telegram Desktop, используй:
+Локальная папка `out/docker-data` доступна внутри контейнера как:
 
 ```text
 /data
 ```
 
-Если приложение просит выбрать папку для результата, используй:
+Локальная папка `out/docker-output` доступна внутри контейнера как:
 
 ```text
 /output
 ```
 
-Файлы, которые ты положишь в локальную папку `data`, будут доступны внутри контейнера по пути `/data`.
+Положи экспорт Telegram Desktop в `out/docker-data`, а PNG/PDF/insight-карточки сохраняй в `/output`.
 
-Результаты, сохранённые в `/output`, появятся в локальной папке `output`.
+## Ручной запуск без Compose
 
-### Остановить контейнер
+```bash
+docker build -t tgwr-docker:local .
+docker run --rm \
+  -p 6080:6080 \
+  -v "$PWD/out/docker-data:/data" \
+  -v "$PWD/out/docker-output:/output" \
+  tgwr-docker:local
+```
 
-Если контейнер запущен в другом окне терминала:
+Windows PowerShell:
+
+```powershell
+docker run --rm `
+  -p 6080:6080 `
+  -v "${PWD}/out/docker-data:/data" `
+  -v "${PWD}/out/docker-output:/output" `
+  tgwr-docker:local
+```
+
+## Остановить
+
+Для Compose:
+
+```bash
+docker compose down
+```
+
+Для ручного контейнера с именем:
 
 ```bash
 docker stop tgwr

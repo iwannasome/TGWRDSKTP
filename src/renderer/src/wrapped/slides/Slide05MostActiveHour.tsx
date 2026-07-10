@@ -166,9 +166,9 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
 
   return (
     <SlideFrame
-      kicker="IW$"
+      kicker="TGWR Rhythm"
       title={<span className="tgwr-gradient-text font-semibold">Час-пик</span>}
-      subtitle="Твои сутки как неоновый skyline: где день взлетает выше всего."
+      subtitle="В какие часы переписка чаще всего набирала скорость."
     >
       <div className="grid h-full min-h-0 grid-cols-[330px_minmax(0,1fr)] gap-5">
         <div className="flex min-h-0 flex-col gap-4">
@@ -176,9 +176,8 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.04 }}
-            className="relative min-h-0 flex-1 overflow-hidden rounded-[32px] border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(145deg,rgba(var(--tgwr-accent1-rgb),0.15),rgba(var(--tgwr-card-rgb),0.74)_56%,rgba(var(--tgwr-accent2-rgb),0.14))] p-6 shadow-[0_26px_80px_rgba(0,0,0,0.30)]"
+            className="relative min-h-0 flex-1 overflow-hidden rounded-[30px] border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(145deg,rgba(var(--tgwr-accent1-rgb),0.15),rgba(var(--tgwr-card-rgb),0.74)_56%,rgba(var(--tgwr-accent2-rgb),0.12))] p-6 shadow-[0_20px_58px_rgba(0,0,0,0.26)]"
           >
-            <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.20)] blur-[64px]" />
             <div className="relative flex h-full flex-col">
               <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
                 самый активный час
@@ -186,12 +185,12 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
               <div className="mt-5 text-[84px] font-bold leading-none">
                 <span className="tgwr-gradient-text">{formatHour(peakHour)}</span>
               </div>
-              <div className="mt-5 inline-flex w-fit rounded-full border border-white/10 bg-black/20 px-4 py-2 text-[14px] font-semibold uppercase tracking-[0.18em] text-slate-100">
+              <div className="mt-5 inline-flex w-fit rounded-full border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.46)] px-4 py-2 text-[14px] font-semibold uppercase tracking-[0.18em] text-slate-100">
                 {dayPartLabel(peakPart)}
               </div>
 
               <div className="mt-auto grid grid-cols-2 gap-3 pt-6">
-                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     в этот час
                   </div>
@@ -205,7 +204,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
                   </div>
                   <div className="mt-1 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.82)]">сообщений</div>
                 </div>
-                <div className="tgwr-info-card rounded-[22px] border border-white/10 bg-black/20 px-4 py-4">
+                <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     среднее
                   </div>
@@ -227,7 +226,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
             initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.1 }}
-            className="tgwr-info-card rounded-[26px] border border-white/10 bg-white/5 p-4"
+            className="tgwr-info-card rounded-[24px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4"
           >
             <div className="text-[12px] font-semibold uppercase tracking-[0.28em] text-[rgba(var(--tgwr-muted-rgb),0.74)]">
               период
@@ -251,17 +250,17 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: exporting ? 0 : 0.38, delay: exporting ? 0 : 0.14 }}
-          className="flex min-h-0 flex-col rounded-[36px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.54)] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.28)]"
+          className="tgwr-telegram-panel flex min-h-0 flex-col rounded-[30px] p-5"
         >
           <div className="flex items-start justify-between gap-5">
             <div>
               <div className="text-[12px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
-                24-hour skyline
+                24 часа
               </div>
-              <div className="mt-2 text-[20px] font-semibold leading-tight text-slate-100">Башни активности за сутки</div>
+              <div className="mt-2 text-[20px] font-semibold leading-tight text-slate-100">Активность по часам</div>
             </div>
             <div className="shrink-0 rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-4 py-2 text-[13px] font-semibold text-slate-100">
-              peak · {formatHour(peakHour)}
+              пик · {formatHour(peakHour)}
             </div>
           </div>
 
@@ -270,7 +269,7 @@ export default function Slide05MostActiveHour({ report, period, exporting }: Sli
               viewBox={`0 0 ${chart.viewWidth} ${chart.viewHeight}`}
               className="h-full w-full"
               role="img"
-              aria-label="Hourly activity skyline"
+              aria-label="Активность по часам"
             >
               <defs>
                 <linearGradient id="tgwr-hour-peak" x1="0" x2="0" y1="0" y2="1">

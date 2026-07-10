@@ -108,8 +108,7 @@ function renderFallbackBadge(label: string): JSX.Element {
 
   return (
     <div className="relative flex h-full w-full items-center justify-center">
-      <div className="absolute inset-4 rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.12)] blur-[24px]" />
-      <div className="relative flex h-full w-full items-center justify-center rounded-[28px] border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-card-rgb),0.72)] text-[42px] font-bold text-slate-100">
+      <div className="flex h-full w-full items-center justify-center rounded-[24px] border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-card-rgb),0.72)] text-[42px] font-bold text-slate-100">
         {initials || '★'}
       </div>
     </div>
@@ -130,7 +129,7 @@ function StatusChip({ earned }: StatusChipProps): JSX.Element {
           : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.82)]'
       ].join(' ')}
     >
-      {earned ? 'Получено' : 'Закрыто'}
+      {earned ? 'Получено' : 'Не открыто'}
     </div>
   )
 }
@@ -152,16 +151,14 @@ function GridCard({ item, index, exporting }: GridCardProps): JSX.Element {
       whileTap={exporting ? undefined : { scale: 0.99 }}
       transition={{ duration: exporting ? 0 : 0.28, delay: exporting ? 0 : Math.min(0.26, 0.1 + index * 0.03) }}
       className={[
-        'tgwr-hover-card relative overflow-hidden rounded-[30px] border p-5',
+        'tgwr-hover-card relative overflow-hidden rounded-[26px] border p-5',
         item.earned
           ? 'border-[rgba(var(--tgwr-accent1-rgb),0.20)] bg-[linear-gradient(180deg,rgba(var(--tgwr-accent1-rgb),0.10),rgba(var(--tgwr-card-rgb),0.68))]'
           : 'border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.46)]'
       ].join(' ')}
     >
-      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.10)] blur-[34px]" />
-
       <div className="relative flex h-full gap-4">
-        <div className="flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-[24px] border border-white/10 bg-black/15 p-3">
+        <div className="flex h-[84px] w-[84px] shrink-0 items-center justify-center rounded-[24px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-3">
           {badgeSrc ? (
             <img src={badgeSrc} alt={item.title} className="h-full w-full object-contain drop-shadow-[0_10px_22px_rgba(0,0,0,0.35)]" />
           ) : (
@@ -231,14 +228,14 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
 
   return (
     <SlideFrame
-      kicker="Achievements"
-      title="Ачивки"
-      subtitle="Твои титулы за стиль общения — в одном экране."
+      kicker="TGWR Premium"
+      title="Коллекция"
+      subtitle="Бейджи за стиль общения, ритм переписок и самые заметные привычки."
       footerHint={undefined}
     >
       <div className="flex h-full min-h-0 flex-col gap-5">
         {!hero ? (
-          <div className="flex flex-1 items-center justify-center rounded-[44px] border border-white/10 bg-white/5 p-10 text-center text-[22px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
+          <div className="flex flex-1 items-center justify-center rounded-[30px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-10 text-center text-[22px] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
             Пока нет достижений для показа.
           </div>
         ) : (
@@ -255,15 +252,12 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                 whileHover={exporting ? undefined : { y: -4, scale: 1.006 }}
                 transition={{ duration: exporting ? 0 : 0.34, delay: exporting ? 0 : 0.04 }}
                 className={[
-                  'tgwr-hover-card relative min-h-0 overflow-hidden rounded-[34px] border p-7',
+                  'tgwr-hover-card relative min-h-0 overflow-hidden rounded-[30px] border p-7',
                   hero.earned
-                    ? 'border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(135deg,rgba(var(--tgwr-accent1-rgb),0.18),rgba(var(--tgwr-card-rgb),0.78)_55%,rgba(var(--tgwr-accent2-rgb),0.14))] shadow-[0_28px_80px_rgba(0,0,0,0.30)]'
+                    ? 'border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[linear-gradient(135deg,rgba(var(--tgwr-accent1-rgb),0.16),rgba(var(--tgwr-card-rgb),0.78)_58%,rgba(var(--tgwr-accent2-rgb),0.12))] shadow-[0_20px_58px_rgba(0,0,0,0.26)]'
                     : 'border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.60)]'
                 ].join(' ')}
               >
-                <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.18)] blur-[56px]" />
-                <div className="pointer-events-none absolute -left-10 bottom-0 h-36 w-36 rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.14)] blur-[40px]" />
-
                 <div
                   className={[
                     'relative grid h-full',
@@ -275,7 +269,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                       <div className="min-w-0">
                         <div className="flex items-center justify-between gap-4">
                           <div className="text-[12px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.76)]">
-                            Главная ачивка
+                            Главный бейдж
                           </div>
                           <StatusChip earned={hero.earned} />
                         </div>
@@ -284,7 +278,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                     </div>
 
                     <div className="mt-4 line-clamp-3 max-w-[540px] break-words text-[16px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.95)] [overflow-wrap:anywhere]">
-                      {hero.description || 'Главный титул, который лучше всего описывает твой стиль общения.'}
+                      {hero.description || 'Бейдж, который лучше всего описывает твой стиль общения.'}
                     </div>
 
                     <div className="mt-auto flex flex-wrap items-end justify-between gap-4 pt-5">
@@ -297,11 +291,11 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                         </div>
                       </div>
 
-                      <div className="tgwr-info-card min-w-[190px] flex-1 shrink-0 rounded-[22px] border border-white/10 bg-black/15 px-4 py-3 text-right">
+                      <div className="tgwr-info-card min-w-[190px] flex-1 shrink-0 rounded-[22px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-3 text-right">
                         <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                          лучший титул
+                          бейдж периода
                         </div>
-                        <div className="mt-2 text-[16px] font-semibold text-slate-100">Главная ачивка периода</div>
+                        <div className="mt-2 text-[16px] font-semibold text-slate-100">Выделено в этом Wrapped</div>
                       </div>
                     </div>
                   </div>
@@ -310,11 +304,10 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                   <div className="flex min-w-0 items-center justify-center">
                     <div
                       className={[
-                        'relative flex items-center justify-center rounded-[34px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.44)] p-7 backdrop-blur-sm',
+                        'relative flex items-center justify-center rounded-[30px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.44)] p-7 backdrop-blur-sm',
                         'h-[230px] w-[230px]'
                       ].join(' ')}
                     >
-                      <div className="pointer-events-none absolute inset-0 rounded-[34px] bg-[radial-gradient(circle_at_center,rgba(var(--tgwr-accent1-rgb),0.16),transparent_65%)]" />
                       {heroBadgeSrc ? (
                         <img
                           src={heroBadgeSrc}
@@ -334,7 +327,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                 initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: exporting ? 0 : 0.3, delay: exporting ? 0 : 0.09 }}
-                className="rounded-[28px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.50)] px-6 py-5"
+                className="rounded-[26px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.50)] px-6 py-5"
               >
                 <div className="flex items-end justify-between gap-6">
                   <div>
@@ -357,7 +350,7 @@ export default function Slide19Achievements({ report, exporting }: SlideCommonPr
                   </div>
                 </div>
 
-                <div className="mt-4 h-3 overflow-hidden rounded-full border border-white/10 bg-black/15">
+                <div className="mt-4 h-3 overflow-hidden rounded-full border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)]">
                   <motion.div
                     className="h-full rounded-full bg-[linear-gradient(90deg,rgba(var(--tgwr-accent1-rgb),0.95),rgba(var(--tgwr-accent2-rgb),0.95))] transition-all"
                     initial={exporting ? { width: `${Math.max(6, completionPercent)}%` } : { width: 0 }}

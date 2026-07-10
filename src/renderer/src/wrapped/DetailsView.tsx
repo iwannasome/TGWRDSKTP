@@ -1,6 +1,13 @@
 import React, { useMemo } from 'react'
-import { formatInt, formatPercent01 } from './format'
-import { getPeriod, getTop10, getYearLabel, type PeriodKey } from './report'
+import {
+  formatInsightConfidence,
+  formatInsightNoWinnerReason,
+  formatInt,
+  formatPercent01,
+  formatPeriodHuman
+} from './format'
+import { summarizeInsightEvidence } from './insightCopy'
+import { CONVERSATION_INSIGHT_KEYS, getConversationInsights, getPeriod, getTop10, getYearLabel, type PeriodKey } from './report'
 import { asString, getNumber, getString } from './safe'
 
 function formatTs(ts: number): string {
@@ -22,18 +29,18 @@ type Props = {
 
 function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: string; onToggle: () => void }): JSX.Element {
   return (
-    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1">
+    <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.58)] p-1">
       <button
         type="button"
         onClick={period === 'all_time' ? undefined : onToggle}
         className={[
           'rounded-full px-4 py-2 text-sm font-semibold transition',
           period === 'all_time'
-            ? 'bg-white/10 text-slate-50'
+            ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-slate-50'
             : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
         ].join(' ')}
       >
-        All-time
+        Весь архив
       </button>
       <button
         type="button"
@@ -41,7 +48,7 @@ function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: strin
         className={[
           'rounded-full px-4 py-2 text-sm font-semibold transition',
           period === 'year'
-            ? 'bg-white/10 text-slate-50'
+            ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-slate-50'
             : 'text-[rgba(var(--tgwr-muted-rgb),0.8)] hover:bg-white/10 hover:text-slate-100'
         ].join(' ')}
       >
@@ -53,7 +60,7 @@ function PeriodTabs({ period, year, onToggle }: { period: PeriodKey; year: strin
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }): JSX.Element {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+    <div className="tgwr-telegram-panel min-w-0 rounded-[24px] p-5">
       <div className="flex items-baseline justify-between gap-6">
         <div className="min-w-0">
           <div className="break-words text-[18px] font-semibold text-slate-100 [overflow-wrap:anywhere]">{title}</div>
@@ -73,9 +80,9 @@ function Table({
   rows: Record<string, unknown>[]
 }): JSX.Element {
   return (
-    <div className="overflow-x-auto rounded-xl border border-white/10">
+    <div className="overflow-x-auto rounded-[18px] border border-white/10">
       <table className="w-full min-w-[720px] border-collapse">
-        <thead className="bg-black/30">
+        <thead className="bg-[rgba(var(--tgwr-surface-rgb),0.58)]">
           <tr>
             {headers.map((h) => (
               <th
@@ -119,6 +126,7 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
   const topMessages = useMemo(() => getTop10(p, 'top_10_people_by_messages'), [p])
   const topSpan = useMemo(() => getTop10(p, 'top_10_people_by_time_span'), [p])
   const topMutual = useMemo(() => getTop10(p, 'top_10_people_by_mutuality'), [p])
+  const insights = useMemo(() => getConversationInsights(report, period), [report, period])
 
   const rowsMessages = useMemo(() => {
     return topMessages.map((it, idx) => {
@@ -171,18 +179,31 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
     })
   }, [topMutual])
 
+  const rowsInsights = useMemo(() => {
+    return CONVERSATION_INSIGHT_KEYS.map((kind, idx) => {
+      const insight = insights[kind]
+      return {
+        rank: String(idx + 1),
+        insight: insight.title,
+        winner: insight.winner?.displayName ?? '—',
+        confidence: formatInsightConfidence(insight.confidence),
+        evidence: insight.winner ? summarizeInsightEvidence(insight, 3) : formatInsightNoWinnerReason(insight.noWinnerReason)
+      }
+    })
+  }, [insights])
+
   return (
     <div className="relative h-full w-full overflow-hidden">
       <div className="absolute inset-0 overflow-auto px-4 py-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[1320px]">
-          <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-white/10 bg-[#05070a]/80 px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <div className="sticky top-0 z-20 -mx-4 flex flex-wrap items-start justify-between gap-5 border-b border-[rgba(var(--tgwr-border-rgb),0.14)] bg-[rgba(var(--tgwr-bg-0),0.86)] px-4 py-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div>
               <div className="text-[13px] font-semibold uppercase tracking-[0.22em] text-[rgba(var(--tgwr-muted-rgb),0.8)]">
-                Details
+                TGWR by IWS Tables
               </div>
-              <div className="mt-2 text-[28px] font-bold leading-tight text-slate-100 sm:text-[32px]">Топ-10 таблицы</div>
+              <div className="mt-2 text-[28px] font-bold leading-tight text-slate-100 sm:text-[32px]">Таблицы</div>
               <div className="mt-2 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                Без фильтров. Ровно из report.json.
+                Быстрый просмотр топ-10 по сообщениям, длительности и балансу диалогов.
               </div>
             </div>
 
@@ -198,7 +219,7 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.24)] bg-[rgba(var(--tgwr-accent1-rgb),0.13)] px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.20)]"
               >
                 Назад
               </button>
@@ -206,51 +227,66 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
           </div>
 
           <div className="mt-6 grid gap-5 xl:grid-cols-2">
-            <Card title="Top 10 · Messages" subtitle="С кем больше всего сообщений">
+            <div className="xl:col-span-2">
+              <Card title="Инсайты переписки" subtitle={`Все 14 выводов ${formatPeriodHuman(period)}: победитель, уверенность и короткое доказательство.`}>
+                <Table
+                  headers={[
+                    { key: 'rank', title: '#' },
+                    { key: 'insight', title: 'Инсайт' },
+                    { key: 'winner', title: 'Победитель' },
+                    { key: 'confidence', title: 'Уверенность' },
+                    { key: 'evidence', title: 'Доказательство' }
+                  ]}
+                  rows={rowsInsights}
+                />
+              </Card>
+            </div>
+
+            <Card title="Топ-10 · сообщения" subtitle="С кем больше всего сообщений">
               {rowsMessages.length === 0 ? (
                 <div className="text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Пусто.</div>
               ) : (
                 <Table
                   headers={[
                     { key: 'rank', title: '#' },
-                    { key: 'name', title: 'Person' },
-                    { key: 'total', title: 'Total', right: true },
-                    { key: 'sent', title: 'Sent', right: true },
-                    { key: 'recv', title: 'Recv', right: true }
+                    { key: 'name', title: 'Человек' },
+                    { key: 'total', title: 'Всего', right: true },
+                    { key: 'sent', title: 'Отправлено', right: true },
+                    { key: 'recv', title: 'Получено', right: true }
                   ]}
                   rows={rowsMessages}
                 />
               )}
             </Card>
 
-            <Card title="Top 10 · Time span" subtitle="От первого до последнего сообщения">
+            <Card title="Топ-10 · длительность" subtitle="От первого до последнего сообщения">
               {rowsSpan.length === 0 ? (
                 <div className="text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Пусто.</div>
               ) : (
                 <Table
                   headers={[
                     { key: 'rank', title: '#' },
-                    { key: 'name', title: 'Person' },
-                    { key: 'span_days', title: 'Days', right: true },
-                    { key: 'first', title: 'First', right: true },
-                    { key: 'last', title: 'Last', right: true }
+                    { key: 'name', title: 'Человек' },
+                    { key: 'span_days', title: 'Дней', right: true },
+                    { key: 'first', title: 'Первое', right: true },
+                    { key: 'last', title: 'Последнее', right: true }
                   ]}
                   rows={rowsSpan}
                 />
               )}
             </Card>
 
-            <Card title="Top 10 · Mutuality" subtitle="Минимальный дисбаланс sent/recv при большом объёме">
+            <Card title="Топ-10 · баланс" subtitle="Минимальная разница отправленных и полученных при большом объеме">
               {rowsMutual.length === 0 ? (
                 <div className="text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Пусто.</div>
               ) : (
                 <Table
                   headers={[
                     { key: 'rank', title: '#' },
-                    { key: 'name', title: 'Person' },
-                    { key: 'total', title: 'Total', right: true },
-                    { key: 'abs_diff', title: 'Abs diff', right: true },
-                    { key: 'imbalance', title: 'Imbalance', right: true }
+                    { key: 'name', title: 'Человек' },
+                    { key: 'total', title: 'Всего', right: true },
+                    { key: 'abs_diff', title: 'Разница', right: true },
+                    { key: 'imbalance', title: 'Дисбаланс', right: true }
                   ]}
                   rows={rowsMutual}
                 />
@@ -260,7 +296,7 @@ export default function DetailsView({ report, period, onClose, onOpenPeople, onP
           </div>
 
           <div className="mt-10 pb-8 text-center text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-            TGWR · local only
+            TGWR by IWS · локально на этом компьютере
           </div>
         </div>
       </div>

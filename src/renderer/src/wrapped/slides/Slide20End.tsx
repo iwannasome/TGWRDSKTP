@@ -3,34 +3,44 @@ import React from 'react'
 import SlideFrame from '../SlideFrame'
 import type { SlideCommonProps } from '../slideTypes'
 
-export default function Slide20End(_props: SlideCommonProps): JSX.Element {
+export default function Slide20End({ exporting }: SlideCommonProps): JSX.Element {
   return (
     <SlideFrame
-      kicker="IW$"
-      title="Экспортируй / Поделись"
-      subtitle="Report уже локально рядом с базой. Дальше — дело вкуса: скриншоты, запись экрана или просто сохранить для себя."
+      kicker="TGWR Export"
+      title="Wrapped готов"
+      subtitle="Сохрани слайды, собери PDF или открой детали — все результаты остаются локально."
       footerHint="Спасибо, что используешь локальные инструменты."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
+          initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.06 }}
-          className="rounded-[44px] border border-white/10 bg-white/5 p-10"
+          transition={{ duration: exporting ? 0 : 0.35, delay: exporting ? 0 : 0.06 }}
+          className="tgwr-telegram-panel rounded-[30px] p-10"
         >
-          <div className="grid grid-cols-2 gap-6">
-            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
-              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                Идея
+          <div className="grid grid-cols-3 gap-6">
+            <div className="tgwr-info-card rounded-[24px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.46)] px-7 py-7">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                PNG
               </div>
-              <div className="mt-3 text-[18px] font-semibold text-slate-100">Сделай 3–5 скринов лучших слайдов</div>
+              <div className="mt-3 text-[18px] font-semibold text-slate-100">Экспорт всех слайдов</div>
               <div className="mt-3 text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.95)]">
-                Это самый простой «шэринг» без интеграций.
+                Подойдет для Stories, постов и быстрой отправки выбранных экранов.
               </div>
             </div>
 
-            <div className="tgwr-info-card rounded-3xl border border-white/10 bg-white/5 px-7 py-7">
-              <div className="text-[13px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+            <div className="tgwr-info-card rounded-[24px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.46)] px-7 py-7">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+                PDF
+              </div>
+              <div className="mt-3 text-[18px] font-semibold text-slate-100">Один файл со всем Wrapped</div>
+              <div className="mt-3 text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.95)]">
+                Удобно оставить себе, переслать или открыть без приложения.
+              </div>
+            </div>
+
+            <div className="tgwr-info-card rounded-[24px] border border-[rgba(var(--tgwr-accent1-rgb),0.20)] bg-[rgba(var(--tgwr-accent1-rgb),0.09)] px-7 py-7">
+              <div className="text-[13px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
                 Приватность
               </div>
               <div className="mt-3 text-[18px] font-semibold text-slate-100">Данные не уходят в сеть</div>
@@ -40,14 +50,14 @@ export default function Slide20End(_props: SlideCommonProps): JSX.Element {
             </div>
           </div>
 
-          <div className="mt-8 tgwr-info-card rounded-3xl border border-white/10 bg-black/20 p-7">
-            <div className="text-[14px] font-semibold uppercase tracking-[0.38em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
+          <div className="mt-8 tgwr-info-card rounded-[26px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-7">
+            <div className="text-[14px] font-semibold uppercase tracking-[0.26em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
               Что дальше
             </div>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-[16px] leading-relaxed text-slate-100/90">
-              <li>Открой “Детали” и посмотри топ-10.</li>
-              <li>Переключай период (All-time / Year) и сравнивай.</li>
-              <li>Если что-то выглядит странно — проверь self_from_id / is_out.</li>
+              <li>Открой “Детали”, чтобы посмотреть таблицы и топ-10.</li>
+              <li>Переключи период и сравни весь архив с выбранным годом.</li>
+              <li>Экспортируй PNG или PDF из панели слева.</li>
             </ul>
           </div>
         </motion.div>

@@ -13,21 +13,21 @@ export default function SlideFrame({ kicker, title, subtitle, footerHint, childr
   return (
     <div
       className={[
-        'tgwr-scanlines relative h-full w-full overflow-hidden rounded-[44px] border',
-        'border-[rgba(var(--tgwr-border-rgb),0.22)]',
-        'bg-[rgba(var(--tgwr-card-rgb),0.60)]',
-        'shadow-[0_0_0_1px_rgba(0,0,0,0.35),0_40px_140px_rgba(0,0,0,0.65)]'
+        'tgwr-story-surface relative h-full w-full overflow-hidden rounded-[30px] border',
+        'border-[rgba(var(--tgwr-border-rgb),0.18)]'
       ].join(' ')}
     >
-      {/* glows */}
-      <div className="pointer-events-none absolute -left-36 -top-44 h-[540px] w-[680px] rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.20)] blur-[120px]" />
-      <div className="pointer-events-none absolute -bottom-44 -right-44 h-[520px] w-[720px] rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.16)] blur-[130px]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[7px] bg-[linear-gradient(90deg,rgba(var(--tgwr-accent1-rgb),0.92),rgba(var(--tgwr-accent2-rgb),0.78))]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(1100px_circle_at_78%_8%,rgba(var(--tgwr-accent1-rgb),0.10),transparent_48%)]" />
+      <div className="pointer-events-none absolute bottom-8 right-9 z-20 text-right">
+        <div className="text-[13px] font-semibold uppercase tracking-[0.24em] text-white/30">IWS</div>
+        <div className="mt-1 text-[11px] font-medium text-white/20">TGWR by IWS</div>
+      </div>
 
-
-      <div className="relative flex h-full w-full flex-col px-[82px] py-[64px]">
-        <div className="min-h-[124px]">
+      <div className="relative flex h-full w-full flex-col px-[78px] py-[58px]">
+        <div className="min-h-[116px]">
           {kicker ? (
-            <div className="text-[12px] font-semibold uppercase tracking-[0.30em] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+            <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-white/[0.045] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.92)]">
               {kicker}
             </div>
           ) : null}
@@ -36,7 +36,7 @@ export default function SlideFrame({ kicker, title, subtitle, footerHint, childr
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35 }}
-            className="mt-4 max-w-[1320px] text-[62px] font-semibold leading-[0.96] text-slate-100"
+            className="mt-5 max-w-[1320px] text-[60px] font-semibold leading-[0.98] text-slate-50"
           >
             {title}
           </motion.h2>
@@ -46,7 +46,7 @@ export default function SlideFrame({ kicker, title, subtitle, footerHint, childr
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: 0.05 }}
-              className="mt-4 max-w-[980px] text-[17px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.92)]"
+              className="mt-4 max-w-[940px] text-[18px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.92)]"
             >
               {subtitle}
             </motion.p>
@@ -56,7 +56,7 @@ export default function SlideFrame({ kicker, title, subtitle, footerHint, childr
         <div className="mt-8 min-h-0 flex-1">{children}</div>
 
         {footerHint ? (
-          <div className="mt-6 text-[13px] font-medium text-[rgba(var(--tgwr-muted-rgb),0.75)]">{footerHint}</div>
+          <div className="mt-6 text-[13px] font-medium text-[rgba(var(--tgwr-muted-rgb),0.72)]">{footerHint}</div>
         ) : null}
       </div>
     </div>

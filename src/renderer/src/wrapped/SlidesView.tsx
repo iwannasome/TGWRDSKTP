@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import * as htmlToImage from 'html-to-image'
 import { PDFDocument } from 'pdf-lib'
 
+import { capturePngBytes, writeOutputFile } from './export'
 import { clamp } from './format'
-import { asReport, getYearLabel, type PeriodKey } from './report'
-import type { SlideDef, ThemeId } from './slideTypes'
+import { asReport, getYearLabel, type ConversationInsightKind, type PeriodKey } from './report'
+import type { SlideCommonProps, SlideDef, ThemeId } from './slideTypes'
 
 import Slide01Cover from './slides/Slide01Cover'
 import Slide02TotalMessages from './slides/Slide02TotalMessages'
@@ -13,18 +13,13 @@ import Slide03SentVsReceived from './slides/Slide03SentVsReceived'
 import Slide04MostActiveMonth from './slides/Slide04MostActiveMonth'
 import Slide05MostActiveHour from './slides/Slide05MostActiveHour'
 import Slide06NightRatio from './slides/Slide06NightRatio'
-import Slide07TopPersonMessages from './slides/Slide07TopPersonMessages'
-import Slide08TopPersonMutuality from './slides/Slide08TopPersonMutuality'
-import Slide09FastestReplyPerson from './slides/Slide09FastestReplyPerson'
-import Slide10IgnoredMostPerson from './slides/Slide10IgnoredMostPerson'
+import InsightStorySlide from './slides/InsightStorySlide'
 import Slide11WordCloud from './slides/Slide11WordCloud'
 import Slide12EmojiTop from './slides/Slide12EmojiTop'
 import Slide13MediaCounts from './slides/Slide13MediaCounts'
 import Slide14LongestMessage from './slides/Slide14LongestMessage'
 import Slide15LongestStreak from './slides/Slide15LongestStreak'
 import Slide16LongestSilence from './slides/Slide16LongestSilence'
-import Slide17DayPerson from './slides/Slide17DayPerson'
-import Slide18NightPerson from './slides/Slide18NightPerson'
 import Slide19Achievements from './slides/Slide19Achievements'
 import Slide20End from './slides/Slide20End'
 import Slide21Credits from './slides/Slide21Credits'
@@ -33,6 +28,12 @@ import Slide21Credits from './slides/Slide21Credits'
 const SLIDE_W = 1920
 const SLIDE_H = 1080
 
+function makeInsightSlide(kind: ConversationInsightKind): (props: SlideCommonProps) => JSX.Element {
+  return function ConversationInsightSlide(props: SlideCommonProps): JSX.Element {
+    return <InsightStorySlide {...props} kind={kind} />
+  }
+}
+
 const slides: SlideDef[] = [
   { id: 's1', title: 'Cover', Component: Slide01Cover },
   { id: 's2', title: 'Total Messages', Component: Slide02TotalMessages },
@@ -40,21 +41,22 @@ const slides: SlideDef[] = [
   { id: 's4', title: 'Most Active Month', Component: Slide04MostActiveMonth },
   { id: 's5', title: 'Most Active Hour', Component: Slide05MostActiveHour },
   { id: 's6', title: 'Night Ratio', Component: Slide06NightRatio },
-  { id: 's7', title: 'Top Person (Messages)', Component: Slide07TopPersonMessages },
-  { id: 's8', title: 'Top Person (Mutuality)', Component: Slide08TopPersonMutuality },
-  { id: 's9', title: 'Fastest Reply', Component: Slide09FastestReplyPerson },
-  { id: 's10', title: 'Most Ignored', Component: Slide10IgnoredMostPerson },
-  { id: 's11', title: 'Word Cloud', Component: Slide11WordCloud },
-  { id: 's12', title: 'Top Emojis', Component: Slide12EmojiTop },
-  { id: 's13', title: 'Media Counts', Component: Slide13MediaCounts },
-  { id: 's14', title: 'Longest Message', Component: Slide14LongestMessage },
-  { id: 's15', title: 'Longest Streak', Component: Slide15LongestStreak },
-  { id: 's16', title: 'Longest Silence', Component: Slide16LongestSilence },
-  { id: 's17', title: 'Day Person', Component: Slide17DayPerson },
-  { id: 's18', title: 'Night Person', Component: Slide18NightPerson },
-  { id: 's19', title: 'Achievements', Component: Slide19Achievements },
-  { id: 's20', title: 'Final Slide', Component: Slide20End },
-  { id: 's21', title: 'Credits', Component: Slide21Credits }
+  { id: 's7_main_person', title: 'Main Person Insight', Component: makeInsightSlide('main_person') },
+  { id: 's8_stable_dialog', title: 'Stable Dialog Insight', Component: makeInsightSlide('stable_dialog') },
+  { id: 's9_comeback', title: 'Comeback Insight', Component: makeInsightSlide('comeback') },
+  { id: 's10_closer_dialog', title: 'Closer Dialog Insight', Component: makeInsightSlide('closer_dialog') },
+  { id: 's11_night_companion', title: 'Night Companion Insight', Component: makeInsightSlide('night_companion') },
+  { id: 's12_mutual_dialog', title: 'Mutual Dialog Insight', Component: makeInsightSlide('mutual_dialog') },
+  { id: 's13_media_bond', title: 'Media Bond Insight', Component: makeInsightSlide('media_bond') },
+  { id: 's14_word_cloud', title: 'Word Cloud', Component: Slide11WordCloud },
+  { id: 's15_top_emojis', title: 'Top Emojis', Component: Slide12EmojiTop },
+  { id: 's16_media_counts', title: 'Media Counts', Component: Slide13MediaCounts },
+  { id: 's17_longest_message', title: 'Longest Message', Component: Slide14LongestMessage },
+  { id: 's18_longest_streak', title: 'Longest Streak', Component: Slide15LongestStreak },
+  { id: 's19_longest_silence', title: 'Longest Silence', Component: Slide16LongestSilence },
+  { id: 's20_achievements', title: 'Achievements', Component: Slide19Achievements },
+  { id: 's21_final', title: 'Final Slide', Component: Slide20End },
+  { id: 's22_credits', title: 'Credits', Component: Slide21Credits }
 ]
 
 type SlidesViewProps = {
@@ -90,36 +92,6 @@ function getInitialSlideIndex(): number {
   } catch {
     return 0
   }
-}
-
-async function capturePngBytes(node: HTMLElement): Promise<Uint8Array> {
-  try { await document.fonts?.ready } catch { }
-  const images = Array.from(node.querySelectorAll('img'))
-  await Promise.all(images.map(async (img) => {
-    if (img.complete) return
-    try { await img.decode() } catch { }
-  }))
-
-  const blob = await htmlToImage.toBlob(node, {
-    cacheBust: true,
-    backgroundColor: '#05070a',
-    width: SLIDE_W,
-    height: SLIDE_H,
-    pixelRatio: 1,
-    style: { transform: 'none' }
-  })
-  if (blob) return new Uint8Array(await blob.arrayBuffer())
-
-  const dataUrl = await htmlToImage.toPng(node, {
-    cacheBust: true,
-    backgroundColor: '#05070a',
-    width: SLIDE_W,
-    height: SLIDE_H,
-    pixelRatio: 1,
-    style: { transform: 'none' }
-  })
-  const fallbackBlob = await fetch(dataUrl).then((res) => res.blob())
-  return new Uint8Array(await fallbackBlob.arrayBuffer())
 }
 
 export default function SlidesView({
@@ -200,11 +172,6 @@ export default function SlidesView({
     return () => window.removeEventListener('resize', update)
   }, [])
 
-  const writeOutputFile = useCallback(async (dirPath: string, filename: string, bytes: Uint8Array) => {
-    const res = await window.tgwr.writeOutputFile(dirPath, filename, bytes)
-    if (!res.ok) throw new Error(res.error ?? `Failed to write ${filename}`)
-  }, [])
-
   const runExportTask = useCallback(async (kind: ExportKind) => {
     if (exporting || exportRunningRef.current) return
     exportRunningRef.current = true
@@ -226,7 +193,7 @@ export default function SlidesView({
 
         const exportNode = exportStageRef.current
         if (!exportNode) throw new Error('Export stage is not ready')
-        const bytes = await capturePngBytes(exportNode)
+        const bytes = await capturePngBytes(exportNode, { width: SLIDE_W, height: SLIDE_H, backgroundColor: '#05070a' })
 
         if (pdf) {
           const img = await pdf.embedPng(bytes)
@@ -251,14 +218,14 @@ export default function SlidesView({
       exportRunningRef.current = false
       setExportSlideIndex(null)
     }
-  }, [exporting, writeOutputFile])
+  }, [exporting])
 
   const ActiveSlide = slides[index].Component
   const ExportSlide = exportSlideIndex !== null ? slides[exportSlideIndex].Component : null
 
   return (
     <div
-      className="relative h-screen w-screen overflow-hidden bg-[#05070a]"
+      className="relative h-screen w-screen overflow-hidden bg-[var(--tgwr-bg-0)]"
       data-tgwr-slide-index={index}
       data-tgwr-slide-total={slides.length}
     >
@@ -275,11 +242,11 @@ export default function SlidesView({
       ) : null}
 
       {/* Основная сцена */}
-      <div className="flex h-full w-full items-center justify-center pb-[96px] md:pl-[220px] md:pb-0">
+      <div className="flex h-full w-full items-center justify-center pb-[96px] md:pl-[208px] md:pb-0">
         <motion.div
           ref={stageRef}
           style={{ width: SLIDE_W, height: SLIDE_H, scale, transformOrigin: 'center' }}
-          className="relative rounded-[48px] border border-white/10 bg-[#05070a] shadow-2xl"
+          className="relative rounded-[32px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.22)] shadow-[0_24px_110px_rgba(0,0,0,0.42)]"
         >
           <AnimatePresence initial={false} custom={direction}>
             <motion.div
@@ -300,17 +267,17 @@ export default function SlidesView({
 
       {/* Desktop controls */}
       {!captureMode && (
-        <div className="fixed bottom-5 left-4 right-4 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-white/10 bg-black/80 px-4 py-3 shadow-2xl backdrop-blur-xl md:bottom-auto md:left-6 md:right-auto md:top-1/2 md:w-[164px] md:-translate-y-1/2 md:flex-col md:items-stretch md:justify-start md:rounded-2xl md:px-4">
+        <div className="fixed bottom-5 left-4 right-4 z-[100] flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.88)] px-4 py-3 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl md:bottom-auto md:left-6 md:right-auto md:top-1/2 md:w-[156px] md:-translate-y-1/2 md:flex-col md:items-stretch md:justify-start md:px-4">
 
-          <div className="hidden text-[11px] font-bold uppercase tracking-[0.22em] text-white/40 md:block">
-            Slide deck
+          <div className="hidden text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.66)] md:block">
+            TGWR by IWS
           </div>
 
           <div className="flex items-center justify-center gap-2 md:grid md:grid-cols-2">
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/75">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/80">
               {index + 1}/{slides.length}
             </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/75">
+            <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-center text-[12px] font-bold text-white/80">
               {periodLabel}
             </div>
           </div>
@@ -319,9 +286,9 @@ export default function SlidesView({
             <motion.button
               type="button"
               onClick={() => go(-1)}
-              whileHover={{ scale: 1.08, boxShadow: '0 0 18px rgba(var(--tgwr-accent1-rgb),0.18)' }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.92 }}
-              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 hover:text-white"
               aria-label="Предыдущий слайд"
             >
               ↑
@@ -329,9 +296,9 @@ export default function SlidesView({
             <motion.button
               type="button"
               onClick={() => go(1)}
-              whileHover={{ scale: 1.08, boxShadow: '0 0 18px rgba(var(--tgwr-accent1-rgb),0.18)' }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.92 }}
-              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10 hover:text-white"
               aria-label="Следующий слайд"
             >
               ↓
@@ -345,7 +312,7 @@ export default function SlidesView({
             onClick={onOpenDetails}
             whileHover={{ scale: 1.035 }}
             whileTap={{ scale: 0.965 }}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:bg-white/10 hover:text-white"
           >
             Детали
           </motion.button>
@@ -355,7 +322,7 @@ export default function SlidesView({
             onClick={onOpenPeople}
             whileHover={{ scale: 1.035 }}
             whileTap={{ scale: 0.965 }}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-300 transition hover:bg-white/10 hover:text-white"
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-200 transition hover:bg-white/10 hover:text-white"
           >
             Люди
           </motion.button>
@@ -371,11 +338,11 @@ export default function SlidesView({
                 whileHover={{ scale: 1.035 }}
                 whileTap={{ scale: 0.965 }}
                 className={[
-                  'rounded-full px-3 py-1.5 text-[11px] font-bold uppercase tracking-normal transition',
-                  theme === t ? 'bg-white/20 text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
+                  'rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-normal transition',
+                  theme === t ? 'bg-[rgba(var(--tgwr-accent1-rgb),0.18)] text-white' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                 ].join(' ')}
               >
-                {t}
+                {t === 'neon' ? 'blue' : t === 'cyber' ? 'aqua' : 'premium'}
               </motion.button>
             ))}
           </div>
@@ -386,18 +353,18 @@ export default function SlidesView({
             <motion.button
               type="button"
               onClick={() => runExportTask('png')}
-              whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(34,211,238,0.18)' }}
+              whileHover={{ scale: 1.035 }}
               whileTap={{ scale: 0.965 }}
-              className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-500/20"
+              className="rounded-full bg-[rgba(var(--tgwr-accent1-rgb),0.13)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-200 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.22)]"
             >
               PNG
             </motion.button>
             <motion.button
               type="button"
               onClick={() => runExportTask('pdf')}
-              whileHover={{ scale: 1.04, boxShadow: '0 0 18px rgba(216,180,254,0.18)' }}
+              whileHover={{ scale: 1.035 }}
               whileTap={{ scale: 0.965 }}
-              className="rounded-full bg-purple-500/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-purple-300 transition hover:bg-purple-500/20"
+              className="rounded-full bg-[rgba(var(--tgwr-accent2-rgb),0.13)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200 transition hover:bg-[rgba(var(--tgwr-accent2-rgb),0.22)]"
             >
               PDF
             </motion.button>
