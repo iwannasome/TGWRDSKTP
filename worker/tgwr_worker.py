@@ -3384,7 +3384,10 @@ CONFIDENCE_EXACT = "exact"
 CONFIDENCE_BEHAVIORAL = "behavioral"
 CONFIDENCE_HEURISTIC = "heuristic"
 
-SESSION_GAP_SECONDS = 3 * 60 * 60
+SESSION_GAP_SECONDS = 30 * 60
+SESSION_MAX_DURATION_SECONDS = 12 * 60 * 60
+SESSION_MIN_DENSITY_PER_HOUR = 4.0
+SESSION_MIN_DIRECTION_MESSAGES = 8
 SILENCE_RESTART_SECONDS = 7 * 24 * 60 * 60
 MUTUALITY_MIN_MESSAGES = 5000
 
@@ -3406,7 +3409,7 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
             "reply_samples": 3,
             "initiative_days": 6,
             "media_events": 120,
-            "session_messages": 60,
+            "session_messages": 30,
             "mutual_min_total": MUTUALITY_MIN_MESSAGES,
         }
     return {
@@ -3424,7 +3427,7 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
         "reply_samples": 3,
         "initiative_days": 8,
         "media_events": 140,
-        "session_messages": 70,
+        "session_messages": 40,
         "mutual_min_total": MUTUALITY_MIN_MESSAGES,
     }
 
@@ -3531,6 +3534,7 @@ def _finish_profile_session(profile: Dict[str, Any]) -> None:
             "message_count": int(count),
             "sent_messages": int(session.get("sent_messages", 0) or 0),
             "received_messages": int(session.get("received_messages", 0) or 0),
+            "max_gap_seconds": int(session.get("max_gap_seconds", 0) or 0),
             "density_per_hour": float(_safe_div(count * 3600, max(3600, duration))),
         }
     )
@@ -3662,10 +3666,26 @@ def _build_conversation_profiles(
                 profile["restart_by_them"] = int(profile.get("restart_by_them", 0) or 0) + 1
 
         session = profile.get("_session")
-        if not isinstance(session, dict) or not isinstance(last_ts, int) or ts - last_ts > SESSION_GAP_SECONDS:
+        session_start = int(session.get("start_ts", 0) or 0) if isinstance(session, dict) else 0
+        starts_new_session = (
+            not isinstance(session, dict)
+            or not isinstance(last_ts, int)
+            or ts - last_ts > SESSION_GAP_SECONDS
+            or (session_start > 0 and ts - session_start > SESSION_MAX_DURATION_SECONDS)
+        )
+        if starts_new_session:
             _finish_profile_session(profile)
-            session = {"start_ts": ts, "end_ts": ts, "count": 0, "sent_messages": 0, "received_messages": 0}
+            session = {
+                "start_ts": ts,
+                "end_ts": ts,
+                "count": 0,
+                "sent_messages": 0,
+                "received_messages": 0,
+                "max_gap_seconds": 0,
+            }
             profile["_session"] = session
+        elif isinstance(last_ts, int):
+            session["max_gap_seconds"] = max(int(session.get("max_gap_seconds", 0) or 0), int(ts - last_ts))
         session["end_ts"] = ts
         session["count"] = int(session.get("count", 0) or 0) + 1
         if is_out == 1:
@@ -3874,11 +3894,27 @@ def _conversation_sessions(label: str, profiles: Dict[str, Dict[str, Any]], th: 
                 continue
             duration = int(session.get("duration_seconds", 0) or 0)
             density = float(session.get("density_per_hour", 0.0) or 0.0)
-            score = count + density * 8.0 if kind == "alive_dialog" else count + _safe_div(duration, 3600) * 3.0
+            sent = int(session.get("sent_messages", 0) or 0)
+            received = int(session.get("received_messages", 0) or 0)
+            observed_max_gap = int(session.get("max_gap_seconds", 0) or 0)
+            if duration > SESSION_MAX_DURATION_SECONDS or density < SESSION_MIN_DENSITY_PER_HOUR:
+                continue
+            if sent < SESSION_MIN_DIRECTION_MESSAGES or received < SESSION_MIN_DIRECTION_MESSAGES:
+                continue
+            balance = 1.0 - min(1.0, _safe_div(abs(sent - received), max(1, count)))
+            if kind == "alive_dialog":
+                score = density * 20.0 + min(300, count) * 1.5 + balance * 50.0
+            else:
+                score = _safe_div(duration, 3600) * 100.0 + min(300, count) * 1.5 + density * 3.0 + balance * 50.0
             evidence = {
                 "message_count": count,
                 "duration_seconds": duration,
                 "density_per_hour": float(round(density, 4)),
+                "sent_messages": sent,
+                "received_messages": received,
+                "observed_max_gap_seconds": observed_max_gap,
+                "session_gap_limit_seconds": SESSION_GAP_SECONDS,
+                "maximum_session_seconds": SESSION_MAX_DURATION_SECONDS,
                 "start_datetime": _ts_to_msk_datetime(int(session.get("start_ts", 0) or 0)),
                 "end_datetime": _ts_to_msk_datetime(int(session.get("end_ts", 0) or 0)),
             }

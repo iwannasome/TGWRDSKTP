@@ -566,6 +566,20 @@ function assertReport(report) {
     ]
   }
 
+  const assertLiveSessionQuality = (label, period) => {
+    const insights = period?.conversation_insights ?? {}
+    const checks = []
+    for (const key of ['alive_dialog', 'longest_live_session']) {
+      const insight = insights[key]
+      const evidence = insight?.evidence ?? {}
+      checks.push([`${label}.${key}.bounded_duration`, Number(evidence.maximum_session_seconds ?? 0) === 12 * 60 * 60 && Number(evidence.duration_seconds ?? Number.POSITIVE_INFINITY) <= 12 * 60 * 60])
+      checks.push([`${label}.${key}.bounded_message_gap`, Number(evidence.session_gap_limit_seconds ?? 0) === 30 * 60 && Number(evidence.observed_max_gap_seconds ?? Number.POSITIVE_INFINITY) <= 30 * 60])
+      checks.push([`${label}.${key}.minimum_density`, Number(evidence.density_per_hour ?? 0) >= 4])
+      checks.push([`${label}.${key}.two_sided`, Number(evidence.sent_messages ?? 0) > 0 && Number(evidence.received_messages ?? 0) > 0])
+    }
+    return checks
+  }
+
   const required = [
     ...assertPeriodInvariants('all_time', allTime, { total: 19414, activeChats: 11 }),
     ...assertPeriodInvariants('year', year, { total: 18528, activeChats: 8 }),
@@ -574,6 +588,8 @@ function assertReport(report) {
     ...assertInsightContract('year', year),
     ...assertLongestSilenceQuality('all_time', allTime),
     ...assertLongestSilenceQuality('year', year),
+    ...assertLiveSessionQuality('all_time', allTime),
+    ...assertLiveSessionQuality('year', year),
     ['all_time.comeback_stronger_reactivation_wins', getInsightWinnerPeer(allTime, 'comeback') === 'user300008'],
     ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
     ['year.comeback_stronger_reactivation_wins', getInsightWinnerPeer(year, 'comeback') === 'user300008'],

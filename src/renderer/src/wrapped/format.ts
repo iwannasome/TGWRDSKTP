@@ -169,6 +169,12 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Длительность'
     case 'density_per_hour':
       return 'Плотность'
+    case 'observed_max_gap_seconds':
+      return 'Максимальный разрыв'
+    case 'session_gap_limit_seconds':
+      return 'Допустимый разрыв'
+    case 'maximum_session_seconds':
+      return 'Лимит сессии'
     case 'start_datetime':
       return 'Старт'
     case 'end_datetime':
