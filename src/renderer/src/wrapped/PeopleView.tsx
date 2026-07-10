@@ -162,18 +162,22 @@ function InsightDetailPanel({
   insight,
   period,
   anonymizeExport,
+  hidePrivateDetails,
   exportStatus,
   exporting,
   onAnonymizeExportChange,
+  onHidePrivateDetailsChange,
   onExport,
   onSelectPeer
 }: {
   insight: ConversationInsight
   period: PeriodKey
   anonymizeExport: boolean
+  hidePrivateDetails: boolean
   exportStatus: string
   exporting: boolean
   onAnonymizeExportChange: (value: boolean) => void
+  onHidePrivateDetailsChange: (value: boolean) => void
   onExport: () => void
   onSelectPeer: (peerFromId: string) => void
 }): JSX.Element {
@@ -244,6 +248,15 @@ function InsightDetailPanel({
             />
             <span className="break-words [overflow-wrap:anywhere]">Скрыть имя в PNG</span>
           </label>
+          <label className="flex min-w-0 cursor-pointer items-center gap-3 text-[13px] font-semibold text-slate-100">
+            <input
+              type="checkbox"
+              checked={hidePrivateDetails}
+              onChange={(event) => onHidePrivateDetailsChange(event.currentTarget.checked)}
+              className="h-4 w-4 accent-sky-400"
+            />
+            <span className="break-words [overflow-wrap:anywhere]">Скрыть точные даты</span>
+          </label>
           <button
             type="button"
             onClick={onExport}
@@ -301,7 +314,8 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
   const [query, setQuery] = useState('')
   const [selectedPeer, setSelectedPeer] = useState('')
   const [selectedInsightKind, setSelectedInsightKind] = useState<ConversationInsightKind>('main_person')
-  const [anonymizeInsightExport, setAnonymizeInsightExport] = useState(false)
+  const [anonymizeInsightExport, setAnonymizeInsightExport] = useState(true)
+  const [hidePrivateInsightDetails, setHidePrivateInsightDetails] = useState(true)
   const [exportingInsight, setExportingInsight] = useState(false)
   const [insightExportStatus, setInsightExportStatus] = useState('')
   const insightExportRef = useRef<HTMLDivElement>(null)
@@ -452,9 +466,11 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
               insight={selectedInsight}
               period={period}
               anonymizeExport={anonymizeInsightExport}
+              hidePrivateDetails={hidePrivateInsightDetails}
               exportStatus={insightExportStatus}
               exporting={exportingInsight}
               onAnonymizeExportChange={setAnonymizeInsightExport}
+              onHidePrivateDetailsChange={setHidePrivateInsightDetails}
               onExport={exportSelectedInsight}
               onSelectPeer={(peerFromId) => {
                 if (!peerFromId) return
@@ -723,7 +739,12 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
       </div>
       <div className="fixed left-[-6000px] top-0" aria-hidden="true">
         <div ref={insightExportRef} style={{ width: INSIGHT_EXPORT_W, height: INSIGHT_EXPORT_H }}>
-          <InsightExportCard insight={selectedInsight} period={period} anonymize={anonymizeInsightExport} />
+          <InsightExportCard
+            insight={selectedInsight}
+            period={period}
+            anonymize={anonymizeInsightExport}
+            hidePrivateDetails={hidePrivateInsightDetails}
+          />
         </div>
       </div>
     </div>

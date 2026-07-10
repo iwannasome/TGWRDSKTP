@@ -32,8 +32,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+.venv-build/
 venv/
 env/
+worker-bin/*/
 
 # TGWR local data and generated reports
 *.db

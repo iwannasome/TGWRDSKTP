@@ -1,0 +1,59 @@
+{
+  "personal_information": {
+    "user_id": 100000
+  },
+  "chats": {
+    "list": [
+      {
+        "name": "Анонимный контакт",
+        "type": "personal_chat",
+        "id": 101,
+        "messages": [
+          {"id": 1, "type": "message", "date_unixtime": "1704103200", "from": "Владелец", "from_id": "user100000", "text": "Первое сообщение"},
+          {"id": 2, "type": "message", "date_unixtime": "1704106800", "from": "Контакт", "from_id": "user101", "text": "Ответ"}
+        ]
+      },
+      {
+        "name": "Синтетическая группа",
+        "type": "private_group",
+        "id": 102,
+        "messages": [
+          {"id": 1, "type": "message", "date_unixtime": "1704110400", "from": "Участник", "from_id": "user102", "text": "Группа не импортируется"}
+        ]
+      },
+      {
+        "name": "Пустой контакт",
+        "type": "personal_chat",
+        "id": 103,
+        "messages": []
+      },
+      {
+        "name": "Одно имя",
+        "type": "personal_chat",
+        "id": 104,
+        "messages": [
+          {"id": 1, "type": "message", "date_unixtime": "1735725600", "from": "Владелец", "from_id": "user100000", "text": "Чат 104"},
+          {"id": 2, "type": "message", "date_unixtime": "1735729200", "from": "Контакт", "from_id": "user104", "text": "Ответ 104"}
+        ]
+      },
+      {
+        "name": "Одно имя",
+        "type": "personal_chat",
+        "id": 105,
+        "messages": [
+          {"id": 1, "type": "message", "date_unixtime": "1735732800", "from": "Владелец", "from_id": "user100000", "text": "Чат 105"},
+          {"id": 2, "type": "message", "date_unixtime": "1735736400", "from": "Контакт", "from_id": "user105", "text": "Ответ 105"}
+        ]
+      },
+      {
+        "name": "Анонимный контакт",
+        "type": "personal_chat",
+        "id": 101,
+        "messages": [
+          {"id": 1, "type": "message", "date_unixtime": "1704103200", "from": "Владелец", "from_id": "user100000", "text": "Дубликат"},
+          {"id": 2, "type": "message", "date_unixtime": "1704106800", "from": "Контакт", "from_id": "user101", "text": "Дубликат ответа"}
+        ]
+      }
+    ]
+  }
+}

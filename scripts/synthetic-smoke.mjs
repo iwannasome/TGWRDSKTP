@@ -13,7 +13,7 @@ const outDir = join(workDir, 'out')
 const screenshotsDir = join(workDir, 'screenshots')
 const dbPath = join(outDir, 'tgwr.db')
 const selfId = 'user100000000'
-const SLIDE_COUNT = 22
+const SLIDE_COUNT = 14
 
 function isoDate(baseMs, index, stepMinutes = 37) {
   return new Date(baseMs + index * stepMinutes * 60_000).toISOString().replace('.000Z', '')
@@ -700,18 +700,21 @@ function assertReport(report) {
     ['year.faded_dialog_fixture_eligible', (year?.conversation_insights?.faded_dialog?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300005')],
     ['year.media_bond_fixture', getInsightWinnerPeer(year, 'media_bond') === 'user300006'],
     ['all_time.total_messages', allTime?.total_messages > 4500],
+    ['report.schema_version', report?.schema_version === 2],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
+    ['meta.available_years', Array.isArray(report?.meta?.available_years) && report.meta.available_years.some((item) => item?.year === 2025 && item?.messages === 25468)],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
     ['top_10_people_by_mutuality', year?.top_10_people_by_mutuality?.length >= 2],
-    ['all_time.top_10_people_by_mutuality_5000_gate', (allTime?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
-    ['top_10_people_by_mutuality_5000_gate', (year?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.total_messages ?? 0) >= 5000 && Number(person?.minimum_messages_required ?? 0) === 5000)],
-    ['all_time.mutual_dialog_5000_gate', Number(allTime?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
-    ['year.mutual_dialog_5000_gate', Number(year?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= 5000],
+    ['all_time.top_10_people_by_mutuality_adaptive_gate', (allTime?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.minimum_messages_required ?? 0) >= 500 && Number(person?.minimum_messages_required ?? 0) <= 5000 && Number(person?.total_messages ?? 0) >= Number(person?.minimum_messages_required ?? 0))],
+    ['top_10_people_by_mutuality_adaptive_gate', (year?.top_10_people_by_mutuality ?? []).every((person) => Number(person?.minimum_messages_required ?? 0) >= 500 && Number(person?.minimum_messages_required ?? 0) <= 5000 && Number(person?.total_messages ?? 0) >= Number(person?.minimum_messages_required ?? 0))],
+    ['all_time.mutual_dialog_adaptive_gate', Number(allTime?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= Number(allTime?.conversation_insights?.mutual_dialog?.evidence?.minimum_messages_required ?? 0)],
+    ['year.mutual_dialog_adaptive_gate', Number(year?.conversation_insights?.mutual_dialog?.winner?.total_messages ?? 0) >= Number(year?.conversation_insights?.mutual_dialog?.evidence?.minimum_messages_required ?? 0)],
     ['top_longest_messages_sent', allTime?.top_longest_messages_sent?.length > 0],
     ['word_cloud', Object.keys(allTime?.word_cloud ?? {}).length > 0],
-    ['achievements', report?.achievements?.length > 0],
+    ['achievements', report?.achievements?.length > 0 && !report.achievements.some((item) => item?.id === 'placeholder')],
+    ['deleted_metric_removed', !Object.prototype.hasOwnProperty.call(allTime ?? {}, 'deleted_messages_count') && !Object.prototype.hasOwnProperty.call(year ?? {}, 'deleted_messages_count')],
     ['period_span', Boolean(allTime?.period_span?.first_date && allTime?.period_span?.last_date)],
     ['quietest_month', Boolean(year?.quietest_month?.value) && Number(year?.quietest_month?.count ?? -1) >= 0],
     ['direction_extremes', Boolean(year?.most_balanced_day?.date && year?.most_one_sided_day?.date)],
@@ -1042,8 +1045,59 @@ function renderHarnessHtml(report, assets, slideIndex) {
         };
         tick();
       }
+      function runSharePreviewCheck() {
+        const deadline = Date.now() + 7000;
+        let openedExisting = false;
+        let clickedExport = false;
+        const tick = () => {
+          const root = document.querySelector('[data-tgwr-view]');
+          const view = root && root.getAttribute('data-tgwr-view');
+
+          if (!openedExisting) {
+            const openOld = findButtonByText('Открыть старый');
+            if (openOld) {
+              openedExisting = true;
+              openOld.click();
+              setTimeout(tick, 80);
+              return;
+            }
+          }
+
+          if (view === 'slides' && !clickedExport) {
+            const pngButton = findButtonByText('PNG');
+            if (pngButton) {
+              clickedExport = true;
+              pngButton.click();
+              setTimeout(tick, 80);
+              return;
+            }
+          }
+
+          const preview = document.querySelector('[data-tgwr-share-preview="true"]');
+          if (preview) {
+            const previewText = preview.textContent || '';
+            const checked = Array.from(preview.querySelectorAll('input[type="checkbox"]')).every((input) => input.checked);
+            if (previewText.includes('Собеседник ') && !previewText.includes('Александра Очень') && checked) {
+              document.body.setAttribute('data-share-preview-check', 'ok');
+              return;
+            }
+          }
+
+          if (Date.now() > deadline) {
+            document.body.setAttribute('data-share-preview-check', 'fail:' + view);
+            showHarnessError('Share preview check failed. Current view: ' + view + ', clickedExport=' + clickedExport);
+            return;
+          }
+          setTimeout(tick, 80);
+        };
+        tick();
+      }
       function waitForSlidesReady() {
         const deadline = Date.now() + 7000;
+        if (new URLSearchParams(window.location.search).get('tgwr_share_preview_check') === '1') {
+          runSharePreviewCheck();
+          return;
+        }
         if (new URLSearchParams(window.location.search).get('tgwr_people_check') === '1') {
           runPeopleViewCheck();
           return;
@@ -1077,10 +1131,15 @@ function renderHarnessHtml(report, assets, slideIndex) {
       window.__TGWR_REPORT__ = ${JSON.stringify(report)};
       window.tgwr = {
         onWorkerEvent: () => () => {},
-        sendWorker: () => {},
+        pingWorker: () => {},
+        importExport: () => {},
+        buildReport: () => {},
+        cancelWorker: () => {},
         pickExportDir: async () => null,
         pickOutputDir: async () => null,
         writeOutputFile: async () => ({ ok: true, path: '' }),
+        resetReport: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted: true }),
+        deleteAllData: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted_files: 2 }),
         loadReport: async () => ({
           ok: true,
           db_path: ${JSON.stringify(dbPath)},
@@ -1167,7 +1226,10 @@ async function runScreenshots(report, options = {}) {
         throw new Error(`DOM check did not reach slides view for ${label} slide ${slideIndex + 1}`)
       }
 
-      if (!domRes.stdout.includes(`${slideIndex + 1} / ${SLIDE_COUNT}`)) {
+      const totalMatch = domRes.stdout.match(/data-tgwr-slide-total="(\d+)"/)
+      const renderedTotal = Number(totalMatch?.[1] ?? 0)
+      const renderedIndex = Math.min(slideIndex, Math.max(0, renderedTotal - 1))
+      if (renderedTotal <= 0 || !domRes.stdout.includes(`${renderedIndex + 1} / ${renderedTotal}`)) {
         throw new Error(`DOM check opened wrong slide for ${label} slide ${slideIndex + 1}`)
       }
 
@@ -1344,6 +1406,49 @@ async function runInsightExportCardSmoke(report) {
   }
 }
 
+async function runSharePreviewSmoke(report) {
+  const chrome = findChrome()
+  if (!chrome) {
+    console.log('share_preview=skipped chrome_not_found')
+    return
+  }
+
+  const harness = await startHarnessServer(report)
+  try {
+    const pageUrl = `${harness.origin}/?tgwr_slide=5&tgwr_share_preview_check=1`
+    const dom = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--virtual-time-budget=12000',
+      '--dump-dom',
+      pageUrl
+    ], 30_000)
+
+    if (dom.code !== 0 || !dom.stdout.includes('data-share-preview-check="ok"')) {
+      throw new Error(`Share preview DOM check failed: ${dom.stderr || dom.stdout.slice(-3000)}`)
+    }
+
+    const screenshotPath = join(screenshotsDir, 'share-preview.png')
+    const shot = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      '--window-size=1360,900',
+      '--virtual-time-budget=12000',
+      `--screenshot=${screenshotPath}`,
+      pageUrl
+    ], 30_000)
+    if (shot.code !== 0) throw new Error(`Share preview screenshot failed: ${shot.stderr || shot.stdout}`)
+    const info = await stat(screenshotPath)
+    if (info.size < 25_000) throw new Error(`Share preview screenshot looks too small: ${info.size} bytes`)
+    console.log(`share_preview=ok screenshot=${screenshotPath} bytes=${info.size}`)
+  } finally {
+    await new Promise((resolvePromise) => harness.server.close(resolvePromise))
+  }
+}
+
 async function main() {
   if (!existsSync(join(root, 'dist/renderer/index.html'))) {
     throw new Error('dist/renderer/index.html not found. Run npm run build first.')
@@ -1354,21 +1459,22 @@ async function main() {
   const report = JSON.parse(await readFile(reportPath, 'utf8'))
   assertReport(report)
   const baseTargets = process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? allSlideTargets() : undefined
-  const expandedMobileTargets = [0, 1, 2, 5, 6, 7, 8, 9, 11, 12, 14, 15, 16, 17, 18]
+  const expandedMobileTargets = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
   const screenshots = [
     ...(await runScreenshots(report, { label: 'base', targets: baseTargets })),
     ...(await runScreenshots(report, {
       label: 'mobile',
-      targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 13, 18],
+      targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 9, 13],
       viewport: { width: 390, height: 844 },
       minScreenshotBytes: 15_000
     })),
-    ...(await runScreenshots(makeEmptyReport(report), { label: 'empty', targets: [1, 7, 13, 18] })),
-    ...(await runScreenshots(makeExtremeReport(report), { label: 'extreme', targets: [1, 7, 10, 13, 18] }))
+    ...(await runScreenshots(makeEmptyReport(report), { label: 'empty', targets: [0, 1, 2, 3] })),
+    ...(await runScreenshots(makeExtremeReport(report), { label: 'extreme', targets: [1, 6, 9, 11, 13] }))
   ]
   await runNavigationStress(report)
   await runPeopleViewSmoke(report)
   await runInsightExportCardSmoke(report)
+  await runSharePreviewSmoke(report)
 
   console.log(`synthetic_export=${exportDir}`)
   console.log(`db=${dbPath}`)

@@ -25,39 +25,43 @@ declare global {
     error?: string
   }
 
-  interface TgwrDeleteReportOk {
+  interface TgwrDataMutationOk {
     ok: true
     db_path: string
     report_path: string
-    deleted: boolean
+    deleted?: boolean
+    deleted_files?: number
   }
 
-  interface TgwrDeleteReportFail {
+  interface TgwrDataMutationFail {
     ok: false
     error?: string
+  }
+
+  interface TgwrOutputDirectoryGrant {
+    token: string
+    displayPath: string
   }
 
   interface Window {
     tgwr: {
       onWorkerEvent: (cb: (payload: unknown) => void) => () => void
-      sendWorker: (cmdObj: Record<string, unknown>) => void
+      pingWorker: () => void
+      importExport: (exportDir: string) => void
+      buildReport: (year?: number) => void
+      cancelWorker: () => void
 
       pickExportDir: () => Promise<string | null>
-      pickOutputDir: () => Promise<string | null>
-
+      pickOutputDir: () => Promise<TgwrOutputDirectoryGrant | null>
       writeOutputFile: (
-        dirPath: string,
+        directoryToken: string,
         filename: string,
         bytes: Uint8Array
       ) => Promise<TgwrWriteOutputResultOk | TgwrWriteOutputResultFail>
 
-      loadReport: (
-        dbPath?: string
-      ) => Promise<TgwrLoadReportOk | TgwrLoadReportFail>
-
-      deleteReport: (
-        dbPath?: string
-      ) => Promise<TgwrDeleteReportOk | TgwrDeleteReportFail>
+      loadReport: () => Promise<TgwrLoadReportOk | TgwrLoadReportFail>
+      resetReport: () => Promise<TgwrDataMutationOk | TgwrDataMutationFail>
+      deleteAllData: () => Promise<TgwrDataMutationOk | TgwrDataMutationFail>
     }
   }
 }

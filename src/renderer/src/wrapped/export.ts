@@ -43,8 +43,8 @@ export async function capturePngBytes(node: HTMLElement, options: CapturePngOpti
   return new Uint8Array(await fallbackBlob.arrayBuffer())
 }
 
-export async function writeOutputFile(dirPath: string, filename: string, bytes: Uint8Array): Promise<string> {
-  const res = await window.tgwr.writeOutputFile(dirPath, filename, bytes)
+export async function writeOutputFile(directoryToken: string, filename: string, bytes: Uint8Array): Promise<string> {
+  const res = await window.tgwr.writeOutputFile(directoryToken, filename, bytes)
   if (!res.ok) throw new Error(res.error ?? `Failed to write ${filename}`)
   return res.path
 }
@@ -52,5 +52,5 @@ export async function writeOutputFile(dirPath: string, filename: string, bytes: 
 export async function writePngWithPickedDirectory(filename: string, bytes: Uint8Array): Promise<string | null> {
   const dir = await window.tgwr.pickOutputDir()
   if (!dir) return null
-  return writeOutputFile(dir, filename, bytes)
+  return writeOutputFile(dir.token, filename, bytes)
 }

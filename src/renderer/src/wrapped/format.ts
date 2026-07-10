@@ -143,6 +143,12 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Минимальное покрытие'
     case 'balance_ratio':
       return 'Баланс'
+    case 'volume_component':
+      return 'Вклад объёма'
+    case 'active_days_component':
+      return 'Вклад активных дней'
+    case 'active_months_component':
+      return 'Вклад месяцев'
     case 'stability_ratio':
       return 'Стабильность'
     case 'gap_days':
@@ -179,6 +185,10 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Сообщений'
     case 'ratio':
       return 'Доля'
+    case 'archive_baseline_ratio':
+      return 'Обычная доля в архиве'
+    case 'lift_vs_archive':
+      return 'Выше обычного ритма'
     case 'message_count':
       return 'Сообщений в сессии'
     case 'duration_seconds':
@@ -249,6 +259,10 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Главного типа'
     case 'media_ratio':
       return 'Доля медиа'
+    case 'archive_media_ratio':
+      return 'Доля медиа в архиве'
+    case 'media_lift_vs_archive':
+      return 'Выше средней доли'
     default:
       return key
         .replaceAll('_', ' ')
@@ -267,7 +281,10 @@ export function formatEvidenceValue(key: string, value: unknown): string {
   if ((key === 'early_monthly_rate' || key === 'late_monthly_rate') && Number.isFinite(n)) {
     return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/мес.`
   }
-  if ((key === 'ratio' || key.endsWith('_ratio')) && Number.isFinite(n)) return formatPercent01(n)
+  if (
+    (key === 'ratio' || key.endsWith('_ratio') || key.endsWith('_component') || key === 'lift_vs_archive' || key === 'media_lift_vs_archive') &&
+    Number.isFinite(n)
+  ) return formatPercent01(n)
   if (key.endsWith('_seconds') && Number.isFinite(n)) return formatSecondsHuman(n)
   if (key.endsWith('_days') && Number.isFinite(n)) return `${formatInt(n)} дн.`
   if (key === 'top_media_type' && typeof value === 'string') {

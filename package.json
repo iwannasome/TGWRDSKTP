@@ -1,7 +1,7 @@
 {
   "name": "tgwr",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TGWR by IWS — fully local Telegram Wrapped desktop app",
   "author": {
     "name": "iwannasome",
@@ -20,15 +20,22 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test:worker": "python -m unittest discover -s worker/tests -p test_*.py -v",
     "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
-    "verify": "npm run typecheck && npm run test:synthetic && npm run pack",
+    "verify": "npm run typecheck && npm run test:worker && npm run test:synthetic && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run package:check && npm run app:smoke",
 
-    "pack": "npm run build && node scripts/electron-builder-safe.mjs --dir",
-    "dist:win": "npm run build && node scripts/electron-builder-safe.mjs --win nsis",
-    "dist:win:portable": "npm run build && node scripts/electron-builder-safe.mjs --win portable",
-    "dist:mac": "npm run build && node scripts/electron-builder-safe.mjs --mac dmg",
-    "dist:linux": "npm run build && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm",
-    "dist:current": "npm run build && node scripts/electron-builder-safe.mjs"
+    "worker:build": "node scripts/build-worker.mjs",
+    "worker:smoke": "node scripts/worker-binary-smoke.mjs",
+    "release:prepare": "npm run build && npm run worker:build && npm run worker:smoke",
+    "pack": "npm run release:prepare && npm run pack:app && npm run package:check",
+    "pack:app": "node scripts/electron-builder-safe.mjs --dir",
+    "package:check": "node scripts/verify-package-contents.mjs",
+    "app:smoke": "node scripts/packaged-app-smoke.mjs",
+    "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis && npm run package:check",
+    "dist:win:portable": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win portable && npm run package:check",
+    "dist:mac": "npm run release:prepare && node scripts/electron-builder-safe.mjs --mac dmg && npm run package:check",
+    "dist:linux": "npm run release:prepare && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm && npm run package:check",
+    "dist:current": "npm run release:prepare && node scripts/electron-builder-safe.mjs && npm run package:check"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",
@@ -64,13 +71,9 @@
     ],
     "extraResources": [
       {
-        "from": "worker",
-        "to": "worker",
-        "filter": [
-          "**/*",
-          "!**/__pycache__/**",
-          "!**/*.pyc"
-        ]
+        "from": "worker-bin",
+        "to": "worker-bin",
+        "filter": ["**/*"]
       }
     ],
     "asar": true,
@@ -96,8 +99,7 @@
     "mac": {
       "target": [
         {
-          "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "target": "dmg"
         }
       ],
       "icon": "build/icon.icns",

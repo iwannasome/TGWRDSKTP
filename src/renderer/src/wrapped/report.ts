@@ -107,6 +107,11 @@ export type ConversationInsight = {
 }
 
 export type ConversationInsights = Record<ConversationInsightKind, ConversationInsight>
+export type SharePrivacyOptions = {
+  hideNames: boolean
+  hideMessageText: boolean
+  hideExactDates: boolean
+}
 
 const DEFAULT_CONFIDENCE: ConversationInsightConfidence = 'behavioral'
 
@@ -218,13 +223,117 @@ export function getDeckConversationInsights(report: unknown, period: PeriodKey):
     'main_person',
     'comeback',
     'closer_dialog',
+    'stable_dialog',
     'night_companion',
-    'day_anchor',
-    'mutual_dialog',
+    'media_bond',
     'alive_dialog',
-    'longest_live_session'
+    'longest_live_session',
+    'mutual_dialog',
+    'silence_restarter',
+    'contact_initiator',
+    'faded_dialog'
   ]
-  return preferred.map((kind) => insights[kind]).filter((insight) => insight.winner !== null).slice(0, 7)
+
+  const selected: ConversationInsight[] = []
+  const appearances = new Map<string, number>()
+  const sessionKinds = new Set<ConversationInsightKind>()
+
+  for (const kind of preferred) {
+    const insight = insights[kind]
+    const winner = insight.winner
+    if (!winner || winner.totalMessages <= 0) continue
+
+    if ((kind === 'alive_dialog' || kind === 'longest_live_session') && sessionKinds.size > 0) continue
+
+    const peerKey = winner.peerFromId || winner.displayName
+    const previousAppearances = appearances.get(peerKey) ?? 0
+    if (previousAppearances >= 2) continue
+
+    selected.push(insight)
+    appearances.set(peerKey, previousAppearances + 1)
+    if (kind === 'alive_dialog' || kind === 'longest_live_session') sessionKinds.add(kind)
+    if (selected.length >= 4) break
+  }
+
+  return selected
+}
+
+export function sanitizeReportForSharing(report: unknown, options: SharePrivacyOptions): unknown {
+  const nameMap = new Map<string, string>()
+  const peerMap = new Map<string, string>()
+
+  const anonymousName = (value: string): string => {
+    const key = value.trim() || 'unknown'
+    const existing = nameMap.get(key)
+    if (existing) return existing
+    const label = `Собеседник ${nameMap.size + 1}`
+    nameMap.set(key, label)
+    return label
+  }
+
+  const anonymousPeer = (value: string): string => {
+    const key = value.trim() || 'unknown'
+    const existing = peerMap.get(key)
+    if (existing) return existing
+    const label = `anonymous-peer-${peerMap.size + 1}`
+    peerMap.set(key, label)
+    return label
+  }
+
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map((item) => walk(item))
+    if (!isRecord(value)) return value
+
+    const out: Record<string, unknown> = {}
+    for (const [childKey, childValue] of Object.entries(value)) {
+      const normalizedKey = childKey.toLowerCase()
+
+      if (
+        options.hideNames &&
+        typeof childValue === 'string' &&
+        (normalizedKey === 'display_name' || normalizedKey === 'displayname' || normalizedKey === 'chat_name' || normalizedKey === 'from_name')
+      ) {
+        out[childKey] = anonymousName(childValue)
+        continue
+      }
+
+      if (
+        options.hideNames &&
+        typeof childValue === 'string' &&
+        (normalizedKey === 'peer_from_id' || normalizedKey === 'peerfromid' || normalizedKey === 'self_from_id')
+      ) {
+        out[childKey] = anonymousPeer(childValue)
+        continue
+      }
+
+      if (
+        options.hideMessageText &&
+        (normalizedKey.includes('snippet') || normalizedKey === 'text' || normalizedKey === 'message_text')
+      ) {
+        out[childKey] = typeof childValue === 'string' && childValue ? 'Текст скрыт для публикации' : childValue
+        continue
+      }
+
+      if (
+        options.hideExactDates &&
+        (
+          normalizedKey.includes('datetime') ||
+          normalizedKey.endsWith('_date') ||
+          normalizedKey === 'date' ||
+          normalizedKey.endsWith('_ts') ||
+          normalizedKey.includes('timestamp')
+        )
+      ) {
+        out[childKey] = null
+        continue
+      }
+
+      out[childKey] = walk(childValue)
+    }
+    return out
+  }
+
+  return walk(report)
 }
 
 export function getTotalMessages(p: Record<string, unknown>): number {

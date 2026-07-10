@@ -1,0 +1,8 @@
+{
+  "name": "Разделённый чат",
+  "type": "personal_chat",
+  "id": 200,
+  "messages": [
+    {"id": 1, "type": "message", "date_unixtime": "1735819200", "from": "Владелец", "from_id": "user100000", "text": "Первая часть"}
+  ]
+}

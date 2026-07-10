@@ -1,0 +1,82 @@
+name: Проверка TGWR
+
+on:
+  push:
+    branches: [master, "fix/**", "agent/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Метрики, fixtures и интерфейс
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:worker
+      - name: Полный synthetic и browser smoke
+        run: npm run test:synthetic
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+          TGWR_SMOKE_ALL_SLIDES: "1"
+          PYTHONWARNINGS: error::DeprecationWarning
+
+  package:
+    name: Package ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: linux-x64
+            app_smoke: true
+          - os: windows-2025
+            name: windows-x64
+            app_smoke: false
+          - os: macos-15-intel
+            name: macos-x64
+            app_smoke: false
+          - os: macos-15
+            name: macos-arm64
+            app_smoke: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: python -m pip install -r worker/requirements-build.txt
+      - run: npm run typecheck
+      - run: npm run test:worker
+      - run: npm run build
+      - run: npm run worker:build
+      - run: npm run worker:smoke
+      - run: npm run pack:app
+      - run: npm run package:check
+      - name: Проверить связь Electron с packaged worker
+        if: matrix.app_smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          sudo chown root:root release/linux-unpacked/chrome-sandbox
+          sudo chmod 4755 release/linux-unpacked/chrome-sandbox
+          xvfb-run -a npm run app:smoke
