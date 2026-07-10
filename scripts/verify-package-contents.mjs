@@ -1,7 +1,8 @@
 import { readdir, stat } from 'node:fs/promises'
-import { join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const root = resolve(new URL('..', import.meta.url).pathname)
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const releaseDir = join(root, 'release')
 const executableName = process.platform === 'win32' ? 'tgwr-worker.exe' : 'tgwr-worker'
 const expectedSuffix = ['worker-bin', `${process.platform}-${process.arch}`, executableName].join('/')
