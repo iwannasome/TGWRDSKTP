@@ -316,7 +316,13 @@ export function sanitizeReportForSharing(report: unknown, options: SharePrivacyO
 
       if (
         options.hideExactDates &&
-        (normalizedKey.includes('datetime') || normalizedKey.endsWith('_date') || normalizedKey === 'date')
+        (
+          normalizedKey.includes('datetime') ||
+          normalizedKey.endsWith('_date') ||
+          normalizedKey === 'date' ||
+          normalizedKey.endsWith('_ts') ||
+          normalizedKey.includes('timestamp')
+        )
       ) {
         out[childKey] = null
         continue
