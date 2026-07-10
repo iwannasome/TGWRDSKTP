@@ -42,20 +42,20 @@ await new Promise((resolvePromise, reject) => {
 
   const inspect = (chunk) => {
     output += chunk.toString('utf8')
-    if (output.includes('tgwr_packaged_worker_smoke=ok')) {
-      console.log('packaged_app_smoke=ok bundled_worker=pong')
+    if (output.includes('tgwr_packaged_app_smoke=ok worker=pong renderer=ready')) {
+      console.log('packaged_app_smoke=ok bundled_worker=pong renderer=ready')
       finish()
     }
   }
 
   const timeout = setTimeout(() => {
-    finish(new Error(`Установленное приложение не дождалось pong от worker.\n${output.slice(-4000)}`))
+    finish(new Error(`Установленное приложение не подтвердило готовность интерфейса и worker.\n${output.slice(-4000)}`))
   }, 20_000)
 
   child.stdout.on('data', inspect)
   child.stderr.on('data', inspect)
   child.on('error', finish)
   child.on('exit', (code) => {
-    if (!settled) finish(new Error(`Приложение завершилось до проверки worker (code=${code ?? 'null'}).\n${output.slice(-4000)}`))
+    if (!settled) finish(new Error(`Приложение завершилось до проверки интерфейса и worker (code=${code ?? 'null'}).\n${output.slice(-4000)}`))
   })
 })

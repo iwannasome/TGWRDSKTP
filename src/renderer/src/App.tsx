@@ -211,6 +211,11 @@ export default function App(): JSX.Element {
   }, [theme])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => window.tgwr.rendererReady(), 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
     importRunningRef.current = importRunning
   }, [importRunning])
 
