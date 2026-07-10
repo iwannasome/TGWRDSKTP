@@ -27,15 +27,15 @@
     "worker:build": "node scripts/build-worker.mjs",
     "worker:smoke": "node scripts/worker-binary-smoke.mjs",
     "release:prepare": "npm run build && npm run worker:build && npm run worker:smoke",
-    "pack": "npm run release:prepare && npm run pack:app",
+    "pack": "npm run release:prepare && npm run pack:app && npm run package:check",
     "pack:app": "node scripts/electron-builder-safe.mjs --dir",
     "package:check": "node scripts/verify-package-contents.mjs",
     "app:smoke": "node scripts/packaged-app-smoke.mjs",
-    "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis",
-    "dist:win:portable": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win portable",
-    "dist:mac": "npm run release:prepare && node scripts/electron-builder-safe.mjs --mac dmg",
-    "dist:linux": "npm run release:prepare && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm",
-    "dist:current": "npm run release:prepare && node scripts/electron-builder-safe.mjs"
+    "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis && npm run package:check",
+    "dist:win:portable": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win portable && npm run package:check",
+    "dist:mac": "npm run release:prepare && node scripts/electron-builder-safe.mjs --mac dmg && npm run package:check",
+    "dist:linux": "npm run release:prepare && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm && npm run package:check",
+    "dist:current": "npm run release:prepare && node scripts/electron-builder-safe.mjs && npm run package:check"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",
