@@ -470,7 +470,7 @@ export default function SlidesView({
       ) : null}
 
       {pendingExportKind && PreviewSlide ? (
-        <div className="fixed inset-0 z-[180] flex items-center justify-center overflow-auto bg-black/80 p-5 backdrop-blur-md">
+        <div data-tgwr-share-preview="true" className="fixed inset-0 z-[180] flex items-center justify-center overflow-auto bg-black/80 p-5 backdrop-blur-md">
           <div className="w-full max-w-[1120px] rounded-[28px] border border-white/10 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.72)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>

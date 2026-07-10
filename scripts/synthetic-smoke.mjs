@@ -1045,8 +1045,59 @@ function renderHarnessHtml(report, assets, slideIndex) {
         };
         tick();
       }
+      function runSharePreviewCheck() {
+        const deadline = Date.now() + 7000;
+        let openedExisting = false;
+        let clickedExport = false;
+        const tick = () => {
+          const root = document.querySelector('[data-tgwr-view]');
+          const view = root && root.getAttribute('data-tgwr-view');
+
+          if (!openedExisting) {
+            const openOld = findButtonByText('Открыть старый');
+            if (openOld) {
+              openedExisting = true;
+              openOld.click();
+              setTimeout(tick, 80);
+              return;
+            }
+          }
+
+          if (view === 'slides' && !clickedExport) {
+            const pngButton = findButtonByText('PNG');
+            if (pngButton) {
+              clickedExport = true;
+              pngButton.click();
+              setTimeout(tick, 80);
+              return;
+            }
+          }
+
+          const preview = document.querySelector('[data-tgwr-share-preview="true"]');
+          if (preview) {
+            const previewText = preview.textContent || '';
+            const checked = Array.from(preview.querySelectorAll('input[type="checkbox"]')).every((input) => input.checked);
+            if (previewText.includes('Собеседник ') && !previewText.includes('Александра Очень') && checked) {
+              document.body.setAttribute('data-share-preview-check', 'ok');
+              return;
+            }
+          }
+
+          if (Date.now() > deadline) {
+            document.body.setAttribute('data-share-preview-check', 'fail:' + view);
+            showHarnessError('Share preview check failed. Current view: ' + view + ', clickedExport=' + clickedExport);
+            return;
+          }
+          setTimeout(tick, 80);
+        };
+        tick();
+      }
       function waitForSlidesReady() {
         const deadline = Date.now() + 7000;
+        if (new URLSearchParams(window.location.search).get('tgwr_share_preview_check') === '1') {
+          runSharePreviewCheck();
+          return;
+        }
         if (new URLSearchParams(window.location.search).get('tgwr_people_check') === '1') {
           runPeopleViewCheck();
           return;
@@ -1355,6 +1406,49 @@ async function runInsightExportCardSmoke(report) {
   }
 }
 
+async function runSharePreviewSmoke(report) {
+  const chrome = findChrome()
+  if (!chrome) {
+    console.log('share_preview=skipped chrome_not_found')
+    return
+  }
+
+  const harness = await startHarnessServer(report)
+  try {
+    const pageUrl = `${harness.origin}/?tgwr_slide=5&tgwr_share_preview_check=1`
+    const dom = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--virtual-time-budget=12000',
+      '--dump-dom',
+      pageUrl
+    ], 30_000)
+
+    if (dom.code !== 0 || !dom.stdout.includes('data-share-preview-check="ok"')) {
+      throw new Error(`Share preview DOM check failed: ${dom.stderr || dom.stdout.slice(-3000)}`)
+    }
+
+    const screenshotPath = join(screenshotsDir, 'share-preview.png')
+    const shot = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      '--window-size=1360,900',
+      '--virtual-time-budget=12000',
+      `--screenshot=${screenshotPath}`,
+      pageUrl
+    ], 30_000)
+    if (shot.code !== 0) throw new Error(`Share preview screenshot failed: ${shot.stderr || shot.stdout}`)
+    const info = await stat(screenshotPath)
+    if (info.size < 25_000) throw new Error(`Share preview screenshot looks too small: ${info.size} bytes`)
+    console.log(`share_preview=ok screenshot=${screenshotPath} bytes=${info.size}`)
+  } finally {
+    await new Promise((resolvePromise) => harness.server.close(resolvePromise))
+  }
+}
+
 async function main() {
   if (!existsSync(join(root, 'dist/renderer/index.html'))) {
     throw new Error('dist/renderer/index.html not found. Run npm run build first.')
@@ -1380,6 +1474,7 @@ async function main() {
   await runNavigationStress(report)
   await runPeopleViewSmoke(report)
   await runInsightExportCardSmoke(report)
+  await runSharePreviewSmoke(report)
 
   console.log(`synthetic_export=${exportDir}`)
   console.log(`db=${dbPath}`)
