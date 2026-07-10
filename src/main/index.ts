@@ -2,7 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import type { OpenDialogOptions } from 'electron'
 import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync, constants as fsConstants, promises as fsp } from 'node:fs'
+import { existsSync, promises as fsp } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { basename, dirname, extname, join, resolve, sep } from 'node:path'
 
@@ -10,12 +11,16 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const IPC_WORKER_EVENT = 'tgwr:worker-event' as const
-const IPC_WORKER_SEND = 'tgwr:worker-send' as const
+const IPC_WORKER_PING = 'tgwr:worker-ping' as const
+const IPC_WORKER_IMPORT = 'tgwr:worker-import' as const
+const IPC_WORKER_BUILD_REPORT = 'tgwr:worker-build-report' as const
+const IPC_WORKER_CANCEL = 'tgwr:worker-cancel' as const
 const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
-const IPC_DELETE_REPORT = 'tgwr:delete-report' as const
+const IPC_RESET_REPORT = 'tgwr:reset-report' as const
+const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -48,6 +53,8 @@ let mainWindow: BrowserWindow | null = null
 let workerProc: ChildProcessWithoutNullStreams | null = null
 let workerStdoutBuffer = ''
 let workerCommandUsed: string | null = null
+const selectedExportDirs = new Set<string>()
+const outputDirectoryGrants = new Map<string, string>()
 
 let pendingEvents: unknown[] = []
 let lastKnownStatus: WorkerStatusEvent = {
@@ -181,6 +188,14 @@ function handleWorkerStdoutChunk(text: string): void {
     }
 
     emitToRenderer(parsed)
+    if (
+      process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' &&
+      isPlainObject(parsed) &&
+      parsed.type === 'pong'
+    ) {
+      console.log('tgwr_packaged_worker_smoke=ok')
+      setTimeout(() => app.quit(), 50)
+    }
   }
 }
 
@@ -219,17 +234,37 @@ function attachWorker(proc: ChildProcessWithoutNullStreams): void {
 function startWorker(): void {
   if (workerProc) return
 
-  const scriptPath = app.isPackaged
-  ? join(process.resourcesPath, 'worker', 'tgwr_worker.py')
-  : join(process.cwd(), 'worker', 'tgwr_worker.py')
-
-
-  const mkArgs = (cmd: string): string[] => {
-    if (process.platform === 'win32' && cmd === 'py') return ['-3', '-u', scriptPath]
-    return ['-u', scriptPath]
+  type LaunchCandidate = {
+    command: string
+    args: string[]
+    label: string
+    cwd: string
   }
 
-  const candidates: string[] = process.platform === 'win32' ? ['py', 'python'] : ['python', 'python3']
+  const candidates: LaunchCandidate[] = []
+  let diagnosticPath = ''
+
+  if (app.isPackaged) {
+    const executableName = process.platform === 'win32' ? 'tgwr-worker.exe' : 'tgwr-worker'
+    const bundledPath = join(process.resourcesPath, 'worker-bin', `${process.platform}-${process.arch}`, executableName)
+    diagnosticPath = bundledPath
+    if (!existsSync(bundledPath)) {
+      emitStatus('fail', `В установленном приложении отсутствует встроенный worker: ${executableName}`)
+      emitHost('error', 'Bundled worker is missing', { platform: process.platform, arch: process.arch })
+      return
+    }
+    candidates.push({ command: bundledPath, args: [], label: 'bundled', cwd: dirname(bundledPath) })
+  } else {
+    const scriptPath = join(process.cwd(), 'worker', 'tgwr_worker.py')
+    diagnosticPath = scriptPath
+    const pythonCommands = process.platform === 'win32' ? ['py', 'python'] : ['python', 'python3']
+    for (const command of pythonCommands) {
+      const args = process.platform === 'win32' && command === 'py'
+        ? ['-3', '-u', scriptPath]
+        : ['-u', scriptPath]
+      candidates.push({ command, args, label: command, cwd: process.cwd() })
+    }
+  }
 
   const tried: string[] = []
 
@@ -237,16 +272,18 @@ function startWorker(): void {
     if (idx >= candidates.length) {
       emitStatus(
         'fail',
-        `Python not found (tried: ${tried.join(', ')}). Install Python 3 and ensure it is on PATH.`
+        app.isPackaged
+          ? 'Не удалось запустить встроенный модуль анализа. Переустанови TGWR.'
+          : `Python not found (tried: ${tried.join(', ')}). Install Python 3 and ensure it is on PATH.`
       )
       return
     }
 
-    const cmd = candidates[idx]
-    tried.push(cmd)
+    const candidate = candidates[idx]
+    tried.push(candidate.label)
 
-    const proc = spawn(cmd, mkArgs(cmd), {
-      cwd: process.cwd(),
+    const proc = spawn(candidate.command, candidate.args, {
+      cwd: candidate.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true
     })
@@ -258,9 +295,9 @@ function startWorker(): void {
         return
       }
 
-      emitStatus('fail', `Failed to start worker via "${cmd}": ${err.message}`)
+      emitStatus('fail', `Failed to start worker via "${candidate.label}": ${err.message}`)
       emitHost('error', 'Worker spawn error', {
-        cmd,
+        command: candidate.label,
         message: err.message
       })
     }
@@ -271,21 +308,21 @@ function startWorker(): void {
       proc.removeListener('error', onError)
 
       workerProc = proc
-      workerCommandUsed = cmd
+      workerCommandUsed = candidate.label
 
       attachWorker(proc)
 
-      emitStatus('ok', `Worker started (${cmd})`)
+      emitStatus('ok', app.isPackaged ? 'Встроенный модуль анализа запущен' : `Worker started (${candidate.label})`)
       emitHost('info', 'Worker connected', {
-        cmd: workerCommandUsed ?? cmd,
-        scriptPath
+        command: workerCommandUsed ?? candidate.label,
+        packaged: app.isPackaged
       })
 
       sendToWorker({ cmd: 'ping' })
     })
   }
 
-  emitHost('info', 'Starting worker…', { script: scriptPath })
+  emitHost('info', 'Starting worker…', { packaged: app.isPackaged, target: basename(diagnosticPath) })
   trySpawn(0)
 }
 
@@ -310,7 +347,7 @@ function createWindow(): void {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
@@ -360,33 +397,45 @@ function createWindow(): void {
   })
 }
 
-async function isDirWritable(dirPath: string): Promise<boolean> {
-  try {
-    await fsp.access(dirPath, fsConstants.W_OK)
-    const probe = join(dirPath, `.tgwr_write_probe_${process.pid}_${Date.now()}`)
-    await fsp.writeFile(probe, 'x', { encoding: 'utf8' })
-    await fsp.unlink(probe)
-    return true
-  } catch {
-    return false
-  }
+async function computeDbPath(): Promise<{ db_path: string; location: 'userData' }> {
+  const userDataDir = app.getPath('userData')
+  await fsp.mkdir(userDataDir, { recursive: true })
+  return { db_path: join(userDataDir, 'tgwr.db'), location: 'userData' }
 }
 
-async function computeDbPath(): Promise<{ db_path: string; location: 'exe' | 'userData' }> {
-  if (!app.isPackaged) {
-    const userDataDir = app.getPath('userData')
-    return { db_path: join(userDataDir, 'tgwr.db'), location: 'userData' }
+function dataFilesForDb(dbPath: string): string[] {
+  const baseDir = dirname(dbPath)
+  return [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, join(baseDir, 'report.json')]
+}
+
+function legacyDbPath(): string | null {
+  if (!app.isPackaged) return null
+  const candidate = join(dirname(process.execPath), 'tgwr.db')
+  const canonical = join(app.getPath('userData'), 'tgwr.db')
+  return resolve(candidate) === resolve(canonical) ? null : candidate
+}
+
+async function migrateLegacyDataIfNeeded(): Promise<void> {
+  const legacy = legacyDbPath()
+  if (!legacy) return
+
+  const { db_path: canonical } = await computeDbPath()
+  const sourceFiles = dataFilesForDb(legacy)
+  const targetFiles = dataFilesForDb(canonical)
+
+  for (let index = 0; index < sourceFiles.length; index += 1) {
+    const source = sourceFiles[index]
+    const target = targetFiles[index]
+    if (!existsSync(source) || existsSync(target)) continue
+    try {
+      await fsp.copyFile(source, target)
+    } catch (err) {
+      emitHost('error', 'Не удалось перенести старые локальные данные', {
+        file: basename(source),
+        message: err instanceof Error ? err.message : String(err)
+      })
+    }
   }
-
-  const exeDir = dirname(process.execPath)
-  const candidate = join(exeDir, 'tgwr.db')
-
-  if (await isDirWritable(exeDir)) {
-    return { db_path: candidate, location: 'exe' }
-  }
-
-  const userDataDir = app.getPath('userData')
-  return { db_path: join(userDataDir, 'tgwr.db'), location: 'userData' }
 }
 
 function isSafeFilename(name: string): boolean {
@@ -418,7 +467,11 @@ ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
   }
   const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
   if (res.canceled) return null
-  return res.filePaths[0] ?? null
+  const selected = res.filePaths[0]
+  if (!selected) return null
+  const normalized = resolve(selected)
+  selectedExportDirs.add(normalized)
+  return normalized
 })
 
 ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
@@ -430,7 +483,12 @@ ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
   }
   const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
   if (res.canceled) return null
-  return res.filePaths[0] ?? null
+  const selected = res.filePaths[0]
+  if (!selected) return null
+  const normalized = resolve(selected)
+  const token = randomUUID()
+  outputDirectoryGrants.set(token, normalized)
+  return { token, display_path: normalized }
 })
 
 ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
@@ -439,11 +497,12 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
       return { ok: false, error: 'Invalid payload (expected object)' }
     }
 
-    const dirPath = typeof payload.dir_path === 'string' ? payload.dir_path : ''
+    const directoryToken = typeof payload.directory_token === 'string' ? payload.directory_token : ''
     const filename = typeof payload.filename === 'string' ? payload.filename : ''
     const bytesAny = payload.bytes as unknown
 
-    if (dirPath.trim().length === 0) return { ok: false, error: 'dir_path is required' }
+    const dirPath = outputDirectoryGrants.get(directoryToken)
+    if (!dirPath) return { ok: false, error: 'Папка экспорта не была выбрана в текущем сеансе' }
     if (!isAllowedOutputFilename(filename)) return { ok: false, error: 'Unsafe filename or unsupported extension' }
 
     let bytes: Uint8Array
@@ -484,23 +543,9 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
   }
 })
 
-ipcMain.handle(IPC_LOAD_REPORT, async (_event, args: unknown) => {
+ipcMain.handle(IPC_LOAD_REPORT, async () => {
   try {
-    let providedDbPath: string | null = null
-    if (typeof args === 'string') {
-      providedDbPath = args
-    } else if (isPlainObject(args) && typeof args.db_path === 'string') {
-      providedDbPath = args.db_path
-    }
-
-    let db_path: string
-    if (providedDbPath && providedDbPath.trim().length > 0) {
-      db_path = providedDbPath
-    } else {
-      const computed = await computeDbPath()
-      db_path = computed.db_path
-    }
-
+    const { db_path } = await computeDbPath()
     const report_path = join(dirname(db_path), 'report.json')
 
     if (!existsSync(report_path)) {
@@ -516,41 +561,49 @@ ipcMain.handle(IPC_LOAD_REPORT, async (_event, args: unknown) => {
   }
 })
 
-ipcMain.handle(IPC_DELETE_REPORT, async (_event, args: unknown) => {
+ipcMain.handle(IPC_RESET_REPORT, async () => {
   try {
-    let providedDbPath: string | null = null
-    if (typeof args === 'string') {
-      providedDbPath = args
-    } else if (isPlainObject(args) && typeof args.db_path === 'string') {
-      providedDbPath = args.db_path
-    }
-
-    let db_path: string
-    if (providedDbPath && providedDbPath.trim().length > 0) {
-      db_path = providedDbPath
-    } else {
-      const computed = await computeDbPath()
-      db_path = computed.db_path
-    }
-
+    const { db_path } = await computeDbPath()
     const report_path = join(dirname(db_path), 'report.json')
-
-    if (!existsSync(report_path)) {
-      return { ok: true, db_path, report_path, deleted: false }
-    }
-
-    await fsp.unlink(report_path)
-    return { ok: true, db_path, report_path, deleted: true }
+    const existed = existsSync(report_path)
+    await fsp.rm(report_path, { force: true })
+    return { ok: true, db_path, report_path, deleted: existed }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
   }
 })
 
-async function forwardImportExport(cmdObj: Record<string, unknown>): Promise<void> {
-  const exportDir = cmdObj.export_dir
-  const mode = cmdObj.mode
+ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
+  try {
+    sendToWorker({ cmd: 'cancel' })
+    const { db_path } = await computeDbPath()
+    const candidates = new Set(dataFilesForDb(db_path))
+    const legacy = legacyDbPath()
+    if (legacy) {
+      for (const filePath of dataFilesForDb(legacy)) candidates.add(filePath)
+    }
 
+    const deleted: string[] = []
+    for (const filePath of candidates) {
+      if (!existsSync(filePath)) continue
+      await fsp.rm(filePath, { force: true })
+      deleted.push(filePath)
+    }
+
+    return {
+      ok: true,
+      db_path,
+      report_path: join(dirname(db_path), 'report.json'),
+      deleted_files: deleted.length
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: msg }
+  }
+})
+
+async function forwardImportExport(exportDir: unknown): Promise<void> {
   if (typeof exportDir !== 'string' || exportDir.trim().length === 0) {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
@@ -559,40 +612,53 @@ async function forwardImportExport(cmdObj: Record<string, unknown>): Promise<voi
     })
     return
   }
-  if (typeof mode !== 'string' || mode.trim().length === 0) {
+
+  const normalizedExportDir = resolve(exportDir)
+  if (!selectedExportDirs.has(normalizedExportDir)) {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
       ts: nowIso(),
-      message: 'import_export requires mode: string'
+      message: 'Папка Telegram Export не была выбрана в текущем сеансе'
     })
     return
   }
 
   const { db_path, location } = await computeDbPath()
-  emitHost('info', 'DB path selected', { db_path, location, export_dir: exportDir, mode })
+  emitHost('info', 'DB path selected', { db_path, location })
 
-  const forwarded: Record<string, unknown> = { ...cmdObj, db_path }
-  sendToWorker(forwarded)
+  sendToWorker({
+    cmd: 'import_export',
+    mode: 'desktop',
+    export_dir: normalizedExportDir,
+    db_path
+  })
 }
 
-ipcMain.on(IPC_WORKER_SEND, (_event, cmdObj: unknown) => {
-  if (!isPlainObject(cmdObj)) {
+ipcMain.on(IPC_WORKER_PING, () => {
+  sendToWorker({ cmd: 'ping' })
+})
+
+ipcMain.on(IPC_WORKER_CANCEL, () => {
+  sendToWorker({ cmd: 'cancel' })
+})
+
+ipcMain.on(IPC_WORKER_IMPORT, (_event, exportDir: unknown) => {
+  void forwardImportExport(exportDir)
+})
+
+ipcMain.on(IPC_WORKER_BUILD_REPORT, (_event, year: unknown) => {
+  if (year !== undefined && (!Number.isInteger(year) || Number(year) < 2000 || Number(year) > 2200)) {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
       ts: nowIso(),
-      message: 'Expected an object command payload',
-      receivedType: Array.isArray(cmdObj) ? 'array' : typeof cmdObj
+      message: 'Год отчёта должен быть целым числом'
     })
     return
   }
 
-  const cmd = cmdObj.cmd
-  if (cmd === 'import_export') {
-    void forwardImportExport(cmdObj)
-    return
-  }
-
-  sendToWorker(cmdObj)
+  void computeDbPath().then(({ db_path }) => {
+    sendToWorker({ cmd: 'build_report', db_path, ...(year === undefined ? {} : { year: Number(year) }) })
+  })
 })
 
 app.on('before-quit', () => {
@@ -605,7 +671,8 @@ app.on('before-quit', () => {
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await migrateLegacyDataIfNeeded()
   createWindow()
   startWorker()
 

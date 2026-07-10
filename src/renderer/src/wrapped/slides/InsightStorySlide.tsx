@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import React from 'react'
 import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
-import { formatInsightConfidence, formatInsightNoWinnerReason, formatInt, formatPeriodHuman } from '../format'
+import { formatInsightConfidence, formatInsightNoWinnerReason, formatPeriodHuman } from '../format'
 import { getInsightDescription, getInsightEvidenceEntries, summarizeInsightEvidence } from '../insightCopy'
 import { getConversationInsight, type ConversationInsightKind } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
@@ -126,7 +126,7 @@ export default function InsightStorySlide({ report, period, kind, exporting }: P
                           {candidate.displayName}
                         </div>
                         <div className="mt-1 text-[12px] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                          оценка · {formatInt(Math.round(candidate.score))}
+                          прошёл пороги качества
                         </div>
                       </div>
                       <div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[12px] font-bold text-slate-200">

@@ -4,6 +4,8 @@ Date: 2026-07-10
 
 Branch: `fix/full-project-stabilization`
 
+Follow-up: friend-ready distribution, dynamic deck and schema v2 are documented in `docs/2026-07-10-friend-ready-v0.2.md`.
+
 ## Goal
 
 Prevent small, sparse, or structurally misleading chats from winning prominent TGWR metrics. The changes remain deterministic, local-only, and explainable through evidence in `report.json`.
@@ -139,9 +141,9 @@ Result:
 - desktop, mobile, empty, and extreme screenshots passed;
 - `electron-builder --dir` produced `release/linux-unpacked`.
 
-## Compatibility and remaining limits
+## Compatibility and remaining limits at the time of this change
 
-- Existing report fields remain available; new evidence fields are additive.
+- Renderer normalization remains compatible with reports created before schema v2.
 - Renderer normalization remains defensive for older reports.
 - These rules are deterministic heuristics, not psychological truth.
 - Thresholds still need validation against several real exports with different activity levels before a public release.

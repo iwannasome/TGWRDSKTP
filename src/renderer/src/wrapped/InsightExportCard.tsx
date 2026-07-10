@@ -12,16 +12,20 @@ type Props = {
   insight: ConversationInsight
   period: PeriodKey
   anonymize: boolean
+  hidePrivateDetails?: boolean
 }
 
 export const INSIGHT_EXPORT_W = 1080
 export const INSIGHT_EXPORT_H = 1920
 
-export default function InsightExportCard({ insight, period, anonymize }: Props): JSX.Element {
+export default function InsightExportCard({ insight, period, anonymize, hidePrivateDetails = true }: Props): JSX.Element {
   const winner = insight.winner
   const displayName = anonymize && winner ? 'Собеседник из Telegram' : winner?.displayName
-  const evidence = getInsightEvidenceEntries(insight, 5)
+  const evidence = getInsightEvidenceEntries(insight, 8)
+    .filter((entry) => !hidePrivateDetails || !/(date|datetime|snippet|text)/i.test(entry.key))
+    .slice(0, 5)
   const noWinnerReason = formatInsightNoWinnerReason(insight.noWinnerReason)
+  const evidenceSummary = evidence.slice(0, 3).map((entry) => `${entry.label}: ${entry.value}`).join(' · ')
 
   return (
     <div
@@ -91,7 +95,7 @@ export default function InsightExportCard({ insight, period, anonymize }: Props)
 
         <div className="mt-auto">
           <div className="rounded-[30px] border border-white/10 bg-black/20 p-6 text-[24px] leading-relaxed text-slate-100/90">
-            {winner ? summarizeInsightEvidence(insight, 3) : noWinnerReason}
+            {winner ? (evidenceSummary || summarizeInsightEvidence(insight, 3)) : noWinnerReason}
           </div>
           <div className="mt-6 flex items-end justify-between gap-6">
             <div className="text-[22px] font-semibold text-[rgba(var(--tgwr-muted-rgb),0.82)]">
