@@ -369,6 +369,7 @@ MSK_OFFSET_SECONDS = 3 * 60 * 60
 BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
 MAX_INFERRED_REPLY_SECONDS = 7 * 24 * 60 * 60
 PERSON_ANALYTICS_LIMIT = 50
+LONGEST_SILENCE_MIN_MESSAGES = 3000
 
 
 def banned_peer_ids() -> Tuple[str, ...]:
@@ -2426,7 +2427,12 @@ def _compute_reply_times(conn: sqlite3.Connection, year_start_ts: int, year_end_
     }
 
 
-def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:
+def _longest_silence_gap(
+    conn: sqlite3.Connection,
+    start_ts: int,
+    end_ts: int,
+    minimum_messages_required: int = LONGEST_SILENCE_MIN_MESSAGES,
+) -> Dict[str, Any]:
     base, p = _period_where_clause(start_ts, end_ts)
 
     banned_pks = set()
@@ -2441,12 +2447,21 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
     for r in conn.execute(ban_q, banned_params):
         banned_pks.add(r[0])
 
+    chat_message_counts: Dict[int, int] = {}
+    count_q = f"SELECT chat_pk, COUNT(*) FROM messages WHERE is_service = 0 AND {base} GROUP BY chat_pk;"
+    for row in conn.execute(count_q, p):
+        chat_pk = int(row[0])
+        message_count = int(row[1] or 0)
+        if chat_pk in banned_pks or message_count < minimum_messages_required:
+            continue
+        chat_message_counts[chat_pk] = message_count
+
     q = f"SELECT chat_pk, date_ts FROM messages WHERE is_service = 0 AND {base} ORDER BY chat_pk, date_ts;"
     max_gap = 0
     max_chat_pk: Optional[int] = None
     max_prev_ts: Optional[int] = None
     max_cur_ts: Optional[int] = None
-    gaps: List[int] = []
+    gaps_by_chat: Dict[int, List[int]] = {}
 
     last_chat: Optional[int] = None
     prev_ts: Optional[int] = None
@@ -2455,7 +2470,7 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
         chat_pk = int(row[0])
-        if chat_pk in banned_pks:
+        if chat_pk not in chat_message_counts:
             continue
         ts = int(row[1] or 0)
         if ts <= 0:
@@ -2466,7 +2481,7 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
             continue
         if prev_ts is not None and ts > prev_ts:
             gap = ts - prev_ts
-            gaps.append(int(gap))
+            gaps_by_chat.setdefault(chat_pk, []).append(int(gap))
             if gap > max_gap:
                 max_gap = gap
                 max_chat_pk = chat_pk
@@ -2485,6 +2500,9 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
         except Exception:
             pass
 
+    winner_gaps = gaps_by_chat.get(max_chat_pk, []) if max_chat_pk is not None else []
+    winner_median_gap = _median_int(winner_gaps)
+
     return {
         "gap_seconds": int(max_gap),
         "chat_pk": max_chat_pk,
@@ -2495,8 +2513,11 @@ def _longest_silence_gap(conn: sqlite3.Connection, start_ts: int, end_ts: int) -
         "from_datetime": _ts_to_msk_datetime(max_prev_ts),
         "to_datetime": _ts_to_msk_datetime(max_cur_ts),
         "calendar_days": int(max(0, (max_gap + 86399) // 86400)) if max_gap else 0,
-        "median_gap_seconds": _median_int(gaps),
-        "gap_vs_median_ratio": float(_safe_div(max_gap, _median_int(gaps))) if gaps else 0.0,
+        "median_gap_seconds": int(winner_median_gap),
+        "gap_vs_median_ratio": float(_safe_div(max_gap, winner_median_gap)) if winner_median_gap else 0.0,
+        "chat_message_count": int(chat_message_counts.get(max_chat_pk, 0)) if max_chat_pk is not None else 0,
+        "minimum_messages_required": int(minimum_messages_required),
+        "eligible_chats_count": len(chat_message_counts),
     }
 
 def _longest_streak_days(conn: sqlite3.Connection, start_ts: int, end_ts: int) -> Dict[str, Any]:

@@ -14,7 +14,7 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
     <SlideFrame
       kicker="TGWR Silence"
       title="Самая длинная пауза"
-      subtitle="Самый длинный промежуток тишины между двумя сообщениями."
+      subtitle="Среди диалогов минимум с 3 000 сообщений — чтобы случайный маленький чат не становился победителем."
     >
       <div className="flex h-full flex-col justify-center">
         <motion.div
@@ -56,15 +56,15 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
                 </div>
               </div>
               <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дольше обычного</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">сообщений в чате</div>
                 <div className="mt-2 text-[20px] font-bold text-slate-50">
-                  x<AnimatedNumber value={Math.round(s.gapVsMedianRatio)} exporting={exporting} duration={0.62} delay={0.34} />
+                  <AnimatedNumber value={s.chatMessageCount} exporting={exporting} duration={0.62} delay={0.34} format={formatInt} />
                 </div>
               </div>
               <div className="tgwr-info-card rounded-[20px] border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] px-4 py-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">тип паузы</div>
-                <div className="mt-2 text-[14px] font-semibold leading-snug text-slate-100">
-                  {s.calendarDays >= 30 ? 'исчезновение' : s.calendarDays >= 7 ? 'отпуск' : 'пауза'}
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">дольше обычного</div>
+                <div className="mt-2 text-[20px] font-bold text-slate-50">
+                  x<AnimatedNumber value={Math.round(s.gapVsMedianRatio)} exporting={exporting} duration={0.62} delay={0.38} />
                 </div>
               </div>
             </div>
@@ -72,7 +72,7 @@ export default function Slide16LongestSilence({ report, period, exporting }: Sli
 
           {!s && (
             <div className="mt-8 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-              Нужно минимум два сообщения в чате.
+              Нужен личный диалог минимум с 3 000 сообщениями.
             </div>
           )}
         </motion.div>

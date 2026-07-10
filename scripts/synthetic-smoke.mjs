@@ -557,12 +557,23 @@ function assertReport(report) {
     return winner && typeof winner === 'object' ? winner.peer_from_id : null
   }
 
+  const assertLongestSilenceQuality = (label, period) => {
+    const silence = period?.longest_silence_gap
+    return [
+      [`${label}.longest_silence_requires_3000_messages`, Number(silence?.minimum_messages_required ?? 0) === 3000],
+      [`${label}.longest_silence_winner_is_qualified`, Number(silence?.chat_message_count ?? 0) >= 3000],
+      [`${label}.longest_silence_tiny_chat_blocked`, silence?.peer_from_id !== 'user300003']
+    ]
+  }
+
   const required = [
     ...assertPeriodInvariants('all_time', allTime, { total: 19414, activeChats: 11 }),
     ...assertPeriodInvariants('year', year, { total: 18528, activeChats: 8 }),
     ...assertPersonAnalyticsInvariants(report?.people_analytics),
     ...assertInsightContract('all_time', allTime),
     ...assertInsightContract('year', year),
+    ...assertLongestSilenceQuality('all_time', allTime),
+    ...assertLongestSilenceQuality('year', year),
     ['all_time.comeback_stronger_reactivation_wins', getInsightWinnerPeer(allTime, 'comeback') === 'user300008'],
     ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
     ['year.comeback_stronger_reactivation_wins', getInsightWinnerPeer(year, 'comeback') === 'user300008'],

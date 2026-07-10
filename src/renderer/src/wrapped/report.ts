@@ -705,6 +705,8 @@ export function getLongestSilence(p: Record<string, unknown>): {
   calendarDays: number
   medianGapSeconds: number
   gapVsMedianRatio: number
+  chatMessageCount: number
+  minimumMessagesRequired: number
 } | null {
   const obj = getRecord(p, 'longest_silence_gap')
   if (!obj) return null
@@ -718,7 +720,9 @@ export function getLongestSilence(p: Record<string, unknown>): {
     toDatetime: getString(obj, 'to_datetime', ''),
     calendarDays: getNumber(obj, 'calendar_days', 0),
     medianGapSeconds: getNumber(obj, 'median_gap_seconds', 0),
-    gapVsMedianRatio: getNumber(obj, 'gap_vs_median_ratio', 0)
+    gapVsMedianRatio: getNumber(obj, 'gap_vs_median_ratio', 0),
+    chatMessageCount: getNumber(obj, 'chat_message_count', 0),
+    minimumMessagesRequired: getNumber(obj, 'minimum_messages_required', 3000)
   }
 }
 
