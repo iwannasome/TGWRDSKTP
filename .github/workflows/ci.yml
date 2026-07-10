@@ -77,4 +77,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
+          sudo chown root:root release/linux-unpacked/chrome-sandbox
+          sudo chmod 4755 release/linux-unpacked/chrome-sandbox
           xvfb-run -a npm run app:smoke
