@@ -129,6 +129,10 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Сообщений'
     case 'minimum_messages_required':
       return 'Минимум сообщений'
+    case 'baseline_messages':
+      return 'Сообщений для сравнения'
+    case 'minimum_baseline_messages':
+      return 'Минимум для сравнения'
     case 'active_days':
       return 'Активных дней'
     case 'total_active_days':
@@ -196,11 +200,25 @@ export function formatInsightEvidenceLabel(key: string): string {
     case 'ratio':
       return 'Доля'
     case 'archive_baseline_ratio':
-      return 'Обычная доля в архиве'
+      return 'Обычная доля вне этого чата'
     case 'lift_vs_archive':
       return 'Выше обычного ритма'
     case 'message_count':
       return 'Сообщений в сессии'
+    case 'normalized_change_messages':
+      return 'Изменение за сопоставимый срок'
+    case 'early_window_days':
+      return 'Дней в первой части'
+    case 'late_window_days':
+      return 'Дней во второй части'
+    case 'matched_window_days':
+      return 'Сопоставимый срок, дней'
+    case 'trend_span_days':
+      return 'Длительность наблюдения, дней'
+    case 'minimum_trend_span_days':
+      return 'Минимальная длительность, дней'
+    case 'minimum_media_lift':
+      return 'Минимальный избыток медиа'
     case 'duration_seconds':
       return 'Длительность'
     case 'density_per_hour':
@@ -270,7 +288,7 @@ export function formatInsightEvidenceLabel(key: string): string {
     case 'media_ratio':
       return 'Доля медиа'
     case 'archive_media_ratio':
-      return 'Доля медиа в архиве'
+      return 'Доля медиа вне этого чата'
     case 'media_lift_vs_archive':
       return 'Выше средней доли'
     default:
@@ -292,7 +310,7 @@ export function formatEvidenceValue(key: string, value: unknown): string {
     return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/мес.`
   }
   if (
-    (key === 'ratio' || key.endsWith('_ratio') || key.endsWith('_component') || key === 'lift_vs_archive' || key === 'media_lift_vs_archive') &&
+    (key === 'ratio' || key.endsWith('_ratio') || key.endsWith('_component') || key === 'lift_vs_archive' || key === 'media_lift_vs_archive' || key === 'minimum_media_lift') &&
     Number.isFinite(n)
   ) return formatPercent01(n)
   if (key.endsWith('_seconds') && Number.isFinite(n)) return formatSecondsHuman(n)

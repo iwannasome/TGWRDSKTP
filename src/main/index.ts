@@ -24,7 +24,7 @@ const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
 const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
 
-const REPORT_CACHE_REVISION = 1
+const REPORT_CACHE_REVISION = 2
 const REPORT_CACHE_DIR_NAME = 'report-cache'
 
 if (process.platform === 'linux') {

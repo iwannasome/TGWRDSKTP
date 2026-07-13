@@ -656,7 +656,7 @@ function assertReport(report) {
     ]
   }
 
-  const assertLiveSessionQuality = (label, period) => {
+  const assertLiveSessionQuality = (label, period, minimumTotal) => {
     const insights = period?.conversation_insights ?? {}
     const checks = []
     for (const key of ['alive_dialog', 'longest_live_session']) {
@@ -666,6 +666,8 @@ function assertReport(report) {
       checks.push([`${label}.${key}.bounded_message_gap`, Number(evidence.session_gap_limit_seconds ?? 0) === 30 * 60 && Number(evidence.observed_max_gap_seconds ?? Number.POSITIVE_INFINITY) <= 30 * 60])
       checks.push([`${label}.${key}.minimum_density`, Number(evidence.density_per_hour ?? 0) >= 4])
       checks.push([`${label}.${key}.two_sided`, Number(evidence.sent_messages ?? 0) > 0 && Number(evidence.received_messages ?? 0) > 0])
+      checks.push([`${label}.${key}.large_dialog`, Number(insight?.winner?.total_messages ?? 0) >= minimumTotal && Number(evidence.minimum_messages_required ?? 0) === minimumTotal])
+      checks.push([`${label}.${key}.large_dialog_candidates`, (insight?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= minimumTotal)])
     }
     return checks
   }
@@ -679,6 +681,19 @@ function assertReport(report) {
     const initiative = insights.contact_initiator
     const restarter = insights.silence_restarter
     const nightCompanion = insights.night_companion
+    const dayAnchor = insights.day_anchor
+    const mediaBond = insights.media_bond
+    const mediaCandidates = mediaBond?.candidates ?? []
+
+    const timeProfileChecks = (key, insight) => {
+      const candidates = insight?.candidates ?? []
+      const hasCandidates = candidates.length > 0
+      return [
+        [`${label}.${key}.minimum_volume`, !hasCandidates || (Number(insight?.winner?.total_messages ?? 0) >= 3000 && Number(insight?.evidence?.minimum_messages_required ?? 0) === 3000)],
+        [`${label}.${key}.candidates_qualified`, candidates.every((candidate) => Number(candidate?.total_messages ?? 0) >= 3000)],
+        [`${label}.${key}.leave_one_out_baseline`, !hasCandidates || (Number(insight?.evidence?.baseline_messages ?? 0) >= 1500 && insight?.evidence?.baseline_excludes_candidate === true)]
+      ]
+    }
 
     return [
       [`${label}.stable_dialog_fixture`, stable?.winner?.peer_from_id === 'user300001'],
@@ -686,19 +701,24 @@ function assertReport(report) {
       [`${label}.stable_dialog_formula_evidence`, Number(stable?.evidence?.monthly_deviation_ratio ?? -1) >= 0 && Math.abs((Number(stable?.evidence?.stability_ratio ?? 0) + Number(stable?.evidence?.monthly_deviation_ratio ?? 0)) - 1) < 0.0002],
       [`${label}.stable_dialog_threshold_evidence`, Number(stable?.evidence?.minimum_messages_required ?? 0) === thresholds.stableMessages && Number(stable?.evidence?.minimum_stability_ratio ?? 0) === thresholds.stableScore],
       [`${label}.stable_dialog_gap_fixture_blocked`, !(stable?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
-      [`${label}.night_companion_minimum_volume`, Number(nightCompanion?.winner?.total_messages ?? 0) >= 3000 && Number(nightCompanion?.evidence?.minimum_messages_required ?? 0) === 3000],
-      [`${label}.night_companion_candidates_qualified`, (nightCompanion?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= 3000)],
+      ...timeProfileChecks('night_companion', nightCompanion),
+      ...timeProfileChecks('day_anchor', dayAnchor),
       [`${label}.night_companion_small_night_chat_blocked`, !(nightCompanion?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
       [`${label}.closer_dialog_minimum_volume`, Number(closer?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(closer?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
       [`${label}.faded_dialog_minimum_volume`, Number(faded?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(faded?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
+      [`${label}.trend_windows_are_matched`, Number(closer?.evidence?.matched_window_days ?? 0) > 0 && Number(closer?.evidence?.trend_span_days ?? 0) >= thresholds.trendSpanDays && Number(closer?.evidence?.minimum_trend_span_days ?? 0) === thresholds.trendSpanDays],
       [`${label}.tiny_growth_fixture_blocked`, !(closer?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300010')],
       [`${label}.reply_rhythm_samples`, Number(reply?.evidence?.reply_samples ?? 0) >= thresholds.replySamples && Number(reply?.evidence?.minimum_reply_samples ?? 0) === thresholds.replySamples],
       [`${label}.contact_initiator_gap`, Number(initiative?.evidence?.contact_gap_seconds ?? 0) === 12 * 60 * 60],
       [`${label}.contact_initiator_samples`, Number(initiative?.evidence?.contact_events ?? 0) >= thresholds.contactEvents && Number(initiative?.evidence?.minimum_contact_events ?? 0) === thresholds.contactEvents],
       [`${label}.contact_initiator_dominance`, Number(initiative?.evidence?.dominance_ratio ?? 0) >= 0.6],
+      [`${label}.contact_initiator_large_dialog`, Number(initiative?.winner?.total_messages ?? 0) >= thresholds.majorMessages && (initiative?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= thresholds.majorMessages)],
       [`${label}.silence_restarter_gap`, Number(restarter?.evidence?.silence_gap_seconds ?? 0) === 7 * 24 * 60 * 60],
       [`${label}.silence_restarter_samples`, Number(restarter?.evidence?.restart_events ?? 0) >= thresholds.restartEvents && Number(restarter?.evidence?.minimum_restart_events ?? 0) === thresholds.restartEvents],
-      [`${label}.silence_restarter_dominance`, Number(restarter?.evidence?.dominance_ratio ?? 0) >= 0.6]
+      [`${label}.silence_restarter_dominance`, Number(restarter?.evidence?.dominance_ratio ?? 0) >= 0.6],
+      [`${label}.silence_restarter_large_dialog`, Number(restarter?.winner?.total_messages ?? 0) >= thresholds.majorMessages && (restarter?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= thresholds.majorMessages)],
+      [`${label}.media_bond_large_dialog`, mediaCandidates.length === 0 || (Number(mediaBond?.winner?.total_messages ?? 0) >= thresholds.majorMessages && Number(mediaBond?.evidence?.minimum_messages_required ?? 0) === thresholds.majorMessages)],
+      [`${label}.media_bond_above_other_dialogs`, mediaCandidates.length === 0 || (Number(mediaBond?.evidence?.media_lift_vs_archive ?? 0) >= 0.03 && Number(mediaBond?.evidence?.baseline_messages ?? 0) >= 1000 && mediaBond?.evidence?.baseline_excludes_candidate === true)]
     ]
   }
 
@@ -722,10 +742,10 @@ function assertReport(report) {
     ...assertInsightContract('year', year),
     ...assertLongestSilenceQuality('all_time', allTime),
     ...assertLongestSilenceQuality('year', year),
-    ...assertLiveSessionQuality('all_time', allTime),
-    ...assertLiveSessionQuality('year', year),
-    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, stableMessages: 520, stableScore: 0.4, trendMessages: 1200, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
-    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, stableMessages: 420, stableScore: 0.45, trendMessages: 1000, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
+    ...assertLiveSessionQuality('all_time', allTime, 500),
+    ...assertLiveSessionQuality('year', year, 400),
+    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, stableMessages: 520, stableScore: 0.4, trendMessages: 1200, trendSpanDays: 120, majorMessages: 500, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
+    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, stableMessages: 420, stableScore: 0.45, trendMessages: 1000, trendSpanDays: 90, majorMessages: 400, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
     ...assertComebackQuality('all_time', allTime),
     ...assertComebackQuality('year', year),
     ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
@@ -738,7 +758,7 @@ function assertReport(report) {
     ['report.schema_version', report?.schema_version === 2],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
-    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 1],
+    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 2],
     ['meta.available_years', Array.isArray(report?.meta?.available_years) && report.meta.available_years.some((item) => item?.year === 2025 && item?.messages === 25468)],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
@@ -756,6 +776,7 @@ function assertReport(report) {
     ['direction_extremes', Boolean(year?.most_balanced_day?.date && year?.most_one_sided_day?.date)],
     ['night_insights', Boolean(year?.night_peak_hour && year?.most_night_date)],
     ['reply_thresholds', year?.who_you_reply_fastest?.minimum_messages_required === 2500 && year?.who_you_ignore_most?.minimum_messages_required === 3000],
+    ['reply_sample_thresholds', Number(year?.who_you_reply_fastest?.reply_samples ?? 0) >= 20 && Number(year?.who_you_ignore_most?.reply_samples ?? 0) >= 20 && year?.who_you_reply_fastest?.minimum_reply_samples === 20 && year?.who_you_ignore_most?.minimum_reply_samples === 20],
     ['emoji_metrics', typeof year?.messages_with_emoji_count === 'number' && typeof year?.emoji_streak_max_messages === 'number'],
     ['media_insights', Boolean(year?.top_media_type?.type && year?.most_media_month?.value)],
     ['day_night_person_details', Boolean(year?.day_person?.day_peak_hour && year?.night_person?.night_peak_hour)],
