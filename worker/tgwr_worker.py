@@ -17,6 +17,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 VERSION = "0.2.0"
 REPORT_SCHEMA_VERSION = 2
+REPORT_CACHE_REVISION = 1
+REPORT_CACHE_DIR_NAME = "report-cache"
 
 _STDOUT_LOCK = threading.Lock()
 _CANCEL_EVENT = threading.Event()
@@ -28,6 +30,9 @@ _IMPORT_BUSY = False
 _REPORT_LOCK = threading.Lock()
 _REPORT_THREAD: Optional[threading.Thread] = None
 _REPORT_BUSY = False
+_REPORT_ACTIVE_JOB: Optional[Tuple[str, Optional[int], bool]] = None
+_REPORT_PENDING_ACTIVE: Optional[Tuple[str, Optional[int], bool]] = None
+_REPORT_PRELOAD_QUEUE: List[Tuple[str, Optional[int], bool]] = []
 
 
 class CancelledError(Exception):
@@ -47,12 +52,6 @@ def mark_import_idle() -> None:
         _IMPORT_BUSY = False
 
 
-def mark_report_idle() -> None:
-    global _REPORT_BUSY
-    with _STATE_LOCK:
-        _REPORT_BUSY = False
-
-
 def progress(stage: str, percent: int, current_chat: str = "", current_file: str = "") -> None:
     p = max(0, min(100, int(percent)))
     write_json(
@@ -64,6 +63,85 @@ def progress(stage: str, percent: int, current_chat: str = "", current_file: str
             "current_file": current_file,
         }
     )
+
+
+def _report_cache_dir(db_path: str) -> str:
+    return os.path.join(os.path.dirname(db_path), REPORT_CACHE_DIR_NAME, f"v{REPORT_CACHE_REVISION}")
+
+
+def _report_cache_path(db_path: str, year: int) -> str:
+    return os.path.join(_report_cache_dir(db_path), f"report-{int(year)}.json")
+
+
+def _atomic_write_json_file(path: str, payload: Dict[str, Any]) -> None:
+    parent = os.path.dirname(path)
+    os.makedirs(parent, exist_ok=True)
+    temp_path = f"{path}.tmp-{os.getpid()}-{threading.get_ident()}"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as report_file:
+            json.dump(payload, report_file, ensure_ascii=False, indent=2)
+            report_file.flush()
+            os.fsync(report_file.fileno())
+        os.replace(temp_path, path)
+    finally:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+
+
+def _read_cached_report(db_path: str, year: int) -> Optional[Dict[str, Any]]:
+    cache_path = _report_cache_path(db_path, year)
+    if not os.path.isfile(cache_path):
+        return None
+    try:
+        with open(cache_path, "r", encoding="utf-8") as cache_file:
+            report = json.load(cache_file)
+        if not isinstance(report, dict):
+            return None
+        meta = report.get("meta") if isinstance(report.get("meta"), dict) else {}
+        if int(report.get("schema_version", 0) or 0) != REPORT_SCHEMA_VERSION:
+            return None
+        if int(meta.get("report_cache_revision", 0) or 0) != REPORT_CACHE_REVISION:
+            return None
+        if int(meta.get("msk_year_used", 0) or 0) != int(year):
+            return None
+        return report
+    except Exception:
+        try:
+            os.remove(cache_path)
+        except Exception:
+            pass
+        return None
+
+
+def _report_progress(cache_only: bool, percent: int, current_chat: str = "", current_file: str = "") -> None:
+    if cache_only:
+        write_json(
+            {
+                "type": "report_preload_progress",
+                "percent": max(0, min(100, int(percent))),
+                "current_chat": current_chat,
+                "current_file": current_file,
+            }
+        )
+        return
+    progress("compute_metrics", percent, current_chat, current_file)
+
+
+def _report_preview(report: Dict[str, Any]) -> Dict[str, Any]:
+    periods = report.get("periods") if isinstance(report.get("periods"), dict) else {}
+    metrics_all = periods.get("all_time") if isinstance(periods.get("all_time"), dict) else {}
+    metrics_year = periods.get("year") if isinstance(periods.get("year"), dict) else {}
+    return {
+        "total_messages_all_time": int(metrics_all.get("total_messages", 0) or 0),
+        "total_messages_year": int(metrics_year.get("total_messages", 0) or 0),
+        "sent_messages_all_time": int(metrics_all.get("sent_messages", 0) or 0),
+        "received_messages_all_time": int(metrics_all.get("received_messages", 0) or 0),
+        "most_active_day_all_time": metrics_all.get("most_active_day"),
+        "top_person_all_time": (metrics_all.get("top_10_people_by_messages") or [None])[0],
+    }
 
 
 def _moscow_tzinfo() -> Any:
@@ -3458,6 +3536,7 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
     if label == "year":
         return {
             "min_person_total": 180,
+            "night_companion_min_total": 3000,
             "min_major_total": 400,
             "min_stable_total": 420,
             "min_stable_months": 6,
@@ -3485,6 +3564,7 @@ def _conversation_thresholds(label: str) -> Dict[str, int]:
         }
     return {
         "min_person_total": 260,
+        "night_companion_min_total": 3000,
         "min_major_total": 500,
         "min_stable_total": 520,
         "min_stable_months": 5,
@@ -3895,7 +3975,8 @@ def _conversation_stable_dialog(label: str, profiles: Dict[str, Dict[str, Any]],
         avg = _safe_div(sum(counts), len(counts)) if counts else 0.0
         variance = _safe_div(sum(abs(c - avg) for c in counts), max(1, len(counts) * avg)) if avg else 1.0
         stability = max(0.0, 1.0 - min(1.0, variance))
-        if stability < _safe_div(th["stable_score_percent"], 100):
+        minimum_stability = _safe_div(th["stable_score_percent"], 100)
+        if stability < minimum_stability:
             continue
         score = coverage * 60.0 + stability * 60.0 + active_months * 8.0 + min(40.0, _safe_div(active_days, 2))
         evidence = {
@@ -3905,7 +3986,12 @@ def _conversation_stable_dialog(label: str, profiles: Dict[str, Dict[str, Any]],
             "stability_ratio": float(round(stability, 4)),
             "observed_months": observed_months,
             "active_days": active_days,
+            "average_monthly_messages": float(round(avg, 2)),
+            "monthly_deviation_ratio": float(round(min(1.0, variance), 4)),
+            "minimum_messages_required": th["min_stable_total"],
+            "minimum_active_months": th["min_stable_months"],
             "minimum_coverage_ratio": float(round(minimum_coverage, 4)),
+            "minimum_stability_ratio": float(round(minimum_stability, 4)),
         }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
@@ -4035,13 +4121,15 @@ def _conversation_trend(label: str, profiles: Dict[str, Dict[str, Any]], th: Dic
 def _conversation_time_person(label: str, profiles: Dict[str, Dict[str, Any]], th: Dict[str, int], kind: str) -> Dict[str, Any]:
     candidates = []
     field = "night_messages" if kind == "night_companion" else "day_messages"
+    minimum_total = th["night_companion_min_total"] if kind == "night_companion" else th["min_person_total"]
+    minimum_window_messages = max(30, th["min_person_total"] // 3)
     total_messages = sum(int(profile.get("total_messages", 0) or 0) for profile in profiles.values())
     total_in_window = sum(int(profile.get(field, 0) or 0) for profile in profiles.values())
     baseline_ratio = _safe_div(total_in_window, total_messages)
     for profile in profiles.values():
         total = int(profile.get("total_messages", 0) or 0)
         value = int(profile.get(field, 0) or 0)
-        if total < th["min_person_total"] or value < max(30, th["min_person_total"] // 3):
+        if total < minimum_total or value < minimum_window_messages:
             continue
         ratio = _safe_div(value, total)
         lift = ratio - baseline_ratio
@@ -4054,6 +4142,8 @@ def _conversation_time_person(label: str, profiles: Dict[str, Dict[str, Any]], t
             "ratio": float(round(ratio, 4)),
             "archive_baseline_ratio": float(round(baseline_ratio, 4)),
             "lift_vs_archive": float(round(lift, 4)),
+            "minimum_messages_required": minimum_total,
+            "minimum_window_messages": minimum_window_messages,
         }
         candidates.append(_candidate_from_profile(profile, score, evidence))
     ordered = _best_candidates(candidates)
@@ -4555,7 +4645,7 @@ def _compute_period_metrics(
     metrics.update(textm)
     return metrics
 
-def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
+def do_build_report(db_path: str, requested_year: Optional[int] = None, cache_only: bool = False) -> None:
     if _CANCEL_EVENT.is_set():
         raise CancelledError()
 
@@ -4564,7 +4654,36 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
 
     report_path = os.path.join(os.path.dirname(db_path), "report.json")
 
-    progress("compute_metrics", 0, "", "")
+    if requested_year is not None:
+        cached_report = _read_cached_report(db_path, requested_year)
+        if cached_report is not None:
+            if _CANCEL_EVENT.is_set():
+                raise CancelledError()
+            if cache_only:
+                write_json(
+                    {
+                        "type": "report_cached",
+                        "db_path": db_path,
+                        "report_path": _report_cache_path(db_path, requested_year),
+                        "msk_year_used": int(requested_year),
+                        "source": "cache",
+                    }
+                )
+                return
+            _atomic_write_json_file(report_path, cached_report)
+            write_json(
+                {
+                    "type": "report_done",
+                    "db_path": db_path,
+                    "report_path": report_path,
+                    "msk_year_used": int(requested_year),
+                    "source": "cache",
+                    "preview": _report_preview(cached_report),
+                }
+            )
+            return
+
+    _report_progress(cache_only, 0, "", "")
 
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -4593,11 +4712,11 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
         else:
             self_from_id = None
 
-        progress("compute_metrics", 3, "direction", "")
+        _report_progress(cache_only, 3, "direction", "")
         self_from_id = resolve_self_from_id(conn, self_from_id)
         apply_direction_updates(conn, self_from_id)
 
-        progress("compute_metrics", 6, "period_bounds", "")
+        _report_progress(cache_only, 6, "period_bounds", "")
         msk = _moscow_tzinfo()
         year_options = available_report_years(conn)
         available_year_values = {int(item["year"]) for item in year_options}
@@ -4615,10 +4734,10 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
         year_start_ts = int(year_start.timestamp())
         year_end_ts = int(year_end.timestamp())
 
-        progress("compute_metrics", 12, "reply_times", "")
+        _report_progress(cache_only, 12, "reply_times", "")
         reply_stats = _compute_reply_times(conn, year_start_ts, year_end_ts)
 
-        progress("compute_metrics", 22, "people_stats", "")
+        _report_progress(cache_only, 22, "people_stats", "")
         people_all = _people_stats(conn, 0, 2**62)
         people_year = _people_stats(conn, year_start_ts, year_end_ts)
 
@@ -4639,13 +4758,13 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
                 st["median_reply_time_to_others_seconds"] = int(per_year.get(peer_id, 0) or 0)
                 st["reply_samples"] = int(samples_year.get(peer_id, 0) or 0)
 
-        progress("compute_metrics", 35, "metrics_all_time", "")
+        _report_progress(cache_only, 35, "metrics_all_time", "")
         metrics_all = _compute_period_metrics(conn, "all_time", 0, 2**62, people_all, reply_stats)
 
-        progress("compute_metrics", 55, "metrics_year", "")
+        _report_progress(cache_only, 55, "metrics_year", "")
         metrics_year = _compute_period_metrics(conn, "year", year_start_ts, year_end_ts, people_year, reply_stats)
 
-        progress("compute_metrics", 70, "top_people", "")
+        _report_progress(cache_only, 70, "top_people", "")
         all_peers = set(people_all.keys()) | set(people_year.keys())
         top_people_list: List[Dict[str, Any]] = []
         for peer_id in all_peers:
@@ -4666,10 +4785,10 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
             key=lambda x: int(((x.get("periods") or {}).get("all_time") or {}).get("total_messages", 0) or 0), reverse=True
         )
 
-        progress("compute_metrics", 82, "people_analytics", "")
+        _report_progress(cache_only, 82, "people_analytics", "")
         people_analytics = _people_analytics(conn, people_all, people_year, year_start_ts, year_end_ts)
 
-        progress("compute_metrics", 88, "achievements", "")
+        _report_progress(cache_only, 88, "achievements", "")
         achievements = _achievements(metrics_all)
 
         report: Dict[str, Any] = {
@@ -4679,6 +4798,7 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
                 "msk_year_used": int(year_used),
                 "available_years": year_options,
                 "self_from_id": self_from_id,
+                "report_cache_revision": REPORT_CACHE_REVISION,
             },
             "periods": {
                 "all_time": metrics_all,
@@ -4689,38 +4809,49 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
             "achievements": achievements,
         }
 
-        progress("compute_metrics", 92, "slides_data", "")
+        _report_progress(cache_only, 92, "slides_data", "")
         report["slides_data"] = _slides_data(report)
 
-        progress("compute_metrics", 96, "write_report", "")
+        _report_progress(cache_only, 96, "write_report", "")
         try:
-            with open(report_path, "w", encoding="utf-8") as f:
-                json.dump(report, f, ensure_ascii=False, indent=2)
+            cache_path = _report_cache_path(db_path, year_used)
+            if _CANCEL_EVENT.is_set():
+                raise CancelledError()
+            _atomic_write_json_file(cache_path, report)
+            if not cache_only:
+                if _CANCEL_EVENT.is_set():
+                    raise CancelledError()
+                _atomic_write_json_file(report_path, report)
         except Exception as e:
+            if isinstance(e, CancelledError):
+                raise
             raise RuntimeError(f"Failed to write report.json: {str(e)}")
 
-        progress("compute_metrics", 100, "", "")
-        mark_report_idle()
+        if _CANCEL_EVENT.is_set():
+            raise CancelledError()
+        _report_progress(cache_only, 100, "", "")
+        if cache_only:
+            write_json(
+                {
+                    "type": "report_cached",
+                    "db_path": db_path,
+                    "report_path": cache_path,
+                    "msk_year_used": int(year_used),
+                    "source": "computed",
+                }
+            )
+            return
         write_json(
             {
                 "type": "report_done",
                 "db_path": db_path,
                 "report_path": report_path,
                 "msk_year_used": int(year_used),
-                "preview": {
-                    "total_messages_all_time": int(metrics_all.get("total_messages", 0) or 0),
-                    "total_messages_year": int(metrics_year.get("total_messages", 0) or 0),
-                    "sent_messages_all_time": int(metrics_all.get("sent_messages", 0) or 0),
-                    "received_messages_all_time": int(metrics_all.get("received_messages", 0) or 0),
-                    "most_active_day_all_time": metrics_all.get("most_active_day"),
-                    "top_person_all_time": (metrics_all.get("top_10_people_by_messages") or [None])[0],
-                },
+                "source": "computed",
+                "preview": _report_preview(report),
             }
         )
 
-    except CancelledError:
-        mark_report_idle()
-        write_json({"type": "report_error", "message": "Report generation cancelled"})
     finally:
         try:
             conn.close()
@@ -4728,33 +4859,124 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None) -> None:
             pass
 
 
-def start_report_thread(db_path: str, requested_year: Optional[int] = None) -> None:
-    global _REPORT_BUSY, _REPORT_THREAD
+def _report_job_key(job: Tuple[str, Optional[int], bool]) -> Tuple[str, Optional[int]]:
+    return (job[0], job[1])
 
-    def _runner() -> None:
+
+def _run_report_jobs(initial_job: Tuple[str, Optional[int], bool]) -> None:
+    global _REPORT_ACTIVE_JOB, _REPORT_BUSY, _REPORT_PENDING_ACTIVE, _REPORT_THREAD
+
+    job: Optional[Tuple[str, Optional[int], bool]] = initial_job
+    while job is not None:
+        db_path, requested_year, cache_only = job
+        with _REPORT_LOCK:
+            _REPORT_ACTIVE_JOB = job
+        _CANCEL_EVENT.clear()
+
+        if cache_only and requested_year is not None:
+            write_json({"type": "report_preload_started", "msk_year_used": int(requested_year)})
+
         try:
-            do_build_report(db_path, requested_year=requested_year)
+            do_build_report(db_path, requested_year=requested_year, cache_only=cache_only)
         except CancelledError:
-            mark_report_idle()
-            return
+            if cache_only:
+                write_json({"type": "report_preload_cancelled", "msk_year_used": requested_year})
+            else:
+                with _REPORT_LOCK:
+                    superseded = _REPORT_PENDING_ACTIVE is not None
+                write_json(
+                    {
+                        "type": "report_superseded" if superseded else "report_cancelled",
+                        "msk_year_used": requested_year,
+                    }
+                )
         except Exception as e:
-            mark_report_idle()
-            write_json({"type": "report_error", "message": str(e)})
+            if cache_only:
+                write_json({"type": "report_preload_error", "msk_year_used": requested_year, "message": str(e)})
+            else:
+                write_json({"type": "report_error", "msk_year_used": requested_year, "message": str(e)})
 
+        with _REPORT_LOCK:
+            if _REPORT_PENDING_ACTIVE is not None:
+                job = _REPORT_PENDING_ACTIVE
+                _REPORT_PENDING_ACTIVE = None
+            elif _REPORT_PRELOAD_QUEUE:
+                job = _REPORT_PRELOAD_QUEUE.pop(0)
+            else:
+                job = None
+                _REPORT_ACTIVE_JOB = None
+                _REPORT_THREAD = None
+                write_json({"type": "report_preload_idle"})
+                with _STATE_LOCK:
+                    _REPORT_BUSY = False
+
+
+def _start_report_runner_locked(job: Tuple[str, Optional[int], bool]) -> None:
+    global _REPORT_BUSY, _REPORT_THREAD
+    with _STATE_LOCK:
+        _REPORT_BUSY = True
+    thread = threading.Thread(target=_run_report_jobs, args=(job,), name="tgwr_report", daemon=True)
+    _REPORT_THREAD = thread
+    thread.start()
+
+
+def start_report_thread(db_path: str, requested_year: Optional[int] = None) -> None:
+    global _REPORT_PENDING_ACTIVE
+
+    job = (db_path, requested_year, False)
     with _REPORT_LOCK:
         with _STATE_LOCK:
             if _IMPORT_BUSY:
                 write_json({"type": "report_error", "message": "Import is running"})
                 return
-            if _REPORT_BUSY:
-                write_json({"type": "report_error", "message": "Report generation already running"})
-                return
-            _REPORT_BUSY = True
+            report_busy = _REPORT_BUSY
 
-        _CANCEL_EVENT.clear()
-        t = threading.Thread(target=_runner, name="tgwr_report", daemon=True)
-        _REPORT_THREAD = t
-        t.start()
+        if report_busy:
+            _REPORT_PENDING_ACTIVE = job
+            _CANCEL_EVENT.set()
+            write_json({"type": "report_switch_queued", "msk_year_used": requested_year})
+            return
+
+        _start_report_runner_locked(job)
+
+
+def preload_report_years(db_path: str, requested_years: List[int]) -> None:
+    with _REPORT_LOCK:
+        with _STATE_LOCK:
+            if _IMPORT_BUSY:
+                write_json({"type": "report_preload_error", "message": "Import is running"})
+                return
+            report_busy = _REPORT_BUSY
+
+        known_keys = {_report_job_key(job) for job in _REPORT_PRELOAD_QUEUE}
+        if _REPORT_ACTIVE_JOB is not None:
+            known_keys.add(_report_job_key(_REPORT_ACTIVE_JOB))
+        if _REPORT_PENDING_ACTIVE is not None:
+            known_keys.add(_report_job_key(_REPORT_PENDING_ACTIVE))
+
+        added: List[int] = []
+        for year in requested_years:
+            if _read_cached_report(db_path, year) is not None:
+                write_json({"type": "report_cached", "msk_year_used": int(year), "source": "cache"})
+                continue
+            job = (db_path, int(year), True)
+            if _report_job_key(job) in known_keys:
+                continue
+            _REPORT_PRELOAD_QUEUE.append(job)
+            known_keys.add(_report_job_key(job))
+            added.append(int(year))
+
+        write_json({"type": "report_preload_queued", "years": added})
+        if not report_busy and _REPORT_PRELOAD_QUEUE:
+            _start_report_runner_locked(_REPORT_PRELOAD_QUEUE.pop(0))
+
+
+def cancel_worker_jobs() -> None:
+    global _REPORT_PENDING_ACTIVE
+    with _REPORT_LOCK:
+        _REPORT_PENDING_ACTIVE = None
+        _REPORT_PRELOAD_QUEUE.clear()
+    _CANCEL_EVENT.set()
 
 
 def handle_command(cmd_obj: Any) -> None:
@@ -4769,7 +4991,7 @@ def handle_command(cmd_obj: Any) -> None:
         return
 
     if cmd == "cancel":
-        _CANCEL_EVENT.set()
+        cancel_worker_jobs()
         return
 
     if cmd == "import_export":
@@ -4806,6 +5028,28 @@ def handle_command(cmd_obj: Any) -> None:
             write_json({"type": "report_error", "message": "build_report: year must be an integer"})
             return
         start_report_thread(db_path=db_path, requested_year=requested_year)
+        return
+
+    if cmd == "preload_reports":
+        db_path = cmd_obj.get("db_path")
+        requested_years = cmd_obj.get("years")
+        if not isinstance(db_path, str) or not db_path:
+            write_json({"type": "report_preload_error", "message": "preload_reports: db_path must be a non-empty string"})
+            return
+        if not os.path.isfile(db_path):
+            write_json({"type": "report_preload_error", "message": "DB path does not exist"})
+            return
+        if not isinstance(requested_years, list):
+            write_json({"type": "report_preload_error", "message": "preload_reports: years must be an array"})
+            return
+        years: List[int] = []
+        for value in requested_years:
+            if isinstance(value, bool) or not isinstance(value, int) or value < 2000 or value > 2200:
+                write_json({"type": "report_preload_error", "message": "preload_reports: every year must be an integer"})
+                return
+            if value not in years:
+                years.append(value)
+        preload_report_years(db_path, years)
         return
 
     write_json({"type": "error", "message": f"unknown_cmd: {cmd}"})

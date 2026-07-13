@@ -130,11 +130,15 @@ async function generateExport() {
       id: 200002,
       type: 'personal_chat',
       name: 'Maximilian LongName With Mixed Русский English Tokens',
-      messages: makeMessages({
+      messages: makeSegmentedMessages({
         peerId: 'user200002',
         peerName: 'Maximilian LongName With Mixed Русский English Tokens',
-        startMs: Date.UTC(2025, 3, 1, 23, 30, 0),
-        count: 5100
+        segments: Array.from({ length: 100 }, (_, day) => ({
+          startMs: Date.UTC(2025, 0, day + 1, 0, 0, 0),
+          count: 51,
+          stepMinutes: 7,
+          textPrefix: 'устойчивый большой ночной диалог'
+        }))
       })
     },
     {
@@ -323,9 +327,9 @@ async function generateExport() {
         peerId: 'user300009',
         peerName: 'Ровные месяцы с большой дырой',
         segments: [0, 1, 2, 9, 10, 11].map((month) => ({
-          startMs: Date.UTC(2025, month, 5, 10, 0, 0),
+          startMs: Date.UTC(2025, month, 5, 0, 0, 0),
           count: 100,
-          stepMinutes: 60,
+          stepMinutes: 3,
           textPrefix: 'активный месяц вокруг длинного провала'
         }))
       })
@@ -481,7 +485,32 @@ async function runWorkerSmoke() {
     )
     if (built.type !== 'report_done') throw new Error(`Report failed: ${built.message}`)
 
-    return built.report_path
+    worker.send({ cmd: 'preload_reports', db_path: dbPath, years: [2024] })
+    const preloaded = await worker.waitFor(
+      (event) => (event.type === 'report_cached' && event.msk_year_used === 2024) || event.type === 'report_preload_error',
+      '2024 preload result'
+    )
+    if (preloaded.type !== 'report_cached') throw new Error(`Report preload failed: ${preloaded.message}`)
+
+    worker.send({ cmd: 'build_report', db_path: dbPath, year: 2024 })
+    const switchedToCachedYear = await worker.waitFor(
+      (event) => (event.type === 'report_done' && event.msk_year_used === 2024) || event.type === 'report_error',
+      'cached year switch'
+    )
+    if (switchedToCachedYear.type !== 'report_done' || switchedToCachedYear.source !== 'cache') {
+      throw new Error(`Cached year did not open from disk cache: ${JSON.stringify(switchedToCachedYear)}`)
+    }
+
+    worker.send({ cmd: 'build_report', db_path: dbPath, year: 2025 })
+    const switchedBack = await worker.waitFor(
+      (event) => (event.type === 'report_done' && event.msk_year_used === 2025) || event.type === 'report_error',
+      'cached current year switch'
+    )
+    if (switchedBack.type !== 'report_done' || switchedBack.source !== 'cache') {
+      throw new Error(`Current year did not reopen from disk cache: ${JSON.stringify(switchedBack)}`)
+    }
+
+    return switchedBack.report_path
   } finally {
     worker.stop()
   }
@@ -649,11 +678,17 @@ function assertReport(report) {
     const reply = insights.reply_rhythm
     const initiative = insights.contact_initiator
     const restarter = insights.silence_restarter
+    const nightCompanion = insights.night_companion
 
     return [
       [`${label}.stable_dialog_fixture`, stable?.winner?.peer_from_id === 'user300001'],
       [`${label}.stable_dialog_calendar_coverage`, Number(stable?.evidence?.coverage_ratio ?? 0) >= thresholds.stableCoverage && Number(stable?.evidence?.observed_months ?? 0) >= 12],
+      [`${label}.stable_dialog_formula_evidence`, Number(stable?.evidence?.monthly_deviation_ratio ?? -1) >= 0 && Math.abs((Number(stable?.evidence?.stability_ratio ?? 0) + Number(stable?.evidence?.monthly_deviation_ratio ?? 0)) - 1) < 0.0002],
+      [`${label}.stable_dialog_threshold_evidence`, Number(stable?.evidence?.minimum_messages_required ?? 0) === thresholds.stableMessages && Number(stable?.evidence?.minimum_stability_ratio ?? 0) === thresholds.stableScore],
       [`${label}.stable_dialog_gap_fixture_blocked`, !(stable?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
+      [`${label}.night_companion_minimum_volume`, Number(nightCompanion?.winner?.total_messages ?? 0) >= 3000 && Number(nightCompanion?.evidence?.minimum_messages_required ?? 0) === 3000],
+      [`${label}.night_companion_candidates_qualified`, (nightCompanion?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= 3000)],
+      [`${label}.night_companion_small_night_chat_blocked`, !(nightCompanion?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
       [`${label}.closer_dialog_minimum_volume`, Number(closer?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(closer?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
       [`${label}.faded_dialog_minimum_volume`, Number(faded?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(faded?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
       [`${label}.tiny_growth_fixture_blocked`, !(closer?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300010')],
@@ -689,8 +724,8 @@ function assertReport(report) {
     ...assertLongestSilenceQuality('year', year),
     ...assertLiveSessionQuality('all_time', allTime),
     ...assertLiveSessionQuality('year', year),
-    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, trendMessages: 1200, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
-    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, trendMessages: 1000, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
+    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, stableMessages: 520, stableScore: 0.4, trendMessages: 1200, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
+    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, stableMessages: 420, stableScore: 0.45, trendMessages: 1000, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
     ...assertComebackQuality('all_time', allTime),
     ...assertComebackQuality('year', year),
     ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
@@ -703,6 +738,7 @@ function assertReport(report) {
     ['report.schema_version', report?.schema_version === 2],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
+    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 1],
     ['meta.available_years', Array.isArray(report?.meta?.available_years) && report.meta.available_years.some((item) => item?.year === 2025 && item?.messages === 25468)],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
@@ -1135,6 +1171,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         pingWorker: () => {},
         importExport: () => {},
         buildReport: () => {},
+        preloadReports: () => {},
         cancelWorker: () => {},
         pickExportDir: async () => null,
         pickOutputDir: async () => null,
@@ -1145,6 +1182,8 @@ function renderHarnessHtml(report, assets, slideIndex) {
           ok: true,
           db_path: ${JSON.stringify(dbPath)},
           report_path: ${JSON.stringify(join(outDir, 'report.json'))},
+          cached_years: [2025],
+          report_stale: false,
           report: window.__TGWR_REPORT__
         })
       };

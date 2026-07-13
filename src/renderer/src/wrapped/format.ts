@@ -141,6 +141,8 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Покрытие месяцев'
     case 'minimum_coverage_ratio':
       return 'Минимальное покрытие'
+    case 'minimum_active_months':
+      return 'Минимум активных месяцев'
     case 'balance_ratio':
       return 'Баланс'
     case 'volume_component':
@@ -151,6 +153,12 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Вклад месяцев'
     case 'stability_ratio':
       return 'Стабильность'
+    case 'minimum_stability_ratio':
+      return 'Минимальная стабильность'
+    case 'average_monthly_messages':
+      return 'В среднем за месяц'
+    case 'monthly_deviation_ratio':
+      return 'Среднее отклонение'
     case 'gap_days':
       return 'Пауза'
     case 'before_messages':
@@ -183,6 +191,8 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Мультипликатор'
     case 'messages':
       return 'Сообщений'
+    case 'minimum_window_messages':
+      return 'Минимум в этом времени суток'
     case 'ratio':
       return 'Доля'
     case 'archive_baseline_ratio':

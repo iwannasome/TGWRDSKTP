@@ -101,7 +101,28 @@ class ImportFixtureTests(unittest.TestCase):
 
             self.assertEqual(report.get("schema_version"), 2)
             self.assertEqual(report.get("meta", {}).get("msk_year_used"), 2024)
+            self.assertEqual(report.get("meta", {}).get("report_cache_revision"), 1)
             self.assertNotIn("deleted_messages_count", report.get("periods", {}).get("year", {}))
+
+            cache_path_2024 = os.path.join(temp_dir, "report-cache", "v1", "report-2024.json")
+            self.assertTrue(os.path.isfile(cache_path_2024))
+
+            os.remove(os.path.join(temp_dir, "report.json"))
+            cached_output = io.StringIO()
+            with contextlib.redirect_stdout(cached_output):
+                do_build_report(db_path, requested_year=2024)
+            cached_events = [json.loads(line) for line in cached_output.getvalue().splitlines() if line.strip()]
+            cached_done = next(event for event in cached_events if event.get("type") == "report_done")
+            self.assertEqual(cached_done.get("source"), "cache")
+            self.assertTrue(os.path.isfile(os.path.join(temp_dir, "report.json")))
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                do_build_report(db_path, requested_year=2025, cache_only=True)
+            cache_path_2025 = os.path.join(temp_dir, "report-cache", "v1", "report-2025.json")
+            self.assertTrue(os.path.isfile(cache_path_2025))
+            with open(os.path.join(temp_dir, "report.json"), "r", encoding="utf-8") as active_report_file:
+                active_report = json.load(active_report_file)
+            self.assertEqual(active_report.get("meta", {}).get("msk_year_used"), 2024)
 
 
 if __name__ == "__main__":
