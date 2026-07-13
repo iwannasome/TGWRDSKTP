@@ -244,6 +244,43 @@ function attachWorker(proc: ChildProcessWithoutNullStreams): void {
   })
 }
 
+async function waitForWorkerExit(proc: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
+  return await new Promise((resolvePromise) => {
+    let settled = false
+    const onClose = () => finish(true)
+    const finish = (value: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      proc.removeListener('close', onClose)
+      resolvePromise(value)
+    }
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    proc.once('close', onClose)
+  })
+}
+
+async function stopWorkerForDataDeletion(): Promise<void> {
+  const proc = workerProc
+  if (!proc) return
+
+  const gracefulExit = waitForWorkerExit(proc, 2_000)
+  try {
+    proc.kill()
+  } catch {
+    // The process may already be terminating; the close wait below remains authoritative.
+  }
+  if (await gracefulExit) return
+
+  const forcedExit = waitForWorkerExit(proc, 2_000)
+  try {
+    proc.kill('SIGKILL')
+  } catch {
+    // The second wait reports a deterministic error if the process cannot be stopped.
+  }
+  if (!(await forcedExit)) throw new Error('Не удалось остановить модуль анализа перед удалением данных')
+}
+
 function startWorker(): void {
   if (workerProc) return
 
@@ -373,15 +410,7 @@ function createWindow(): void {
   })
 
   win.webContents.on('will-navigate', (event, url) => {
-    const currentUrl = win.webContents.getURL()
-    if (url === currentUrl) return
-
-    try {
-      if (currentUrl && new URL(url).origin === new URL(currentUrl).origin) return
-    } catch {
-      //
-    }
-
+    if (url === win.webContents.getURL()) return
     event.preventDefault()
     openExternalIfAllowed(url)
   })
@@ -419,6 +448,11 @@ async function computeDbPath(): Promise<{ db_path: string; location: 'userData' 
 function dataFilesForDb(dbPath: string): string[] {
   const baseDir = dirname(dbPath)
   return [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, join(baseDir, 'report.json')]
+}
+
+function importStagingFilesForDb(dbPath: string): string[] {
+  const stagingDbPath = `${dbPath}.importing`
+  return [stagingDbPath, `${stagingDbPath}-wal`, `${stagingDbPath}-shm`]
 }
 
 function reportCacheRootForDb(dbPath: string): string {
@@ -627,13 +661,14 @@ ipcMain.handle(IPC_RESET_REPORT, async () => {
 
 ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
   try {
-    sendToWorker({ cmd: 'cancel' })
+    await stopWorkerForDataDeletion()
     const { db_path } = await computeDbPath()
-    const candidates = new Set(dataFilesForDb(db_path))
+    const candidates = new Set([...dataFilesForDb(db_path), ...importStagingFilesForDb(db_path)])
     const cacheRoots = new Set([reportCacheRootForDb(db_path)])
     const legacy = legacyDbPath()
     if (legacy) {
       for (const filePath of dataFilesForDb(legacy)) candidates.add(filePath)
+      for (const filePath of importStagingFilesForDb(legacy)) candidates.add(filePath)
       cacheRoots.add(reportCacheRootForDb(legacy))
     }
 
@@ -658,6 +693,8 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
+  } finally {
+    startWorker()
   }
 })
 
