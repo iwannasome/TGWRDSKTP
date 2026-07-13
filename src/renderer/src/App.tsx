@@ -50,6 +50,7 @@ type ReportBuildState = {
   running: boolean
   progress?: ImportProgress
   error?: string
+  notice?: string
 }
 
 type ExistingReportPrompt = {
@@ -188,6 +189,7 @@ export default function App(): JSX.Element {
   const [importProgress, setImportProgress] = useState<ImportProgress | undefined>(undefined)
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [importNotice, setImportNotice] = useState<string | null>(null)
 
   const [reportBuild, setReportBuild] = useState<ReportBuildState>({ running: false })
   const reportBuildRunningRef = useRef(false)
@@ -522,6 +524,7 @@ export default function App(): JSX.Element {
         importRunningRef.current = false
         setImportProgress(undefined)
         setImportError(null)
+        setImportNotice(null)
         setImportSummary(summary)
         setDbPath(summary.db_path)
         setAvailableYears(years)
@@ -600,7 +603,7 @@ export default function App(): JSX.Element {
       }
 
       if (type === 'report_cancelled') {
-        setReportBuild({ running: false })
+        setReportBuild({ running: false, notice: 'Сборка Wrapped отменена. Импортированная база сохранена.' })
         reportBuildRunningRef.current = false
         setLoadingYear(undefined)
         return
@@ -619,7 +622,8 @@ export default function App(): JSX.Element {
         setImportRunning(false)
         importRunningRef.current = false
         setImportProgress(undefined)
-        setImportError(msg)
+        setImportError(msg === 'Import cancelled' ? null : msg)
+        setImportNotice(msg === 'Import cancelled' ? 'Импорт отменён. Предыдущий Wrapped и база остались без изменений.' : null)
         return
       }
 
@@ -690,6 +694,7 @@ export default function App(): JSX.Element {
     setExportDir(dir)
     setImportSummary(null)
     setImportError(null)
+    setImportNotice(null)
     setReport(null)
     setReportPath(null)
     setReportAvailable(false)
@@ -712,6 +717,7 @@ export default function App(): JSX.Element {
     setImportRunning(true)
     setImportProgress({ stage: 'scan_files', current: 0, total: 1 })
     setImportError(null)
+    setImportNotice(null)
     setImportSummary(null)
     setReport(null)
     setReportPath(null)
@@ -729,6 +735,7 @@ export default function App(): JSX.Element {
       setImportRunning(false)
       setImportProgress(undefined)
       setImportError(err instanceof Error ? err.message : String(err))
+      setImportNotice(null)
     }
   }, [exportDir, workerStatus.status])
 
@@ -1053,6 +1060,12 @@ export default function App(): JSX.Element {
                 </div>
               ) : null}
 
+              {importNotice ? (
+                <div className="mt-4 rounded-xl border border-sky-300/20 bg-sky-400/[0.07] p-4 text-sm text-sky-50" role="status">
+                  {importNotice}
+                </div>
+              ) : null}
+
               {importSummary ? (
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -1151,6 +1164,12 @@ export default function App(): JSX.Element {
                 </div>
               ) : null}
 
+              {reportBuild.notice ? (
+                <div className="mt-4 rounded-xl border border-sky-300/20 bg-sky-400/[0.07] p-4 text-sm text-sky-50" role="status">
+                  {reportBuild.notice}
+                </div>
+              ) : null}
+
               <div className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                 <div className="text-sm font-semibold text-slate-100">Готовый Wrapped хранится локально</div>
                 <div className="mt-1 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.85)]">
@@ -1243,6 +1262,7 @@ export default function App(): JSX.Element {
     existingReportError,
     existingReportPrompt,
     importError,
+    importNotice,
     importProgress,
     importRunning,
     importSummary,
