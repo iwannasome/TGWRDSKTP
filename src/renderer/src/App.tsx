@@ -1208,12 +1208,12 @@ export default function App(): JSX.Element {
         </div>
 
         {existingReportPrompt ? (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+          <div role="dialog" aria-modal="true" aria-labelledby="tgwr-existing-report-title" className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
             <div className="w-full max-w-[560px] rounded-2xl border border-white/10 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.75)]">
               <div className="text-[13px] font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
                 Найден старый отчет
               </div>
-              <div className="mt-3 text-2xl font-bold text-slate-100">Что открыть при запуске?</div>
+              <div id="tgwr-existing-report-title" className="mt-3 text-2xl font-bold text-slate-100">Что открыть при запуске?</div>
               <div className="mt-3 text-sm leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.9)]">
                 В TGWR уже есть готовый Wrapped. Его можно открыть, пересобрать из этой же локальной базы или полностью стереть все данные.
               </div>

@@ -195,6 +195,7 @@ export default function SlidesView({
   const exportReport = useMemo(() => sanitizeReportForSharing(parsed, privacy), [parsed, privacy])
   const stageRef = useRef<HTMLDivElement>(null)
   const exportStageRef = useRef<HTMLDivElement>(null)
+  const previewCloseRef = useRef<HTMLButtonElement>(null)
   const lastWheelAtRef = useRef(0)
   const exportRunningRef = useRef(false)
 
@@ -213,6 +214,22 @@ export default function SlidesView({
     setIndex((current) => clamp(current, 0, Math.max(0, storySlides.length - 1)))
     setPreviewSlideIndex((current) => clamp(current, 0, Math.max(0, storySlides.length - 1)))
   }, [storySlides.length])
+
+  useEffect(() => {
+    if (!pendingExportKind) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setPendingExportKind(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    requestAnimationFrame(() => previewCloseRef.current?.focus())
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      previousFocus?.focus()
+    }
+  }, [pendingExportKind])
 
   const go = useCallback((delta: number) => {
     if (exporting || pendingExportKind) return
@@ -475,15 +492,15 @@ export default function SlidesView({
       ) : null}
 
       {pendingExportKind && PreviewSlide ? (
-        <div data-tgwr-share-preview="true" className="fixed inset-0 z-[180] flex items-center justify-center overflow-auto bg-black/80 p-5 backdrop-blur-md">
+        <div data-tgwr-share-preview="true" role="dialog" aria-modal="true" aria-labelledby="tgwr-share-preview-title" className="fixed inset-0 z-[180] flex items-center justify-center overflow-auto bg-black/80 p-5 backdrop-blur-md">
           <div className="w-full max-w-[1120px] rounded-[28px] border border-white/10 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.72)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-sky-200">Предпросмотр публикации</div>
-                <div className="mt-2 text-2xl font-bold text-slate-50">Именно эти данные попадут в {pendingExportKind.toUpperCase()}</div>
+                <div id="tgwr-share-preview-title" className="mt-2 text-2xl font-bold text-slate-50">Именно эти данные попадут в {pendingExportKind.toUpperCase()}</div>
                 <div className="mt-2 text-sm text-slate-300/80">{storySlides.length} слайдов · имена, текст и даты можно скрыть независимо.</div>
               </div>
-              <button type="button" onClick={() => setPendingExportKind(null)} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Закрыть</button>
+              <button ref={previewCloseRef} type="button" onClick={() => setPendingExportKind(null)} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Закрыть</button>
             </div>
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
