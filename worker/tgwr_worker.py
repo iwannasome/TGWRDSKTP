@@ -1750,12 +1750,18 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
     progress("scan_files", 5, "", "")
 
     if not candidates:
-        raise RuntimeError("Не найдено данных для импорта: нет chat JSON, result.json chats.list, или messages*.html.")
+        raise RuntimeError(
+            "В выбранной папке не найден экспорт Telegram. Выбери папку, внутри которой есть result.json "
+            "или папки чатов с файлами messages*.json/messages*.html."
+        )
 
     accepted, dedupe_skip_reasons = dedupe_candidates(candidates)
 
     if not accepted:
-        raise RuntimeError("После фильтрации и дедупликации не осталось чатов для импорта.")
+        raise RuntimeError(
+            "В выбранном экспорте не найдено личных диалогов с сообщениями. "
+            "Повтори экспорт Telegram Desktop и включи раздел «Личные чаты»."
+        )
 
     skip_reasons: Counter[str] = Counter(candidate_skip_reasons)
     skip_reasons.update(dedupe_skip_reasons)
@@ -1804,7 +1810,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
 
         total_units = len(units)
         if total_units <= 0:
-            raise RuntimeError("No processing units after scan.")
+            raise RuntimeError("В найденных чатах нет файлов сообщений, которые TGWR может прочитать.")
 
         for ui, unit in enumerate(units):
             if _CANCEL_EVENT.is_set():
@@ -1873,6 +1879,12 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
             raise
         except Exception as e:
             write_json({"type": "warning", "message": f"Failed to compute direction: {str(e)}"})
+
+        if not year_options:
+            raise RuntimeError(
+                "В экспорте не найдено обычных сообщений с корректными датами. "
+                "Повтори экспорт Telegram Desktop в формате JSON и включи личные чаты."
+            )
 
         progress("index_db", 92, "", "")
         create_indexes(conn)

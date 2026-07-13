@@ -207,6 +207,8 @@ export default function App(): JSX.Element {
   const preloadSessionKeyRef = useRef('')
   const [existingReportPrompt, setExistingReportPrompt] = useState<ExistingReportPrompt | null>(null)
   const [existingReportError, setExistingReportError] = useState<string | null>(null)
+  const [dataMutationRunning, setDataMutationRunning] = useState(false)
+  const dataMutationRunningRef = useRef(false)
 
   useEffect(() => {
     applyTheme(theme)
@@ -353,64 +355,79 @@ export default function App(): JSX.Element {
 
   const onResetExistingReport = useCallback(async () => {
     const prompt = existingReportPrompt
-    if (!prompt) return
+    if (!prompt || dataMutationRunningRef.current) return
 
     setExistingReportError(null)
-    const res = await window.tgwr.resetReport()
-    if (!res.ok) {
-      setExistingReportError(res.error ?? 'Не удалось подготовить новый отчёт')
-      return
-    }
+    dataMutationRunningRef.current = true
+    setDataMutationRunning(true)
+    try {
+      const res = await window.tgwr.resetReport()
+      if (!res.ok) {
+        setExistingReportError(res.error ?? 'Не удалось подготовить новый отчёт')
+        return
+      }
 
-    const summary = summaryFromExistingReport(prompt)
-    const yearState = reportYearState(prompt.report)
-    setExistingReportPrompt(null)
-    setReport(null)
-    setReportAvailable(false)
-    setReportPath(res.report_path)
-    setDbPath(res.db_path)
-    setImportSummary(summary)
-    setAvailableYears(yearState.years)
-    setSelectedYear(yearState.selectedYear ?? yearState.years[0]?.year)
-    setCachedYears(new Set())
-    setPreparingYears(new Set())
-    setLoadingYear(undefined)
-    setReportStale(false)
-    preloadSessionKeyRef.current = ''
-    setReportBuild({ running: false })
-    setView('setup')
+      const summary = summaryFromExistingReport(prompt)
+      const yearState = reportYearState(prompt.report)
+      setExistingReportPrompt(null)
+      setReport(null)
+      setReportAvailable(false)
+      setReportPath(res.report_path)
+      setDbPath(res.db_path)
+      setImportSummary(summary)
+      setAvailableYears(yearState.years)
+      setSelectedYear(yearState.selectedYear ?? yearState.years[0]?.year)
+      setCachedYears(new Set())
+      setPreparingYears(new Set())
+      setLoadingYear(undefined)
+      setReportStale(false)
+      preloadSessionKeyRef.current = ''
+      setReportBuild({ running: false })
+      setView('setup')
+    } finally {
+      dataMutationRunningRef.current = false
+      setDataMutationRunning(false)
+    }
   }, [existingReportPrompt])
 
   const onDeleteAllData = useCallback(async () => {
+    if (dataMutationRunningRef.current) return
     const confirmed = window.confirm(
       'Удалить локальную базу переписок и готовый отчёт? Это действие нельзя отменить.'
     )
     if (!confirmed) return
 
     setExistingReportError(null)
-    const res = await window.tgwr.deleteAllData()
-    if (!res.ok) {
-      const message = res.error ?? 'Не удалось удалить локальные данные'
-      setExistingReportError(message)
-      setImportError(message)
-      return
-    }
+    dataMutationRunningRef.current = true
+    setDataMutationRunning(true)
+    try {
+      const res = await window.tgwr.deleteAllData()
+      if (!res.ok) {
+        const message = res.error ?? 'Не удалось удалить локальные данные'
+        setExistingReportError(message)
+        setImportError(message)
+        return
+      }
 
-    setExistingReportPrompt(null)
-    setReport(null)
-    setReportAvailable(false)
-    setReportPath(res.report_path)
-    setDbPath(res.db_path)
-    setImportSummary(null)
-    setAvailableYears([])
-    setSelectedYear(undefined)
-    setCachedYears(new Set())
-    setPreparingYears(new Set())
-    setLoadingYear(undefined)
-    setReportStale(false)
-    preloadSessionKeyRef.current = ''
-    setReportBuild({ running: false })
-    setView('setup')
+      setExistingReportPrompt(null)
+      setReport(null)
+      setReportAvailable(false)
+      setReportPath(res.report_path)
+      setDbPath(res.db_path)
+      setImportSummary(null)
+      setAvailableYears([])
+      setSelectedYear(undefined)
+      setCachedYears(new Set())
+      setPreparingYears(new Set())
+      setLoadingYear(undefined)
+      setReportStale(false)
+      preloadSessionKeyRef.current = ''
+      setReportBuild({ running: false })
+      setView('setup')
+    } finally {
+      dataMutationRunningRef.current = false
+      setDataMutationRunning(false)
+    }
   }, [])
 
   // Subscribe to worker events
@@ -439,13 +456,13 @@ export default function App(): JSX.Element {
           setWorkerError(null)
           setWorkerStatus({
             status,
-            message: message || 'Connected',
+            message: message || 'Подключено',
             ts: typeof payload.ts === 'string' ? payload.ts : new Date().toISOString()
           })
         } else {
           setWorkerStatus({
             status,
-            message: message || 'Disconnected',
+            message: message || 'Соединение потеряно',
             ts: typeof payload.ts === 'string' ? payload.ts : new Date().toISOString()
           })
         }
@@ -658,8 +675,8 @@ export default function App(): JSX.Element {
         window.tgwr.pingWorker()
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        setWorkerError(`Ping failed: ${msg}`)
-        setWorkerStatus({ status: 'fail', message: 'Ping failed', ts: new Date().toISOString() })
+        setWorkerError(`Не удалось проверить модуль анализа: ${msg}`)
+        setWorkerStatus({ status: 'fail', message: 'Модуль анализа не отвечает', ts: new Date().toISOString() })
       }
     }
 
@@ -686,7 +703,13 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !importRunning && !reportBuild.running
+  const canImport = workerStatus.status === 'ok' && exportDir.trim().length > 0 && !importRunning && !reportBuild.running && !dataMutationRunning
+
+  const onRestartWorker = useCallback(() => {
+    setWorkerError(null)
+    setWorkerStatus({ status: 'fail', message: 'Перезапускаю модуль анализа…', ts: new Date().toISOString() })
+    window.tgwr.restartWorker()
+  }, [])
 
   const onPickExportDir = useCallback(async () => {
     const dir = await window.tgwr.pickExportDir()
@@ -744,8 +767,8 @@ export default function App(): JSX.Element {
     window.tgwr.cancelWorker()
   }, [])
 
-  const canBuildReport = !!importSummary && !!selectedYear && !reportBuild.running && !importRunning
-  const canOpenReport = reportAvailable && !reportBuild.running && !importRunning
+  const canBuildReport = !!importSummary && !!selectedYear && !reportBuild.running && !importRunning && !dataMutationRunning
+  const canOpenReport = reportAvailable && !reportBuild.running && !importRunning && !dataMutationRunning
 
   const requestReportBuild = useCallback((year: number) => {
     if (importRunningRef.current) return
@@ -863,7 +886,7 @@ export default function App(): JSX.Element {
               </div>
               <div className="mt-5 text-[34px] font-semibold leading-tight text-slate-50">Telegram Wrapped без облака</div>
               <div className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)]">
-                Выбери экспорт Telegram Desktop, TGWR by IWS соберет приватный recap на твоем компьютере и сразу откроет story deck.
+                Выбери экспорт Telegram Desktop — TGWR локально соберёт личные итоги и сразу откроет историю в слайдах.
               </div>
 
               <div className="mt-6 grid gap-2">
@@ -899,6 +922,20 @@ export default function App(): JSX.Element {
                   <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-[13px] text-red-100">
                     {workerError}
                   </div>
+                ) : null}
+                {workerStatus.status !== 'ok' &&
+                workerStatus.message !== 'Модуль анализа запускается' &&
+                !workerStatus.message.startsWith('Перезапускаю') &&
+                !importRunning &&
+                !dataMutationRunning &&
+                !reportBuild.running ? (
+                  <button
+                    type="button"
+                    onClick={onRestartWorker}
+                    className="mt-3 w-full rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[12px] font-semibold text-slate-100 transition hover:bg-white/10"
+                  >
+                    Перезапустить модуль
+                  </button>
                 ) : null}
               </div>
             </div>
@@ -938,11 +975,11 @@ export default function App(): JSX.Element {
                     : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.58)]'
                 ].join(' ')}
               >
-                Открыть wrapped
+                Открыть Wrapped
               </button>
               <button
                 type="button"
-                disabled={importRunning || reportBuild.running || (!reportAvailable && !importSummary)}
+                disabled={dataMutationRunning || importRunning || reportBuild.running || (!reportAvailable && !importSummary)}
                 onClick={onDeleteAllData}
                 className="rounded-full border border-red-400/20 bg-red-500/[0.08] px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -955,7 +992,7 @@ export default function App(): JSX.Element {
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-3 py-1 text-[12px] font-semibold text-sky-100">Шаг 1</div>
-                  <div className="mt-3 text-[18px] font-semibold text-slate-50">Выбери Telegram Export</div>
+                  <div className="mt-3 text-[18px] font-semibold text-slate-50">Выбери экспорт Telegram</div>
                   <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
                     Выбери готовую папку экспорта из Telegram Desktop. JSON предпочтительнее, HTML тоже поддерживается.
                   </div>
@@ -963,8 +1000,9 @@ export default function App(): JSX.Element {
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
+                    disabled={dataMutationRunning}
                     onClick={onPickExportDir}
-                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Выбрать папку
                   </button>
@@ -1056,7 +1094,14 @@ export default function App(): JSX.Element {
 
               {importError ? (
                 <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
-                  {importError}
+                  <div>{importError}</div>
+                  <button
+                    type="button"
+                    onClick={onPickExportDir}
+                    className="mt-3 rounded-full border border-red-200/20 bg-white/5 px-4 py-2 text-[13px] font-semibold text-red-50 transition hover:bg-white/10"
+                  >
+                    Выбрать другую папку
+                  </button>
                 </div>
               ) : null}
 
@@ -1113,7 +1158,7 @@ export default function App(): JSX.Element {
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent2-rgb),0.18)] bg-[rgba(var(--tgwr-accent2-rgb),0.10)] px-3 py-1 text-[12px] font-semibold text-violet-100">Шаг 2</div>
-                  <div className="mt-3 text-[18px] font-semibold text-slate-50">Сгенерируй приватный отчет</div>
+                  <div className="mt-3 text-[18px] font-semibold text-slate-50">Собери приватный отчёт</div>
                   <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">TGWR посчитает метрики на этом компьютере и соберёт твой Wrapped. Переписки никуда не отправляются.</div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1181,7 +1226,7 @@ export default function App(): JSX.Element {
                 <div>
                   <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[12px] font-semibold text-slate-100">Шаг 3</div>
                   <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-                    Когда отчет готов, открой Wrapped как Telegram Story.
+                    Когда отчёт готов, открой Wrapped в формате историй.
                   </div>
                 </div>
                 <button
@@ -1198,7 +1243,7 @@ export default function App(): JSX.Element {
                       : 'border-white/10 bg-white/5 text-[rgba(var(--tgwr-muted-rgb),0.58)]'
                   ].join(' ')}
                 >
-                  Открыть wrapped
+                  Открыть Wrapped
                 </button>
               </div>
               </section>
@@ -1211,7 +1256,7 @@ export default function App(): JSX.Element {
           <div role="dialog" aria-modal="true" aria-labelledby="tgwr-existing-report-title" className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
             <div className="w-full max-w-[560px] rounded-2xl border border-white/10 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.75)]">
               <div className="text-[13px] font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
-                Найден старый отчет
+                Найден старый отчёт
               </div>
               <div id="tgwr-existing-report-title" className="mt-3 text-2xl font-bold text-slate-100">Что открыть при запуске?</div>
               <div className="mt-3 text-sm leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.9)]">
@@ -1227,22 +1272,25 @@ export default function App(): JSX.Element {
               <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
                 <button
                   type="button"
+                  disabled={dataMutationRunning}
                   onClick={onDeleteAllData}
-                  className="rounded-full border border-red-400/25 bg-red-500/10 px-5 py-2.5 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
+                  className="rounded-full border border-red-400/25 bg-red-500/10 px-5 py-2.5 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Стереть все данные
+                  {dataMutationRunning ? 'Удаляю данные…' : 'Стереть все данные'}
                 </button>
                 <button
                   type="button"
+                  disabled={dataMutationRunning}
                   onClick={onResetExistingReport}
-                  className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                  className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Собрать новый отчёт
                 </button>
                 <button
                   type="button"
+                  disabled={dataMutationRunning}
                   onClick={onOpenExistingReport}
-                  className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.35)] bg-[rgba(var(--tgwr-accent1-rgb),0.12)] px-5 py-2.5 text-sm font-semibold text-slate-50 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.18)]"
+                  className="rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.35)] bg-[rgba(var(--tgwr-accent1-rgb),0.12)] px-5 py-2.5 text-sm font-semibold text-slate-50 transition hover:bg-[rgba(var(--tgwr-accent1-rgb),0.18)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Открыть старый
                 </button>
@@ -1258,6 +1306,7 @@ export default function App(): JSX.Element {
     canImport,
     canOpenReport,
     dbPath,
+    dataMutationRunning,
     exportDir,
     existingReportError,
     existingReportPrompt,
@@ -1273,6 +1322,7 @@ export default function App(): JSX.Element {
     onDeleteAllData,
     onOpenExistingReport,
     onPickExportDir,
+    onRestartWorker,
     onResetExistingReport,
     onStartImport,
     onYearChange,

@@ -16,6 +16,7 @@ const IPC_WORKER_IMPORT = 'tgwr:worker-import' as const
 const IPC_WORKER_BUILD_REPORT = 'tgwr:worker-build-report' as const
 const IPC_WORKER_PRELOAD_REPORTS = 'tgwr:worker-preload-reports' as const
 const IPC_WORKER_CANCEL = 'tgwr:worker-cancel' as const
+const IPC_WORKER_RESTART = 'tgwr:worker-restart' as const
 const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
@@ -65,12 +66,15 @@ let pendingEvents: unknown[] = []
 let lastKnownStatus: WorkerStatusEvent = {
   type: 'worker_status',
   status: 'fail',
-  message: 'Worker not started',
+  message: 'Модуль анализа запускается',
   ts: new Date().toISOString()
 }
 let smokeWorkerPong = false
 let smokeRendererReady = false
 let smokeExitScheduled = false
+let smokeRestartStarted = false
+let workerRestartPromise: Promise<void> | null = null
+let dataDeletionRunning = false
 
 function nowIso(): string {
   return new Date().toISOString()
@@ -80,8 +84,16 @@ function finishPackagedSmokeWhenReady(): void {
   if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1') return
   if (!smokeWorkerPong || !smokeRendererReady || smokeExitScheduled) return
 
+  if (process.env.TGWR_SMOKE_RESTART_WORKER === '1' && !smokeRestartStarted) {
+    smokeRestartStarted = true
+    smokeWorkerPong = false
+    void restartWorkerProcess()
+    return
+  }
+
   smokeExitScheduled = true
-  console.log('tgwr_packaged_app_smoke=ok worker=pong renderer=ready')
+  const workerState = smokeRestartStarted ? 'restart_pong' : 'pong'
+  console.log(`tgwr_packaged_app_smoke=ok worker=${workerState} renderer=ready`)
   setTimeout(() => app.quit(), 50)
 }
 
@@ -145,10 +157,10 @@ function openExternalIfAllowed(rawUrl: string): boolean {
 
 function sendToWorker(cmdObj: unknown): void {
   if (!workerProc || workerProc.stdin.destroyed) {
-    emitStatus('fail', 'Worker not running')
+    emitStatus('fail', 'Модуль анализа не запущен')
     emitToRenderer({
       type: 'worker_send_fail',
-      message: 'Worker not running',
+      message: 'Модуль анализа не запущен',
       ts: nowIso(),
       cmd: isPlainObject(cmdObj) ? (cmdObj as JsonObject) : { valueType: typeof cmdObj }
     })
@@ -162,7 +174,7 @@ function sendToWorker(cmdObj: unknown): void {
     const msg = err instanceof Error ? err.message : String(err)
     emitToRenderer({
       type: 'worker_send_fail',
-      message: 'Failed to serialize command',
+      message: 'Не удалось подготовить команду для модуля анализа',
       ts: nowIso(),
       error: msg
     })
@@ -173,7 +185,7 @@ function sendToWorker(cmdObj: unknown): void {
     workerProc.stdin.write(`${line}\n`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    emitStatus('fail', `Failed to write to worker stdin: ${msg}`)
+    emitStatus('fail', `Не удалось передать команду модулю анализа: ${msg}`)
   }
 }
 
@@ -236,11 +248,11 @@ function attachWorker(proc: ChildProcessWithoutNullStreams): void {
   proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
     workerProc = null
     workerCommandUsed = null
-    emitStatus('fail', `Worker exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`)
+    emitStatus('fail', `Модуль анализа завершил работу (код ${code ?? '—'}, сигнал ${signal ?? '—'})`)
   })
 
   proc.on('error', (err: Error) => {
-    emitStatus('fail', `Worker process error: ${err.message}`)
+    emitStatus('fail', `Ошибка процесса анализа: ${err.message}`)
   })
 }
 
@@ -260,7 +272,7 @@ async function waitForWorkerExit(proc: ChildProcessWithoutNullStreams, timeoutMs
   })
 }
 
-async function stopWorkerForDataDeletion(): Promise<void> {
+async function stopWorkerProcess(): Promise<void> {
   const proc = workerProc
   if (!proc) return
 
@@ -278,7 +290,28 @@ async function stopWorkerForDataDeletion(): Promise<void> {
   } catch {
     // The second wait reports a deterministic error if the process cannot be stopped.
   }
-  if (!(await forcedExit)) throw new Error('Не удалось остановить модуль анализа перед удалением данных')
+  if (!(await forcedExit)) throw new Error('Не удалось остановить модуль анализа')
+}
+
+async function restartWorkerProcess(): Promise<void> {
+  if (workerRestartPromise) return await workerRestartPromise
+
+  workerRestartPromise = (async () => {
+    emitStatus('fail', 'Перезапускаю модуль анализа…')
+    try {
+      await stopWorkerProcess()
+      startWorker()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      emitStatus('fail', message)
+    }
+  })()
+
+  try {
+    await workerRestartPromise
+  } finally {
+    workerRestartPromise = null
+  }
 }
 
 function startWorker(): void {
@@ -324,7 +357,7 @@ function startWorker(): void {
         'fail',
         app.isPackaged
           ? 'Не удалось запустить встроенный модуль анализа. Переустанови TGWR.'
-          : `Python not found (tried: ${tried.join(', ')}). Install Python 3 and ensure it is on PATH.`
+          : `Python 3 не найден (проверено: ${tried.join(', ')}). Установи Python 3 и перезапусти TGWR.`
       )
       return
     }
@@ -345,7 +378,7 @@ function startWorker(): void {
         return
       }
 
-      emitStatus('fail', `Failed to start worker via "${candidate.label}": ${err.message}`)
+      emitStatus('fail', `Не удалось запустить модуль анализа через ${candidate.label}: ${err.message}`)
       emitHost('error', 'Worker spawn error', {
         command: candidate.label,
         message: err.message
@@ -362,7 +395,7 @@ function startWorker(): void {
 
       attachWorker(proc)
 
-      emitStatus('ok', app.isPackaged ? 'Встроенный модуль анализа запущен' : `Worker started (${candidate.label})`)
+      emitStatus('ok', app.isPackaged ? 'Встроенный модуль анализа запущен' : `Модуль анализа запущен (${candidate.label})`)
       emitHost('info', 'Worker connected', {
         command: workerCommandUsed ?? candidate.label,
         packaged: app.isPackaged
@@ -669,8 +702,14 @@ ipcMain.handle(IPC_RESET_REPORT, async () => {
 })
 
 ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
+  if (dataDeletionRunning) {
+    return { ok: false, error: 'Полное удаление данных уже выполняется' }
+  }
+
+  dataDeletionRunning = true
   try {
-    await stopWorkerForDataDeletion()
+    if (workerRestartPromise) await workerRestartPromise
+    await stopWorkerProcess()
     const { db_path } = await computeDbPath()
     const candidates = new Set([...dataFilesForDb(db_path), ...importStagingFilesForDb(db_path)])
     const cacheRoots = new Set([reportCacheRootForDb(db_path)])
@@ -703,6 +742,7 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
   } finally {
+    dataDeletionRunning = false
     startWorker()
   }
 })
@@ -749,6 +789,11 @@ ipcMain.on(IPC_RENDERER_READY, () => {
 
 ipcMain.on(IPC_WORKER_CANCEL, () => {
   sendToWorker({ cmd: 'cancel' })
+})
+
+ipcMain.on(IPC_WORKER_RESTART, () => {
+  if (dataDeletionRunning) return
+  void restartWorkerProcess()
 })
 
 ipcMain.on(IPC_WORKER_IMPORT, (_event, exportDir: unknown) => {

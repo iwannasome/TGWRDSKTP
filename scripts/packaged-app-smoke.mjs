@@ -24,7 +24,7 @@ if (!executable) throw new Error('Не найдена распакованная
 await new Promise((resolvePromise, reject) => {
   const child = spawn(executable, [], {
     cwd: root,
-    env: { ...process.env, TGWR_SMOKE_EXIT_ON_PONG: '1' },
+    env: { ...process.env, TGWR_SMOKE_EXIT_ON_PONG: '1', TGWR_SMOKE_RESTART_WORKER: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   })
@@ -42,8 +42,8 @@ await new Promise((resolvePromise, reject) => {
 
   const inspect = (chunk) => {
     output += chunk.toString('utf8')
-    if (output.includes('tgwr_packaged_app_smoke=ok worker=pong renderer=ready')) {
-      console.log('packaged_app_smoke=ok bundled_worker=pong renderer=ready')
+    if (output.includes('tgwr_packaged_app_smoke=ok worker=restart_pong renderer=ready')) {
+      console.log('packaged_app_smoke=ok bundled_worker=restart_pong renderer=ready')
       finish()
     }
   }

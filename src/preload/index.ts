@@ -6,6 +6,7 @@ const IPC_WORKER_IMPORT = 'tgwr:worker-import' as const
 const IPC_WORKER_BUILD_REPORT = 'tgwr:worker-build-report' as const
 const IPC_WORKER_PRELOAD_REPORTS = 'tgwr:worker-preload-reports' as const
 const IPC_WORKER_CANCEL = 'tgwr:worker-cancel' as const
+const IPC_WORKER_RESTART = 'tgwr:worker-restart' as const
 const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
@@ -70,6 +71,7 @@ export interface TgwrApi {
   buildReport: (year?: number) => void
   preloadReports: (years: number[]) => void
   cancelWorker: () => void
+  restartWorker: () => void
 
   pickExportDir: () => Promise<string | null>
   pickOutputDir: () => Promise<OutputDirectoryGrant | null>
@@ -99,6 +101,7 @@ const api: TgwrApi = {
   buildReport: (year) => ipcRenderer.send(IPC_WORKER_BUILD_REPORT, year),
   preloadReports: (years) => ipcRenderer.send(IPC_WORKER_PRELOAD_REPORTS, years),
   cancelWorker: () => ipcRenderer.send(IPC_WORKER_CANCEL),
+  restartWorker: () => ipcRenderer.send(IPC_WORKER_RESTART),
 
   pickExportDir: async () => {
     const res = await ipcRenderer.invoke(IPC_PICK_EXPORT_DIR)

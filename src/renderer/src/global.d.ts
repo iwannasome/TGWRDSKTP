@@ -54,6 +54,7 @@ declare global {
       buildReport: (year?: number) => void
       preloadReports: (years: number[]) => void
       cancelWorker: () => void
+      restartWorker: () => void
 
       pickExportDir: () => Promise<string | null>
       pickOutputDir: () => Promise<TgwrOutputDirectoryGrant | null>

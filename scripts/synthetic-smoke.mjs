@@ -1215,6 +1215,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         buildReport: () => {},
         preloadReports: () => {},
         cancelWorker: () => {},
+        restartWorker: () => {},
         pickExportDir: async () => null,
         pickOutputDir: async () => null,
         writeOutputFile: async () => ({ ok: true, path: '' }),

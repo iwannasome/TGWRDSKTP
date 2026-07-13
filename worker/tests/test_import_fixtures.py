@@ -173,7 +173,7 @@ class ImportFixtureTests(unittest.TestCase):
             with open(cache_path, "w", encoding="utf-8") as cache_file:
                 cache_file.write('{"previous": true}')
 
-            with self.assertRaisesRegex(RuntimeError, "Не найдено данных для импорта"):
+            with self.assertRaisesRegex(RuntimeError, "не найден экспорт Telegram"):
                 with contextlib.redirect_stdout(io.StringIO()):
                     do_import(export_dir, "desktop", db_path)
 
@@ -183,6 +183,63 @@ class ImportFixtureTests(unittest.TestCase):
                 self.assertEqual(report_file.read(), '{"previous": true}')
             with open(cache_path, "r", encoding="utf-8") as cache_file:
                 self.assertEqual(cache_file.read(), '{"previous": true}')
+
+    def test_service_only_import_is_rejected_and_keeps_previous_result(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-service-only-import-") as temp_dir:
+            export_dir = os.path.join(temp_dir, "service-only-export")
+            os.makedirs(export_dir)
+            with open(os.path.join(export_dir, "result.json"), "w", encoding="utf-8") as export_file:
+                json.dump(
+                    {
+                        "personal_information": {"user_id": 100000000},
+                        "chats": {
+                            "list": [
+                                {
+                                    "id": 900001,
+                                    "type": "personal_chat",
+                                    "name": "Service only",
+                                    "messages": [
+                                        {
+                                            "id": 1,
+                                            "type": "service",
+                                            "date": "2025-01-01T12:00:00",
+                                            "date_unixtime": "1735732800",
+                                            "actor": "Synthetic Self",
+                                            "actor_id": "user100000000",
+                                            "action": "phone_call",
+                                            "text": ""
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    export_file,
+                    ensure_ascii=False
+                )
+
+            db_path = os.path.join(temp_dir, "tgwr.db")
+            report_path = os.path.join(temp_dir, "report.json")
+            cache_path = os.path.join(temp_dir, "report-cache", "v2", "report-2025.json")
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(db_path, "wb") as db_file:
+                db_file.write(b"previous database")
+            with open(report_path, "w", encoding="utf-8") as report_file:
+                report_file.write('{"previous": true}')
+            with open(cache_path, "w", encoding="utf-8") as cache_file:
+                cache_file.write('{"previous": true}')
+
+            with self.assertRaisesRegex(RuntimeError, "не найдено обычных сообщений"):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    do_import(export_dir, "desktop", db_path)
+
+            with open(db_path, "rb") as db_file:
+                self.assertEqual(db_file.read(), b"previous database")
+            with open(report_path, "r", encoding="utf-8") as report_file:
+                self.assertEqual(report_file.read(), '{"previous": true}')
+            with open(cache_path, "r", encoding="utf-8") as cache_file:
+                self.assertEqual(cache_file.read(), '{"previous": true}')
+            self.assertFalse(os.path.exists(db_path + ".importing"))
 
     def test_cancelled_import_discards_staging_data_and_keeps_previous_result(self):
         export_dir = os.path.join(FIXTURES_DIR, "result_mixed")
