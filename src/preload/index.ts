@@ -4,6 +4,7 @@ const IPC_WORKER_EVENT = 'tgwr:worker-event' as const
 const IPC_WORKER_PING = 'tgwr:worker-ping' as const
 const IPC_WORKER_IMPORT = 'tgwr:worker-import' as const
 const IPC_WORKER_BUILD_REPORT = 'tgwr:worker-build-report' as const
+const IPC_WORKER_PRELOAD_REPORTS = 'tgwr:worker-preload-reports' as const
 const IPC_WORKER_CANCEL = 'tgwr:worker-cancel' as const
 const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
@@ -23,6 +24,8 @@ export type LoadReportResult =
       db_path: string
       report_path: string
       report: unknown
+      cached_years: number[]
+      report_stale: boolean
     }
   | {
       ok: false
@@ -65,6 +68,7 @@ export interface TgwrApi {
   pingWorker: () => void
   importExport: (exportDir: string) => void
   buildReport: (year?: number) => void
+  preloadReports: (years: number[]) => void
   cancelWorker: () => void
 
   pickExportDir: () => Promise<string | null>
@@ -93,6 +97,7 @@ const api: TgwrApi = {
   pingWorker: () => ipcRenderer.send(IPC_WORKER_PING),
   importExport: (exportDir) => ipcRenderer.send(IPC_WORKER_IMPORT, exportDir),
   buildReport: (year) => ipcRenderer.send(IPC_WORKER_BUILD_REPORT, year),
+  preloadReports: (years) => ipcRenderer.send(IPC_WORKER_PRELOAD_REPORTS, years),
   cancelWorker: () => ipcRenderer.send(IPC_WORKER_CANCEL),
 
   pickExportDir: async () => {

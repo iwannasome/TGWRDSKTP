@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DetailsView from './wrapped/DetailsView'
 import PeopleView from './wrapped/PeopleView'
 import SlidesView from './wrapped/SlidesView'
+import YearSelect, { type YearCacheState, type YearOption } from './wrapped/YearSelect'
 import type { PeriodKey } from './wrapped/report'
 import type { ThemeId } from './wrapped/slideTypes'
 import { isRecord } from './wrapped/safe'
@@ -17,11 +18,6 @@ type ImportProgress = {
   current: number
   total: number
   message?: string
-}
-
-type YearOption = {
-  year: number
-  messages: number
 }
 
 type ImportSkipReason = {
@@ -202,6 +198,11 @@ export default function App(): JSX.Element {
   const [reportAvailable, setReportAvailable] = useState(false)
   const [availableYears, setAvailableYears] = useState<YearOption[]>([])
   const [selectedYear, setSelectedYear] = useState<number | undefined>(undefined)
+  const [cachedYears, setCachedYears] = useState<Set<number>>(() => new Set())
+  const [preparingYears, setPreparingYears] = useState<Set<number>>(() => new Set())
+  const [loadingYear, setLoadingYear] = useState<number | undefined>(undefined)
+  const [reportStale, setReportStale] = useState(false)
+  const preloadSessionKeyRef = useRef('')
   const [existingReportPrompt, setExistingReportPrompt] = useState<ExistingReportPrompt | null>(null)
   const [existingReportError, setExistingReportError] = useState<string | null>(null)
 
@@ -282,6 +283,8 @@ export default function App(): JSX.Element {
       const yearState = reportYearState(parsedReport)
       setAvailableYears(yearState.years)
       setSelectedYear(yearState.selectedYear)
+      setCachedYears(new Set(Array.isArray(res.cached_years) ? res.cached_years : []))
+      setReportStale(res.report_stale === true)
       setReportAvailable(true)
       setView('slides')
 
@@ -367,6 +370,11 @@ export default function App(): JSX.Element {
     setImportSummary(summary)
     setAvailableYears(yearState.years)
     setSelectedYear(yearState.selectedYear ?? yearState.years[0]?.year)
+    setCachedYears(new Set())
+    setPreparingYears(new Set())
+    setLoadingYear(undefined)
+    setReportStale(false)
+    preloadSessionKeyRef.current = ''
     setReportBuild({ running: false })
     setView('setup')
   }, [existingReportPrompt])
@@ -394,6 +402,11 @@ export default function App(): JSX.Element {
     setImportSummary(null)
     setAvailableYears([])
     setSelectedYear(undefined)
+    setCachedYears(new Set())
+    setPreparingYears(new Set())
+    setLoadingYear(undefined)
+    setReportStale(false)
+    preloadSessionKeyRef.current = ''
     setReportBuild({ running: false })
     setView('setup')
   }, [])
@@ -513,15 +526,83 @@ export default function App(): JSX.Element {
         setDbPath(summary.db_path)
         setAvailableYears(years)
         setSelectedYear(recommendedYear)
+        setCachedYears(new Set())
+        setPreparingYears(new Set())
+        setLoadingYear(undefined)
+        setReportStale(false)
+        preloadSessionKeyRef.current = ''
         return
       }
 
       if (type === 'report_done') {
+        const completedYear = typeof payload.msk_year_used === 'number' ? payload.msk_year_used : undefined
+        if (completedYear !== undefined) {
+          setCachedYears((current) => new Set(current).add(completedYear))
+          setPreparingYears((current) => {
+            const next = new Set(current)
+            next.delete(completedYear)
+            return next
+          })
+        }
         setReportBuild({ running: false })
         reportBuildRunningRef.current = false
+        setLoadingYear(undefined)
         const rp = typeof payload.report_path === 'string' ? payload.report_path : null
         if (rp) setReportPath(rp)
         void loadReport()
+        return
+      }
+
+      if (type === 'report_preload_queued') {
+        const years = Array.isArray(payload.years)
+          ? payload.years.filter((year): year is number => typeof year === 'number' && Number.isInteger(year))
+          : []
+        if (years.length > 0) {
+          setPreparingYears((current) => new Set([...current, ...years]))
+        }
+        return
+      }
+
+      if (type === 'report_preload_started') {
+        const year = typeof payload.msk_year_used === 'number' ? payload.msk_year_used : undefined
+        if (year !== undefined) setPreparingYears((current) => new Set(current).add(year))
+        return
+      }
+
+      if (type === 'report_cached') {
+        const year = typeof payload.msk_year_used === 'number' ? payload.msk_year_used : undefined
+        if (year !== undefined) {
+          setCachedYears((current) => new Set(current).add(year))
+          setPreparingYears((current) => {
+            const next = new Set(current)
+            next.delete(year)
+            return next
+          })
+        }
+        return
+      }
+
+      if (type === 'report_preload_cancelled' || type === 'report_preload_error') {
+        const year = typeof payload.msk_year_used === 'number' ? payload.msk_year_used : undefined
+        if (year !== undefined) {
+          setPreparingYears((current) => {
+            const next = new Set(current)
+            next.delete(year)
+            return next
+          })
+        }
+        return
+      }
+
+      if (type === 'report_preload_idle') {
+        setPreparingYears(new Set())
+        return
+      }
+
+      if (type === 'report_cancelled') {
+        setReportBuild({ running: false })
+        reportBuildRunningRef.current = false
+        setLoadingYear(undefined)
         return
       }
 
@@ -529,6 +610,7 @@ export default function App(): JSX.Element {
         const msg = typeof payload.message === 'string' ? payload.message : 'Report error'
         setReportBuild({ running: false, error: msg })
         reportBuildRunningRef.current = false
+        setLoadingYear(undefined)
         return
       }
 
@@ -613,6 +695,11 @@ export default function App(): JSX.Element {
     setReportAvailable(false)
     setAvailableYears([])
     setSelectedYear(undefined)
+    setCachedYears(new Set())
+    setPreparingYears(new Set())
+    setLoadingYear(undefined)
+    setReportStale(false)
+    preloadSessionKeyRef.current = ''
     setReportBuild({ running: false })
   }, [])
 
@@ -629,6 +716,11 @@ export default function App(): JSX.Element {
     setReport(null)
     setReportPath(null)
     setReportAvailable(false)
+    setCachedYears(new Set())
+    setPreparingYears(new Set())
+    setLoadingYear(undefined)
+    setReportStale(false)
+    preloadSessionKeyRef.current = ''
 
     try {
       window.tgwr.importExport(dir)
@@ -644,15 +736,16 @@ export default function App(): JSX.Element {
   const canOpenReport = reportAvailable && !reportBuild.running && !importRunning
 
   const requestReportBuild = useCallback((year: number) => {
-    if (importRunningRef.current || reportBuildRunningRef.current) return
+    if (importRunningRef.current) return
     reportBuildRunningRef.current = true
-    setReportAvailable(false)
+    setLoadingYear(year)
     setReportBuild({ running: true, progress: { stage: 'compute_metrics', current: 0, total: 1 } })
     try {
       setSelectedYear(year)
       window.tgwr.buildReport(year)
     } catch (err) {
       reportBuildRunningRef.current = false
+      setLoadingYear(undefined)
       setReportBuild({
         running: false,
         error: err instanceof Error ? err.message : String(err)
@@ -666,9 +759,41 @@ export default function App(): JSX.Element {
   }, [importSummary, requestReportBuild, selectedYear])
 
   const onYearChange = useCallback((year: number) => {
-    if (year === selectedYear || reportBuildRunningRef.current) return
+    if (year === selectedYear) return
     requestReportBuild(year)
   }, [requestReportBuild, selectedYear])
+
+  useEffect(() => {
+    if (!report || workerStatus.status !== 'ok' || isScreenshotMode() || availableYears.length < 2) return
+    const years = availableYears
+      .map((option) => option.year)
+      .filter((year) => year !== selectedYear)
+      .sort((left, right) => Math.abs(left - (selectedYear ?? left)) - Math.abs(right - (selectedYear ?? right)))
+    const sessionKey = `${dbPath ?? ''}:${years.join(',')}`
+    if (!years.length || preloadSessionKeyRef.current === sessionKey) return
+    const timer = window.setTimeout(() => {
+      preloadSessionKeyRef.current = sessionKey
+      window.tgwr.preloadReports(years)
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [availableYears, dbPath, report, selectedYear, workerStatus.status])
+
+  useEffect(() => {
+    if (!report || !reportStale || !selectedYear || workerStatus.status !== 'ok' || reportBuildRunningRef.current) return
+    requestReportBuild(selectedYear)
+  }, [report, reportStale, requestReportBuild, selectedYear, workerStatus.status])
+
+  const yearCacheState = useMemo<Record<number, YearCacheState>>(() => {
+    const state: Record<number, YearCacheState> = {}
+    for (const option of availableYears) {
+      state[option.year] = cachedYears.has(option.year)
+        ? 'ready'
+        : preparingYears.has(option.year)
+          ? 'preparing'
+          : 'idle'
+    }
+    return state
+  }, [availableYears, cachedYears, preparingYears])
 
   const mainContent = useMemo(() => {
     if (report && view === 'slides') {
@@ -684,6 +809,8 @@ export default function App(): JSX.Element {
           availableYears={availableYears}
           selectedYear={selectedYear}
           onYearChange={onYearChange}
+          yearCacheState={yearCacheState}
+          loadingYear={loadingYear}
           yearBuildRunning={reportBuild.running}
           yearBuildError={reportBuild.error}
         />
@@ -846,26 +973,23 @@ export default function App(): JSX.Element {
               </div>
 
               {availableYears.length > 0 ? (
-                <label className="mt-4 block rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
+                <div className="mt-4 block rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                   <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
                     Год Wrapped
                   </span>
-                  <select
-                    value={selectedYear ?? ''}
+                  <YearSelect
+                    options={availableYears}
+                    value={selectedYear}
+                    onChange={setSelectedYear}
+                    cacheState={yearCacheState}
+                    loadingYear={loadingYear}
                     disabled={reportBuild.running}
-                    onChange={(event) => setSelectedYear(Number(event.target.value))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-[#0a111d] px-3 py-2.5 text-sm font-semibold text-slate-100 outline-none focus:border-[rgba(var(--tgwr-accent2-rgb),0.45)]"
-                  >
-                    {availableYears.map((item) => (
-                      <option key={item.year} value={item.year}>
-                        {item.year} · {item.messages.toLocaleString('ru-RU')} сообщений
-                      </option>
-                    ))}
-                  </select>
+                    variant="setup"
+                  />
                   <span className="mt-2 block text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.82)]">
                     Можно выбрать любой год, найденный в экспорте. Раздел «За всё время» останется доступен внутри Wrapped.
                   </span>
-                </label>
+                </div>
               ) : null}
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
@@ -1098,6 +1222,7 @@ export default function App(): JSX.Element {
     importRunning,
     importSummary,
     loadReport,
+    loadingYear,
     onBuildReport,
     onDeleteAllData,
     onOpenExistingReport,
@@ -1118,7 +1243,8 @@ export default function App(): JSX.Element {
     view,
     workerError,
     workerStatus.message,
-    workerStatus.status
+    workerStatus.status,
+    yearCacheState
   ])
 
   return (
