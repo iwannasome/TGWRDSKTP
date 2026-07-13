@@ -682,7 +682,6 @@ async function forwardImportExport(exportDir: unknown): Promise<void> {
   }
 
   const { db_path, location } = await computeDbPath()
-  await clearReportArtifacts(db_path)
   emitHost('info', 'DB path selected', { db_path, location })
 
   sendToWorker({

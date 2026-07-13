@@ -3,6 +3,7 @@ import json
 import math
 import os
 import re
+import shutil
 import sqlite3
 import statistics
 import sys
@@ -331,6 +332,34 @@ def ensure_removed(path: str) -> None:
         return
     except Exception:
         return
+
+
+def remove_sqlite_artifacts(db_path: str) -> None:
+    ensure_removed(db_path)
+    ensure_removed(db_path + "-wal")
+    ensure_removed(db_path + "-shm")
+
+
+def import_staging_db_path(db_path: str) -> str:
+    return db_path + ".importing"
+
+
+def clear_report_artifacts_for_db(db_path: str) -> None:
+    ensure_removed(os.path.join(os.path.dirname(db_path), "report.json"))
+    try:
+        shutil.rmtree(os.path.join(os.path.dirname(db_path), REPORT_CACHE_DIR_NAME))
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+
+def promote_imported_database(staging_db_path: str, db_path: str) -> None:
+    # A complete staged database has been checkpointed and closed before this call.
+    # Remove stale sidecars from the previous database before atomically replacing it.
+    ensure_removed(db_path + "-wal")
+    ensure_removed(db_path + "-shm")
+    os.replace(staging_db_path, db_path)
 
 
 def recreate_db(db_path: str) -> sqlite3.Connection:
@@ -1709,6 +1738,7 @@ def insert_html_messages_from_file(
 
 def do_import(export_dir: str, mode: str, db_path: str) -> None:
     _ = mode
+    staging_db_path = import_staging_db_path(db_path)
 
     progress("scan_files", 0, "", "")
 
@@ -1742,7 +1772,8 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
 
-        conn = recreate_db(db_path)
+        remove_sqlite_artifacts(staging_db_path)
+        conn = recreate_db(staging_db_path)
 
         for c in accepted:
             if _CANCEL_EVENT.is_set():
@@ -1854,6 +1885,8 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         conn.close()
         conn = None
 
+        promote_imported_database(staging_db_path, db_path)
+        clear_report_artifacts_for_db(db_path)
         db_size = compute_db_total_size_bytes(db_path)
 
         mark_import_idle()
@@ -1898,13 +1931,23 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
                 pass
             conn = None
 
-        ensure_removed(db_path)
-        ensure_removed(db_path + "-wal")
-        ensure_removed(db_path + "-shm")
+        remove_sqlite_artifacts(staging_db_path)
 
         mark_import_idle()
         write_json({"type": "import_error", "message": "Import cancelled"})
         return
+
+    except Exception:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = None
+
+        remove_sqlite_artifacts(staging_db_path)
+        mark_import_idle()
+        raise
 
     finally:
         if conn is not None:
@@ -1920,7 +1963,12 @@ def start_import_thread(export_dir: str, mode: str, db_path: str) -> None:
     def _runner() -> None:
         try:
             do_import(export_dir, mode, db_path)
+        except CancelledError:
+            remove_sqlite_artifacts(import_staging_db_path(db_path))
+            mark_import_idle()
+            write_json({"type": "import_error", "message": "Import cancelled"})
         except Exception as e:
+            remove_sqlite_artifacts(import_staging_db_path(db_path))
             mark_import_idle()
             write_json({"type": "import_error", "message": str(e)})
 
