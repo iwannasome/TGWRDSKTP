@@ -618,7 +618,16 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
     if (!isPathInsideDir(dirPath, outPath)) {
       return { ok: false, error: 'Output path escaped selected directory' }
     }
-    await fsp.writeFile(outPath, Buffer.from(bytes))
+
+    // Записываем рядом и атомарно заменяем цель: не оставляем частичный файл
+    // и заменяем существующий симлинк вместо перехода по нему.
+    const tempPath = join(dirPath, `.${filename}.${randomUUID()}.tmp`)
+    try {
+      await fsp.writeFile(tempPath, Buffer.from(bytes), { flag: 'wx' })
+      await fsp.rename(tempPath, outPath)
+    } finally {
+      await fsp.rm(tempPath, { force: true }).catch(() => undefined)
+    }
     return { ok: true, path: outPath }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
