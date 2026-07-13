@@ -53,10 +53,11 @@
     "electron": "^40.8.0",
     "electron-builder": "^26.8.1",
     "electron-vite": "^5.0.0",
+    "esbuild": "^0.28.1",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5",
-    "vite": "^7.3.1"
+    "vite": "^7.3.6"
   },
   "build": {
     "appId": "com.iwannasome.tgwr",
