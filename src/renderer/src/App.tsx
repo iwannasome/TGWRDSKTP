@@ -177,7 +177,7 @@ export default function App(): JSX.Element {
 
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus>({
     status: 'fail',
-    message: 'Worker not started'
+    message: 'Модуль анализа запускается'
   })
   const lastPongAtRef = useRef(0)
   const [workerError, setWorkerError] = useState<string | null>(null)
@@ -247,7 +247,7 @@ export default function App(): JSX.Element {
           setReportBuild((prev) => ({
             ...prev,
             running: false,
-            error: `Ошибка бекенда: ${res?.error || 'отчет не найден'}`
+            error: `Ошибка модуля анализа: ${res?.error || 'отчёт не найден'}`
           }))
         }
         return false
@@ -259,7 +259,7 @@ export default function App(): JSX.Element {
           setReportBuild((prev) => ({
             ...prev,
             running: false,
-            error: `Отчет загружен, но данные отсутствуют.`
+            error: 'Отчёт загружен, но данные отсутствуют.'
           }))
         }
         return false
@@ -273,7 +273,7 @@ export default function App(): JSX.Element {
         } catch {
           setReportAvailable(false)
           if (!isStartup) {
-            setReportBuild((prev) => ({ ...prev, running: false, error: 'Ошибка парсинга JSON отчета.' }))
+            setReportBuild((prev) => ({ ...prev, running: false, error: 'Не удалось прочитать JSON отчёта.' }))
           }
           return false
         }
@@ -299,7 +299,7 @@ export default function App(): JSX.Element {
         setReportBuild((prev) => ({
           ...prev,
           running: false,
-          error: `Критическая ошибка IPC: ${String(err)}`
+          error: `Ошибка связи с модулем анализа: ${String(err)}`
         }))
       }
       return false
@@ -610,7 +610,7 @@ export default function App(): JSX.Element {
       }
 
       if (type === 'report_error') {
-        const msg = typeof payload.message === 'string' ? payload.message : 'Report error'
+        const msg = typeof payload.message === 'string' ? payload.message : 'Не удалось собрать отчёт'
         setReportBuild({ running: false, error: msg })
         reportBuildRunningRef.current = false
         setLoadingYear(undefined)
@@ -618,7 +618,7 @@ export default function App(): JSX.Element {
       }
 
       if (type === 'import_error') {
-        const msg = typeof payload.message === 'string' ? payload.message : 'Import error'
+        const msg = typeof payload.message === 'string' ? payload.message : 'Не удалось импортировать экспорт Telegram'
         setImportRunning(false)
         importRunningRef.current = false
         setImportProgress(undefined)
@@ -628,7 +628,7 @@ export default function App(): JSX.Element {
       }
 
       if (type === 'error') {
-        const msg = typeof payload.message === 'string' ? payload.message : 'Worker error'
+        const msg = typeof payload.message === 'string' ? payload.message : 'Ошибка модуля анализа'
         if (importRunning) {
           setImportRunning(false)
           importRunningRef.current = false
@@ -671,10 +671,10 @@ export default function App(): JSX.Element {
       if (!lastPongAt) return
       const delta = Date.now() - lastPongAt
       if (delta > pongTimeoutMs) {
-        setWorkerError(`No pong for ${Math.round(delta / 1000)}s`)
+        setWorkerError(`Модуль анализа не отвечает ${Math.round(delta / 1000)} с`)
         setWorkerStatus({
           status: 'fail',
-          message: `No pong for ${Math.round(delta / 1000)}s`,
+          message: `Нет ответа ${Math.round(delta / 1000)} с`,
           ts: new Date().toISOString()
         })
       }

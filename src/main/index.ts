@@ -544,9 +544,9 @@ function isPathInsideDir(parentDir: string, childPath: string): boolean {
 ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
   const parent = mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined
   const options: OpenDialogOptions = {
-    title: 'Select Telegram Desktop Export folder',
+    title: 'Выберите папку экспорта Telegram Desktop',
     properties: ['openDirectory', 'dontAddToRecent'],
-    buttonLabel: 'Select folder'
+    buttonLabel: 'Выбрать папку'
   }
   const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
   if (res.canceled) return null
@@ -560,9 +560,9 @@ ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
 ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
   const parent = mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined
   const options: OpenDialogOptions = {
-    title: 'Select folder to export TGWR slides',
+    title: 'Выберите папку для экспорта слайдов TGWR',
     properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
-    buttonLabel: 'Select folder'
+    buttonLabel: 'Выбрать папку'
   }
   const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
   if (res.canceled) return null
