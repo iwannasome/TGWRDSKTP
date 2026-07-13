@@ -732,6 +732,11 @@ export default function App(): JSX.Element {
     }
   }, [exportDir, workerStatus.status])
 
+  const onCancelCurrentWork = useCallback(() => {
+    if (!importRunningRef.current && !reportBuildRunningRef.current) return
+    window.tgwr.cancelWorker()
+  }, [])
+
   const canBuildReport = !!importSummary && !!selectedYear && !reportBuild.running && !importRunning
   const canOpenReport = reportAvailable && !reportBuild.running && !importRunning
 
@@ -868,7 +873,7 @@ export default function App(): JSX.Element {
               <div className="mt-6 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                    Worker
+                    Модуль анализа
                   </div>
                   <div
                     className={[
@@ -878,7 +883,7 @@ export default function App(): JSX.Element {
                   />
                 </div>
                 <div className="mt-2 text-sm font-semibold text-slate-100">
-                  {workerStatus.status === 'ok' ? 'Работает' : 'OFFLINE'}
+                  {workerStatus.status === 'ok' ? 'Готов к работе' : 'Не запущен'}
                 </div>
                 <div className="mt-1 break-words text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.85)]">
                   {workerStatus.message}
@@ -908,7 +913,7 @@ export default function App(): JSX.Element {
             <div className="mb-5 flex flex-wrap items-end justify-between gap-4 rounded-[24px] border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.46)] px-5 py-4 backdrop-blur-xl">
               <div>
                 <div className="text-[13px] font-semibold uppercase tracking-[0.16em] text-[rgba(var(--tgwr-muted-rgb),0.75)]">
-                  Private recap workspace
+                  Локальный Telegram Wrapped
                 </div>
                 <div className="mt-1 text-2xl font-semibold text-slate-50">Собери Telegram Wrapped</div>
               </div>
@@ -945,7 +950,7 @@ export default function App(): JSX.Element {
                   <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.18)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-3 py-1 text-[12px] font-semibold text-sky-100">Шаг 1</div>
                   <div className="mt-3 text-[18px] font-semibold text-slate-50">Выбери Telegram Export</div>
                   <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                    Подойдет папка с `result.json` или HTML-файлами из Telegram Desktop.
+                    Выбери готовую папку экспорта из Telegram Desktop. JSON предпочтительнее, HTML тоже поддерживается.
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -972,6 +977,20 @@ export default function App(): JSX.Element {
                 </div>
               </div>
 
+              <details className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
+                <summary className="cursor-pointer list-none text-sm font-semibold text-slate-100 marker:content-none">
+                  Как подготовить экспорт Telegram
+                </summary>
+                <ol className="mt-3 list-decimal space-y-2 pl-5 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.9)]">
+                  <li>В Telegram Desktop открой «Настройки → Продвинутые настройки → Экспорт данных из Telegram».</li>
+                  <li>Выбери личные чаты и машиночитаемый JSON. Если есть только HTML, TGWR попробует прочитать и его.</li>
+                  <li>Дождись завершения экспорта и выбери его папку здесь.</li>
+                </ol>
+                <div className="mt-3 text-[13px] leading-relaxed text-sky-100/85">
+                  TGWR не запрашивает пароль, код Telegram или доступ к аккаунту: он читает только выбранную тобой папку на этом компьютере.
+                </div>
+              </details>
+
               {availableYears.length > 0 ? (
                 <div className="mt-4 block rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
                   <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
@@ -992,15 +1011,19 @@ export default function App(): JSX.Element {
                 </div>
               ) : null}
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
-                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.66)]">
-                  Техническая деталь · папка экспорта
+              {exportDir ? (
+                <div className="mt-4 rounded-2xl border border-emerald-300/15 bg-emerald-400/[0.06] p-4">
+                  <div className="text-sm font-semibold text-slate-100">Папка экспорта выбрана</div>
+                  <div className="mt-1 text-[13px] leading-relaxed text-slate-300/80">Нажми «Анализировать локально», чтобы начать импорт. Переписка останется на этом компьютере.</div>
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-[12px] font-semibold text-slate-300/75">Показать путь к папке</summary>
+                    <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-[12px] text-slate-100/85">{exportDir}</div>
+                  </details>
                 </div>
-                <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-[13px] text-slate-100/90">{exportDir || '—'}</div>
-              </div>
+              ) : null}
 
               {importRunning ? (
-                <div className="mt-4">
+                <div className="mt-4" role="status" aria-live="polite">
                   <div className="flex items-center justify-between text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
                     <span>{importProgress ? stageLabel(importProgress.stage) : '…'}</span>
                     <span>{Math.round(progressPct(importProgress))}%</span>
@@ -1014,6 +1037,13 @@ export default function App(): JSX.Element {
                   {importProgress?.message ? (
                     <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">{importProgress.message}</div>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={onCancelCurrentWork}
+                    className="mt-4 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                  >
+                    Отменить импорт
+                  </button>
                 </div>
               ) : null}
 
@@ -1027,13 +1057,13 @@ export default function App(): JSX.Element {
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                      Chats
+                      Личные диалоги
                     </div>
                     <div className="mt-1 text-xl font-bold text-slate-100">{importSummary.chats}</div>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                      Messages
+                      Сообщения
                     </div>
                     <div className="mt-1 text-xl font-bold text-slate-100">{importSummary.messages}</div>
                   </div>
@@ -1057,12 +1087,9 @@ export default function App(): JSX.Element {
                     )}
                   </div>
                   <div className="col-span-2 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
-                    <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                      DB path
-                    </div>
-                    <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-[13px] text-slate-100/90">{importSummary.db_path}</div>
-                    <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
-                      size: {formatBytes(importSummary.db_size_bytes)}
+                    <div className="text-sm font-semibold text-slate-100">Импорт сохранён только локально</div>
+                    <div className="mt-1 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+                      TGWR занял {formatBytes(importSummary.db_size_bytes)} на этом компьютере. В любой момент можно удалить базу и готовые отчёты кнопкой сверху.
                     </div>
                   </div>
                 </div>
@@ -1074,7 +1101,7 @@ export default function App(): JSX.Element {
                 <div>
                   <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent2-rgb),0.18)] bg-[rgba(var(--tgwr-accent2-rgb),0.10)] px-3 py-1 text-[12px] font-semibold text-violet-100">Шаг 2</div>
                   <div className="mt-3 text-[18px] font-semibold text-slate-50">Сгенерируй приватный отчет</div>
-                  <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">Python worker посчитает метрики и соберет story deck локально.</div>
+                  <div className="mt-1 text-[14px] text-[rgba(var(--tgwr-muted-rgb),0.9)]">TGWR посчитает метрики на этом компьютере и соберёт твой Wrapped. Переписки никуда не отправляются.</div>
                 </div>
                 <div className="flex items-center gap-3">
                   <button
@@ -1094,7 +1121,7 @@ export default function App(): JSX.Element {
               </div>
 
               {reportBuild.running ? (
-                <div className="mt-4">
+                <div className="mt-4" role="status" aria-live="polite">
                   <div className="flex items-center justify-between text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">
                     <span>{stageLabel(reportBuild.progress?.stage ?? 'compute_metrics')}</span>
                     <span>{Math.round(progressPct(reportBuild.progress))}%</span>
@@ -1108,6 +1135,13 @@ export default function App(): JSX.Element {
                   {reportBuild.progress?.message ? (
                     <div className="mt-2 text-[13px] text-[rgba(var(--tgwr-muted-rgb),0.85)]">{reportBuild.progress.message}</div>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={onCancelCurrentWork}
+                    className="mt-4 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+                  >
+                    Отменить сборку
+                  </button>
                 </div>
               ) : null}
 
@@ -1118,10 +1152,10 @@ export default function App(): JSX.Element {
               ) : null}
 
               <div className="mt-4 rounded-2xl border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.42)] p-4">
-                <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[rgba(var(--tgwr-muted-rgb),0.66)]">
-                  Техническая деталь · report.json
+                <div className="text-sm font-semibold text-slate-100">Готовый Wrapped хранится локально</div>
+                <div className="mt-1 text-[13px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.85)]">
+                  Его можно открыть позже, пересобрать из этой же базы или полностью удалить вместе с импортированными данными.
                 </div>
-                <div className="mt-2 max-h-20 overflow-auto break-all font-mono text-[13px] text-slate-100/90">{reportPath || '—'}</div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
@@ -1162,16 +1196,7 @@ export default function App(): JSX.Element {
               </div>
               <div className="mt-3 text-2xl font-bold text-slate-100">Что открыть при запуске?</div>
               <div className="mt-3 text-sm leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.9)]">
-                Можно открыть готовый Wrapped, пересобрать только отчёт из уже импортированной базы или полностью стереть локальные данные.
-              </div>
-
-              <div className="mt-5 rounded-xl border border-white/10 bg-black/25 p-4">
-                <div className="text-[13px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
-                  report.json
-                </div>
-                <div className="mt-2 max-h-24 overflow-auto break-all font-mono text-[13px] text-slate-100/85">
-                  {existingReportPrompt.report_path}
-                </div>
+                В TGWR уже есть готовый Wrapped. Его можно открыть, пересобрать из этой же локальной базы или полностью стереть все данные.
               </div>
 
               {existingReportError ? (
@@ -1193,7 +1218,7 @@ export default function App(): JSX.Element {
                   onClick={onResetExistingReport}
                   className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
                 >
-                  Пересобрать отчёт
+                  Собрать новый отчёт
                 </button>
                 <button
                   type="button"
@@ -1224,6 +1249,7 @@ export default function App(): JSX.Element {
     loadReport,
     loadingYear,
     onBuildReport,
+    onCancelCurrentWork,
     onDeleteAllData,
     onOpenExistingReport,
     onPickExportDir,
