@@ -18,11 +18,15 @@ type Props = {
 export const INSIGHT_EXPORT_W = 1080
 export const INSIGHT_EXPORT_H = 1920
 
+function hasExactDate(value: string): boolean {
+  return /\b(?:\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})\b/.test(value)
+}
+
 export default function InsightExportCard({ insight, period, anonymize, hidePrivateDetails = true }: Props): JSX.Element {
   const winner = insight.winner
   const displayName = anonymize && winner ? 'Собеседник из Telegram' : winner?.displayName
   const evidence = getInsightEvidenceEntries(insight, 8)
-    .filter((entry) => !hidePrivateDetails || !/(date|datetime|snippet|text)/i.test(entry.key))
+    .filter((entry) => !hidePrivateDetails || (!/(date|datetime|snippet|text)/i.test(entry.key) && !hasExactDate(entry.value)))
     .slice(0, 5)
   const noWinnerReason = formatInsightNoWinnerReason(insight.noWinnerReason)
   const evidenceSummary = evidence.slice(0, 3).map((entry) => `${entry.label}: ${entry.value}`).join(' · ')

@@ -255,7 +255,7 @@ function InsightDetailPanel({
               onChange={(event) => onHidePrivateDetailsChange(event.currentTarget.checked)}
               className="h-4 w-4 accent-sky-400"
             />
-            <span className="break-words [overflow-wrap:anywhere]">Скрыть точные даты</span>
+            <span className="break-words [overflow-wrap:anywhere]">Скрыть даты и приватные детали</span>
           </label>
           <button
             type="button"

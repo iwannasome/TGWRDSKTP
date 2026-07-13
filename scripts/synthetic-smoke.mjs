@@ -1106,6 +1106,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         const deadline = Date.now() + 7000;
         let openedExisting = false;
         let clickedExport = false;
+        let previewSlideChecked = 0;
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
           const view = root && root.getAttribute('data-tgwr-view');
@@ -1134,8 +1135,28 @@ function renderHarnessHtml(report, assets, slideIndex) {
           if (preview) {
             const previewText = preview.textContent || '';
             const checked = Array.from(preview.querySelectorAll('input[type="checkbox"]')).every((input) => input.checked);
-            if (previewText.includes('Собеседник ') && !previewText.includes('Александра Очень') && checked) {
+            const counter = previewText.match(/(\d+)\/(\d+)\s*·/);
+            const currentSlide = counter ? Number(counter[1]) : 0;
+            const totalSlides = counter ? Number(counter[2]) : 0;
+            const containsPrivateName = previewText.includes('Александра Очень');
+            const containsExactDate = /\b(?:\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})\b/.test(previewText);
+
+            if (!checked || containsPrivateName || containsExactDate) {
+              document.body.setAttribute('data-share-preview-check', 'fail:privacy');
+              showHarnessError('Share preview leaked private data. checked=' + checked + ', name=' + containsPrivateName + ', date=' + containsExactDate + ', slide=' + currentSlide + '/' + totalSlides);
+              return;
+            }
+
+            if (currentSlide > previewSlideChecked) previewSlideChecked = currentSlide;
+            if (totalSlides > 0 && currentSlide === totalSlides && previewSlideChecked === totalSlides) {
               document.body.setAttribute('data-share-preview-check', 'ok');
+              return;
+            }
+
+            const next = findButtonByText('Дальше →');
+            if (next && currentSlide > 0 && currentSlide < totalSlides) {
+              next.click();
+              setTimeout(tick, 80);
               return;
             }
           }
