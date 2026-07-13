@@ -21,6 +21,7 @@ const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
 const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
+const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -63,9 +64,21 @@ let lastKnownStatus: WorkerStatusEvent = {
   message: 'Worker not started',
   ts: new Date().toISOString()
 }
+let smokeWorkerPong = false
+let smokeRendererReady = false
+let smokeExitScheduled = false
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+function finishPackagedSmokeWhenReady(): void {
+  if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1') return
+  if (!smokeWorkerPong || !smokeRendererReady || smokeExitScheduled) return
+
+  smokeExitScheduled = true
+  console.log('tgwr_packaged_app_smoke=ok worker=pong renderer=ready')
+  setTimeout(() => app.quit(), 50)
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -188,13 +201,9 @@ function handleWorkerStdoutChunk(text: string): void {
     }
 
     emitToRenderer(parsed)
-    if (
-      process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' &&
-      isPlainObject(parsed) &&
-      parsed.type === 'pong'
-    ) {
-      console.log('tgwr_packaged_worker_smoke=ok')
-      setTimeout(() => app.quit(), 50)
+    if (isPlainObject(parsed) && parsed.type === 'pong') {
+      smokeWorkerPong = true
+      finishPackagedSmokeWhenReady()
     }
   }
 }
@@ -636,6 +645,11 @@ async function forwardImportExport(exportDir: unknown): Promise<void> {
 
 ipcMain.on(IPC_WORKER_PING, () => {
   sendToWorker({ cmd: 'ping' })
+})
+
+ipcMain.on(IPC_RENDERER_READY, () => {
+  smokeRendererReady = true
+  finishPackagedSmokeWhenReady()
 })
 
 ipcMain.on(IPC_WORKER_CANCEL, () => {

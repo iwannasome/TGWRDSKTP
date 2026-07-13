@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -7,6 +7,17 @@ const releaseDir = join(root, 'release')
 const executableName = process.platform === 'win32' ? 'tgwr-worker.exe' : 'tgwr-worker'
 const expectedSuffix = ['worker-bin', `${process.platform}-${process.arch}`, executableName].join('/')
 const files = []
+
+const preloadPath = join(root, 'dist', 'preload', 'index.js')
+let preloadSource = ''
+try {
+  preloadSource = await readFile(preloadPath, 'utf8')
+} catch {
+  throw new Error('Не найден CommonJS preload dist/preload/index.js')
+}
+if (!preloadSource.includes('require("electron")')) {
+  throw new Error('Preload собран не в CommonJS и не сможет работать внутри Electron sandbox')
+}
 
 async function walk(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {

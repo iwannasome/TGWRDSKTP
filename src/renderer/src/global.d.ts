@@ -45,6 +45,7 @@ declare global {
 
   interface Window {
     tgwr: {
+      rendererReady: () => void
       onWorkerEvent: (cb: (payload: unknown) => void) => () => void
       pingWorker: () => void
       importExport: (exportDir: string) => void

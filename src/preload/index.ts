@@ -11,6 +11,7 @@ const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
 const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
+const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -59,6 +60,7 @@ export type DataMutationResult =
     }
 
 export interface TgwrApi {
+  rendererReady: () => void
   onWorkerEvent: (cb: (payload: unknown) => void) => () => void
   pingWorker: () => void
   importExport: (exportDir: string) => void
@@ -80,6 +82,8 @@ function normalizeDataMutationResult(value: unknown): DataMutationResult {
 }
 
 const api: TgwrApi = {
+  rendererReady: () => ipcRenderer.send(IPC_RENDERER_READY),
+
   onWorkerEvent: (cb) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => cb(payload)
     ipcRenderer.on(IPC_WORKER_EVENT, listener)

@@ -1130,6 +1130,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
       });
       window.__TGWR_REPORT__ = ${JSON.stringify(report)};
       window.tgwr = {
+        rendererReady: () => {},
         onWorkerEvent: () => () => {},
         pingWorker: () => {},
         importExport: () => {},
