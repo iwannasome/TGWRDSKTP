@@ -25,6 +25,7 @@ import {
   type SharePrivacyOptions
 } from './report'
 import type { SlideCommonProps, SlideDef, ThemeId } from './slideTypes'
+import YearSelect, { type YearCacheState } from './YearSelect'
 
 import Slide01Cover from './slides/Slide01Cover'
 import Slide02TotalMessages from './slides/Slide02TotalMessages'
@@ -130,6 +131,8 @@ type SlidesViewProps = {
   availableYears: Array<{ year: number; messages: number }>
   selectedYear?: number
   onYearChange: (year: number) => void
+  yearCacheState: Record<number, YearCacheState>
+  loadingYear?: number
   yearBuildRunning: boolean
   yearBuildError?: string
 }
@@ -170,6 +173,8 @@ export default function SlidesView({
   availableYears,
   selectedYear,
   onYearChange,
+  yearCacheState,
+  loadingYear,
   yearBuildRunning,
   yearBuildError
 }: SlidesViewProps): JSX.Element {
@@ -405,19 +410,19 @@ export default function SlidesView({
           </div>
 
           {availableYears.length > 1 ? (
-            <select
-              aria-label="Год Wrapped"
-              value={selectedYear ?? year}
-              disabled={yearBuildRunning || exporting}
-              onChange={(event) => onYearChange(Number(event.target.value))}
-              className="max-w-full rounded-xl border border-white/10 bg-[#0a111d] px-2 py-2 text-center text-[11px] font-semibold text-slate-100 outline-none disabled:opacity-60"
-            >
-              {availableYears.map((item) => <option key={item.year} value={item.year}>{item.year}</option>)}
-            </select>
+            <YearSelect
+              options={availableYears}
+              value={selectedYear ?? Number(year)}
+              onChange={onYearChange}
+              cacheState={yearCacheState}
+              loadingYear={loadingYear}
+              disabled={exporting}
+              variant="rail"
+            />
           ) : null}
 
           {yearBuildRunning ? (
-            <div className="text-center text-[10px] font-semibold leading-tight text-sky-200">Пересчитываю год…</div>
+            <div className="text-center text-[10px] font-semibold leading-tight text-sky-200">Открываю {loadingYear ?? selectedYear} год…</div>
           ) : yearBuildError ? (
             <div className="text-center text-[10px] leading-tight text-red-200">{yearBuildError}</div>
           ) : null}

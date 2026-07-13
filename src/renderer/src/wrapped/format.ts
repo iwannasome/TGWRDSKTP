@@ -129,6 +129,10 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Сообщений'
     case 'minimum_messages_required':
       return 'Минимум сообщений'
+    case 'baseline_messages':
+      return 'Сообщений для сравнения'
+    case 'minimum_baseline_messages':
+      return 'Минимум для сравнения'
     case 'active_days':
       return 'Активных дней'
     case 'total_active_days':
@@ -141,6 +145,8 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Покрытие месяцев'
     case 'minimum_coverage_ratio':
       return 'Минимальное покрытие'
+    case 'minimum_active_months':
+      return 'Минимум активных месяцев'
     case 'balance_ratio':
       return 'Баланс'
     case 'volume_component':
@@ -151,6 +157,12 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Вклад месяцев'
     case 'stability_ratio':
       return 'Стабильность'
+    case 'minimum_stability_ratio':
+      return 'Минимальная стабильность'
+    case 'average_monthly_messages':
+      return 'В среднем за месяц'
+    case 'monthly_deviation_ratio':
+      return 'Среднее отклонение'
     case 'gap_days':
       return 'Пауза'
     case 'before_messages':
@@ -183,14 +195,30 @@ export function formatInsightEvidenceLabel(key: string): string {
       return 'Мультипликатор'
     case 'messages':
       return 'Сообщений'
+    case 'minimum_window_messages':
+      return 'Минимум в этом времени суток'
     case 'ratio':
       return 'Доля'
     case 'archive_baseline_ratio':
-      return 'Обычная доля в архиве'
+      return 'Обычная доля вне этого чата'
     case 'lift_vs_archive':
       return 'Выше обычного ритма'
     case 'message_count':
       return 'Сообщений в сессии'
+    case 'normalized_change_messages':
+      return 'Изменение за сопоставимый срок'
+    case 'early_window_days':
+      return 'Дней в первой части'
+    case 'late_window_days':
+      return 'Дней во второй части'
+    case 'matched_window_days':
+      return 'Сопоставимый срок, дней'
+    case 'trend_span_days':
+      return 'Длительность наблюдения, дней'
+    case 'minimum_trend_span_days':
+      return 'Минимальная длительность, дней'
+    case 'minimum_media_lift':
+      return 'Минимальный избыток медиа'
     case 'duration_seconds':
       return 'Длительность'
     case 'density_per_hour':
@@ -260,7 +288,7 @@ export function formatInsightEvidenceLabel(key: string): string {
     case 'media_ratio':
       return 'Доля медиа'
     case 'archive_media_ratio':
-      return 'Доля медиа в архиве'
+      return 'Доля медиа вне этого чата'
     case 'media_lift_vs_archive':
       return 'Выше средней доли'
     default:
@@ -282,7 +310,7 @@ export function formatEvidenceValue(key: string, value: unknown): string {
     return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(n)}/мес.`
   }
   if (
-    (key === 'ratio' || key.endsWith('_ratio') || key.endsWith('_component') || key === 'lift_vs_archive' || key === 'media_lift_vs_archive') &&
+    (key === 'ratio' || key.endsWith('_ratio') || key.endsWith('_component') || key === 'lift_vs_archive' || key === 'media_lift_vs_archive' || key === 'minimum_media_lift') &&
     Number.isFinite(n)
   ) return formatPercent01(n)
   if (key.endsWith('_seconds') && Number.isFinite(n)) return formatSecondsHuman(n)

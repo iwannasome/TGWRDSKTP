@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 
 
 WORKER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -18,6 +19,9 @@ from tgwr_worker import (  # noqa: E402
     build_candidates,
     dedupe_candidates,
     do_build_report,
+    _effective_bounded_period_end,
+    _moscow_tzinfo,
+    _quietest_month_candidates,
     do_import,
     html_looks_like_group_chat,
     recommend_report_year,
@@ -70,6 +74,25 @@ class ImportFixtureTests(unittest.TestCase):
         ]
         self.assertEqual(recommend_report_year(years), 2025)
 
+    def test_current_calendar_window_stops_at_present_but_past_year_stays_complete(self):
+        msk = _moscow_tzinfo()
+        current_start = int(datetime(2026, 1, 1, tzinfo=msk).timestamp())
+        current_end = int(datetime(2027, 1, 1, tzinfo=msk).timestamp())
+        current_now = int(datetime(2026, 7, 13, 12, 0, tzinfo=msk).timestamp())
+        self.assertEqual(_effective_bounded_period_end(current_start, current_end, current_now), current_now)
+
+        past_start = int(datetime(2025, 1, 1, tzinfo=msk).timestamp())
+        past_end = int(datetime(2026, 1, 1, tzinfo=msk).timestamp())
+        self.assertEqual(_effective_bounded_period_end(past_start, past_end, current_now), past_end)
+
+        months = [
+            {"value": "2026-01", "count": 200},
+            {"value": "2026-02", "count": 100},
+            {"value": "2026-07", "count": 1},
+        ]
+        quietest_candidates = _quietest_month_candidates(months, current_start, current_end, current_now)
+        self.assertEqual([item["value"] for item in quietest_candidates], ["2026-01", "2026-02"])
+
     def test_fixture_import_builds_schema_v2_for_requested_year(self):
         export_dir = os.path.join(FIXTURES_DIR, "result_mixed")
         with tempfile.TemporaryDirectory(prefix="tgwr-fixture-") as temp_dir:
@@ -101,7 +124,28 @@ class ImportFixtureTests(unittest.TestCase):
 
             self.assertEqual(report.get("schema_version"), 2)
             self.assertEqual(report.get("meta", {}).get("msk_year_used"), 2024)
+            self.assertEqual(report.get("meta", {}).get("report_cache_revision"), 2)
             self.assertNotIn("deleted_messages_count", report.get("periods", {}).get("year", {}))
+
+            cache_path_2024 = os.path.join(temp_dir, "report-cache", "v2", "report-2024.json")
+            self.assertTrue(os.path.isfile(cache_path_2024))
+
+            os.remove(os.path.join(temp_dir, "report.json"))
+            cached_output = io.StringIO()
+            with contextlib.redirect_stdout(cached_output):
+                do_build_report(db_path, requested_year=2024)
+            cached_events = [json.loads(line) for line in cached_output.getvalue().splitlines() if line.strip()]
+            cached_done = next(event for event in cached_events if event.get("type") == "report_done")
+            self.assertEqual(cached_done.get("source"), "cache")
+            self.assertTrue(os.path.isfile(os.path.join(temp_dir, "report.json")))
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                do_build_report(db_path, requested_year=2025, cache_only=True)
+            cache_path_2025 = os.path.join(temp_dir, "report-cache", "v2", "report-2025.json")
+            self.assertTrue(os.path.isfile(cache_path_2025))
+            with open(os.path.join(temp_dir, "report.json"), "r", encoding="utf-8") as active_report_file:
+                active_report = json.load(active_report_file)
+            self.assertEqual(active_report.get("meta", {}).get("msk_year_used"), 2024)
 
 
 if __name__ == "__main__":

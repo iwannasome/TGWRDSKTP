@@ -14,6 +14,7 @@ const IPC_WORKER_EVENT = 'tgwr:worker-event' as const
 const IPC_WORKER_PING = 'tgwr:worker-ping' as const
 const IPC_WORKER_IMPORT = 'tgwr:worker-import' as const
 const IPC_WORKER_BUILD_REPORT = 'tgwr:worker-build-report' as const
+const IPC_WORKER_PRELOAD_REPORTS = 'tgwr:worker-preload-reports' as const
 const IPC_WORKER_CANCEL = 'tgwr:worker-cancel' as const
 const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
@@ -22,6 +23,9 @@ const IPC_LOAD_REPORT = 'tgwr:load-report' as const
 const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
 const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
+
+const REPORT_CACHE_REVISION = 2
+const REPORT_CACHE_DIR_NAME = 'report-cache'
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -417,6 +421,42 @@ function dataFilesForDb(dbPath: string): string[] {
   return [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, join(baseDir, 'report.json')]
 }
 
+function reportCacheRootForDb(dbPath: string): string {
+  return join(dirname(dbPath), REPORT_CACHE_DIR_NAME)
+}
+
+function reportCacheDirForDb(dbPath: string): string {
+  return join(reportCacheRootForDb(dbPath), `v${REPORT_CACHE_REVISION}`)
+}
+
+async function listCachedReportYears(dbPath: string): Promise<number[]> {
+  try {
+    const entries = await fsp.readdir(reportCacheDirForDb(dbPath), { withFileTypes: true })
+    return entries
+      .flatMap((entry) => {
+        if (!entry.isFile()) return []
+        const match = /^report-(\d{4})\.json$/.exec(entry.name)
+        if (!match) return []
+        const year = Number(match[1])
+        return Number.isInteger(year) && year >= 2000 && year <= 2200 ? [year] : []
+      })
+      .sort((a, b) => b - a)
+  } catch {
+    return []
+  }
+}
+
+async function clearReportArtifacts(dbPath: string): Promise<boolean> {
+  const reportPath = join(dirname(dbPath), 'report.json')
+  const cacheRoot = reportCacheRootForDb(dbPath)
+  const existed = existsSync(reportPath) || existsSync(cacheRoot)
+  await Promise.all([
+    fsp.rm(reportPath, { force: true }),
+    fsp.rm(cacheRoot, { recursive: true, force: true })
+  ])
+  return existed
+}
+
 function legacyDbPath(): string | null {
   if (!app.isPackaged) return null
   const candidate = join(dirname(process.execPath), 'tgwr.db')
@@ -563,7 +603,10 @@ ipcMain.handle(IPC_LOAD_REPORT, async () => {
 
     const txt = await fsp.readFile(report_path, { encoding: 'utf8' })
     const report = JSON.parse(txt) as unknown
-    return { ok: true, db_path, report_path, report }
+    const meta = isPlainObject(report) && isPlainObject(report.meta) ? report.meta : {}
+    const report_stale = Number(meta.report_cache_revision ?? 0) !== REPORT_CACHE_REVISION
+    const cached_years = await listCachedReportYears(db_path)
+    return { ok: true, db_path, report_path, report, cached_years, report_stale }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
@@ -574,8 +617,7 @@ ipcMain.handle(IPC_RESET_REPORT, async () => {
   try {
     const { db_path } = await computeDbPath()
     const report_path = join(dirname(db_path), 'report.json')
-    const existed = existsSync(report_path)
-    await fsp.rm(report_path, { force: true })
+    const existed = await clearReportArtifacts(db_path)
     return { ok: true, db_path, report_path, deleted: existed }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -588,9 +630,11 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
     sendToWorker({ cmd: 'cancel' })
     const { db_path } = await computeDbPath()
     const candidates = new Set(dataFilesForDb(db_path))
+    const cacheRoots = new Set([reportCacheRootForDb(db_path)])
     const legacy = legacyDbPath()
     if (legacy) {
       for (const filePath of dataFilesForDb(legacy)) candidates.add(filePath)
+      cacheRoots.add(reportCacheRootForDb(legacy))
     }
 
     const deleted: string[] = []
@@ -598,6 +642,11 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
       if (!existsSync(filePath)) continue
       await fsp.rm(filePath, { force: true })
       deleted.push(filePath)
+    }
+    for (const cacheRoot of cacheRoots) {
+      if (!existsSync(cacheRoot)) continue
+      await fsp.rm(cacheRoot, { recursive: true, force: true })
+      deleted.push(cacheRoot)
     }
 
     return {
@@ -633,6 +682,7 @@ async function forwardImportExport(exportDir: unknown): Promise<void> {
   }
 
   const { db_path, location } = await computeDbPath()
+  await clearReportArtifacts(db_path)
   emitHost('info', 'DB path selected', { db_path, location })
 
   sendToWorker({
@@ -672,6 +722,25 @@ ipcMain.on(IPC_WORKER_BUILD_REPORT, (_event, year: unknown) => {
 
   void computeDbPath().then(({ db_path }) => {
     sendToWorker({ cmd: 'build_report', db_path, ...(year === undefined ? {} : { year: Number(year) }) })
+  })
+})
+
+ipcMain.on(IPC_WORKER_PRELOAD_REPORTS, (_event, years: unknown) => {
+  if (!Array.isArray(years)) {
+    emitToRenderer({
+      type: 'ipc_invalid_cmd',
+      ts: nowIso(),
+      message: 'Список годов для предзагрузки должен быть массивом'
+    })
+    return
+  }
+
+  const normalized = [...new Set(years)]
+    .filter((year): year is number => Number.isInteger(year) && Number(year) >= 2000 && Number(year) <= 2200)
+    .map(Number)
+
+  void computeDbPath().then(({ db_path }) => {
+    sendToWorker({ cmd: 'preload_reports', db_path, years: normalized })
   })
 })
 

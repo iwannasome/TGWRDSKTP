@@ -3,7 +3,7 @@ import React from 'react'
 import AnimatedNumber from '../AnimatedNumber'
 import SlideFrame from '../SlideFrame'
 import { formatInsightConfidence, formatInsightNoWinnerReason, formatPeriodHuman } from '../format'
-import { getInsightDescription, getInsightEvidenceEntries, summarizeInsightEvidence } from '../insightCopy'
+import { getInsightDescription, getInsightEvidenceEntries, getInsightRationale } from '../insightCopy'
 import { getConversationInsight, type ConversationInsightKind } from '../report'
 import type { SlideCommonProps } from '../slideTypes'
 
@@ -33,6 +33,7 @@ export default function InsightStorySlide({ report, period, kind, exporting }: P
   const evidence = getInsightEvidenceEntries(insight, 5)
   const winner = insight.winner
   const candidates = insight.candidates.slice(0, 3)
+  const rationale = getInsightRationale(insight)
 
   return (
     <SlideFrame
@@ -103,9 +104,20 @@ export default function InsightStorySlide({ report, period, kind, exporting }: P
             <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[rgba(var(--tgwr-muted-rgb),0.72)]">
               Почему этот результат
             </div>
-            <div className="mt-4 break-words text-[16px] leading-relaxed text-slate-100/90 [overflow-wrap:anywhere]">
-              {winner ? summarizeInsightEvidence(insight, 4) : formatInsightNoWinnerReason(insight.noWinnerReason)}
-            </div>
+            {winner ? (
+              <ul className="mt-4 space-y-3">
+                {rationale.map((line, index) => (
+                  <li key={`${insight.kind}-${index}`} className="flex gap-3 break-words text-[15px] leading-relaxed text-slate-100/90 [overflow-wrap:anywhere]">
+                    <span className="mt-[0.62em] h-1.5 w-1.5 shrink-0 rounded-full bg-[rgb(var(--tgwr-accent1-rgb))]" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-4 break-words text-[16px] leading-relaxed text-slate-100/90 [overflow-wrap:anywhere]">
+                {formatInsightNoWinnerReason(insight.noWinnerReason)}
+              </div>
+            )}
           </div>
 
           <div className="tgwr-telegram-panel rounded-[26px] p-6">
