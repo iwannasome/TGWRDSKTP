@@ -1135,11 +1135,11 @@ function renderHarnessHtml(report, assets, slideIndex) {
           if (preview) {
             const previewText = preview.textContent || '';
             const checked = Array.from(preview.querySelectorAll('input[type="checkbox"]')).every((input) => input.checked);
-            const counter = previewText.match(/(\d+)\/(\d+)\s*·/);
+            const counter = previewText.match(/([0-9]+)[/]([0-9]+) *·/);
             const currentSlide = counter ? Number(counter[1]) : 0;
             const totalSlides = counter ? Number(counter[2]) : 0;
             const containsPrivateName = previewText.includes('Александра Очень');
-            const containsExactDate = /\b(?:\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})\b/.test(previewText);
+            const containsExactDate = /(?:^|[^0-9])(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}[.][0-9]{2}[.][0-9]{4})(?:$|[^0-9])/.test(previewText);
 
             if (!checked || containsPrivateName || containsExactDate) {
               document.body.setAttribute('data-share-preview-check', 'fail:privacy');
@@ -1237,6 +1237,18 @@ function renderHarnessHtml(report, assets, slideIndex) {
   </body>
 </html>
 `
+}
+
+function assertHarnessInlineScriptParses(report) {
+  const html = renderHarnessHtml(report, { cssFile: 'smoke.css', jsFile: 'smoke.js' }, 0)
+  const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+  if (!inlineScript) throw new Error('Synthetic harness is missing its inline bootstrap script')
+  try {
+    new Function(inlineScript)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Synthetic harness inline script does not parse: ${message}`)
+  }
 }
 
 async function startHarnessServer(report) {
@@ -1540,6 +1552,7 @@ async function main() {
   const reportPath = await runWorkerSmoke()
   const report = JSON.parse(await readFile(reportPath, 'utf8'))
   assertReport(report)
+  assertHarnessInlineScriptParses(report)
   const baseTargets = process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? allSlideTargets() : undefined
   const expandedMobileTargets = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
   const screenshots = [
