@@ -165,3 +165,5 @@ http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 TGWR / Telegram Wrapped создан **iwannasome**.
 
 Авторский канал: [IWANNASOME](https://t.me/shizikjke).
+
+Код распространяется по лицензии [MIT](LICENSE).
