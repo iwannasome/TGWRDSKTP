@@ -50,7 +50,7 @@ await new Promise((resolvePromise, reject) => {
 
   const timeout = setTimeout(() => {
     finish(new Error(`Установленное приложение не подтвердило готовность интерфейса и worker.\n${output.slice(-4000)}`))
-  }, 20_000)
+  }, 45_000)
 
   child.stdout.on('data', inspect)
   child.stderr.on('data', inspect)

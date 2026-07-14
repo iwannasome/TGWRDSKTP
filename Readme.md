@@ -21,13 +21,28 @@ TGWR импортирует официальный экспорт Telegram Deskt
 - объясняет, какие чаты были пропущены при импорте и почему;
 - различает пересборку отчёта и полное удаление локальной базы.
 
+## Скачать и запустить
+
+После публикации релиза готовые сборки будут доступны в разделе [**Releases**](https://github.com/iwannasome/TGWRDSKTP/releases). Выбери файл для своего компьютера:
+
+| Система | Файл | Что делать |
+|---|---|---|
+| Windows x64 | `TGWR-by-IWS-Setup-…-x64.exe` | Запусти установщик и выбери папку установки. |
+| macOS Apple Silicon | `TGWR-by-IWS-…-arm64.dmg` | Открой DMG и перенеси TGWR в Applications. |
+| macOS Intel | `TGWR-by-IWS-…-x64.dmg` | Открой DMG и перенеси TGWR в Applications. |
+| Ubuntu/Debian x64 | `TGWR-by-IWS-…-amd64.deb` | Открой пакет системным установщиком. |
+| Fedora/RHEL x64 | `TGWR-by-IWS-…-x86_64.rpm` | Открой пакет системным установщиком. |
+| Другой Linux x64 | `TGWR-by-IWS-…-x86_64.AppImage` | Разреши запуск файла как программы и открой его. |
+
+Windows ARM, Linux ARM, мобильные ОС и BSD в версии 0.2 не поддерживаются. Установщики пока не подписаны: Windows или macOS могут показать предупреждение издателя. Скачивай файлы только из Releases этого репозитория и при необходимости сверяй SHA-256 с `SHA256SUMS.txt`.
+
 ## Быстрый пользовательский путь
 
 1. В Telegram Desktop открой `Настройки → Продвинутые настройки → Экспорт данных из Telegram`.
 2. Выбери личные чаты и машиночитаемый JSON. HTML тоже поддерживается, но JSON надёжнее передаёт ID и направление сообщений.
 3. Запусти установленный TGWR и выбери папку экспорта.
 4. Проверь сводку импорта и выбери год.
-5. Открой Wrapped, Explore или экспорт.
+5. Открой Wrapped, разделы «Детали»/«Люди» или безопасный экспорт PNG/PDF.
 
 В установленной версии **не нужно отдельно устанавливать Node.js или Python**. Python worker заранее собирается в нативный бинарник под Windows, macOS или Linux и поставляется внутри приложения.
 
@@ -102,6 +117,7 @@ npm run test:synthetic  # полный synthetic report и browser smoke при 
 npm run worker:build    # PyInstaller binary текущей ОС/архитектуры
 npm run worker:smoke    # JSONL ping замороженному worker
 npm run pack            # распакованное Electron-приложение
+npm run release:version-check # совпадение версии package/lock/worker/UI/README
 npm run verify          # весь локальный release gate
 ```
 

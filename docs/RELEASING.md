@@ -30,13 +30,15 @@ npm run verify
 - Share Preview, навигация, People и insight export;
 - PyInstaller worker pong;
 - electron-builder package;
-- packaged Electron → bundled worker pong.
+- packaged Electron → bundled worker pong, принудительный перезапуск и повторный pong.
 
 ## GitHub Actions
 
 - `.github/workflows/ci.yml` работает на push и pull request;
 - `.github/workflows/release.yml` запускается вручную или тегом `v*`;
-- release workflow сохраняет установщики как GitHub Actions artifacts на 14 дней.
+- CI запускает packaged app и перезапускает встроенный worker на Windows x64, macOS Intel/ARM64 и Linux x64;
+- ручной release workflow сохраняет установщики и SHA-256 как GitHub Actions artifacts на 14 дней;
+- запуск по тегу `v*` дополнительно создаёт **черновик** GitHub Release со всеми установщиками и общей `SHA256SUMS.txt`. Публикация черновика остаётся ручным решением владельца.
 
 Пример:
 
@@ -45,7 +47,7 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-Перед тегом версия в `package.json`, `package-lock.json`, worker и интерфейсе должна совпадать.
+Перед тегом `npm run release:version-check` автоматически проверяет совпадение версии в `package.json`, `package-lock.json`, worker, интерфейсе и README, а также соответствие самого тега.
 
 ## Подпись приложений
 
