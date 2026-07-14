@@ -81,6 +81,10 @@
       {
         "from": "LICENSE",
         "to": "LICENSE.txt"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "app-icon.png"
       }
     ],
     "asar": true,

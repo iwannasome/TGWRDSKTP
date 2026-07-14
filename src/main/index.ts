@@ -431,6 +431,9 @@ function createWindow(): void {
   ]
 
   const preloadPath = preloadCandidates.find((p) => existsSync(p))
+  const appIconPath = app.isPackaged
+    ? join(process.resourcesPath, 'app-icon.png')
+    : join(process.cwd(), 'build', 'icon.png')
 
   const win = new BrowserWindow({
     width: 1360,
@@ -439,6 +442,7 @@ function createWindow(): void {
     minHeight: 680,
     show: true,
     backgroundColor: '#05070a',
+    icon: existsSync(appIconPath) ? appIconPath : undefined,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
