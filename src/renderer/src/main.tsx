@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { MotionConfig } from 'framer-motion'
 import App from './App'
 import './styles.css'
 
@@ -57,7 +58,9 @@ class RendererErrorBoundary extends React.Component<React.PropsWithChildren, Ren
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <RendererErrorBoundary>
-      <App />
+      <MotionConfig reducedMotion="user">
+        <App />
+      </MotionConfig>
     </RendererErrorBoundary>
   </React.StrictMode>
 )

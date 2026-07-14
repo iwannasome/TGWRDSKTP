@@ -28,6 +28,10 @@ from tgwr_worker import (  # noqa: E402
     html_looks_like_group_chat,
     recommend_report_year,
     scan_export_dir,
+    load_json_safely,
+    ensure_import_disk_capacity,
+    _pick_person_by_time_profile,
+    MAX_INFERRED_REPLY_SECONDS,
 )
 
 
@@ -57,6 +61,65 @@ class ImportFixtureTests(unittest.TestCase):
         self.assertEqual(reasons.get("non_personal_chat"), 1)
         self.assertEqual(reasons.get("empty_chat"), 1)
         self.assertEqual(reasons.get("duplicate_by_id"), 1)
+
+    def test_result_candidates_keep_only_stream_position_not_message_objects(self):
+        accepted, _reasons = self.candidates_for("result_mixed")
+        result_candidates = [candidate for candidate in accepted if candidate.source == "result"]
+        self.assertTrue(result_candidates)
+        self.assertTrue(all(candidate.result_chat_index is not None for candidate in result_candidates))
+        self.assertFalse(any(hasattr(candidate, "result_chat_obj") for candidate in result_candidates))
+
+    def test_truncated_result_discards_every_partial_candidate(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-truncated-result-") as export_dir:
+            result_path = os.path.join(export_dir, "result.json")
+            with open(result_path, "w", encoding="utf-8") as result_file:
+                result_file.write(
+                    '{"chats":{"list":['
+                    '{"id":1,"type":"personal_chat","name":"Partial",'
+                    '"messages":[{"id":1,"type":"message","date_unixtime":"1735732800"}]},'
+                )
+
+            candidates, reasons = build_candidates(export_dir, [], [result_path], [])
+            self.assertEqual(candidates, [])
+            self.assertEqual(reasons.get("invalid_result_json"), 1)
+
+    def test_symlinked_export_file_is_never_read(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-symlink-export-") as temp_dir:
+            export_dir = os.path.join(temp_dir, "export")
+            os.makedirs(export_dir)
+            outside_path = os.path.join(temp_dir, "outside.json")
+            with open(outside_path, "w", encoding="utf-8") as outside_file:
+                json.dump({"chats": {"list": []}}, outside_file)
+
+            link_path = os.path.join(export_dir, "result.json")
+            try:
+                os.symlink(outside_path, link_path)
+            except (OSError, NotImplementedError):
+                self.skipTest("Симлинки недоступны на этой тестовой системе")
+
+            json_files, result_files, html_files = scan_export_dir(export_dir)
+            self.assertEqual((json_files, result_files, html_files), ([], [], []))
+            self.assertIsNone(load_json_safely(link_path))
+
+    def test_import_preflight_rejects_insufficient_disk_space(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-disk-preflight-") as temp_dir:
+            input_path = os.path.join(temp_dir, "result.json")
+            with open(input_path, "wb") as input_file:
+                input_file.write(b"{}")
+            fake_usage = type("DiskUsage", (), {"free": 32 * 1024 * 1024})()
+            with mock.patch.object(tgwr_worker.shutil, "disk_usage", return_value=fake_usage):
+                with self.assertRaisesRegex(RuntimeError, "Недостаточно свободного места"):
+                    ensure_import_disk_capacity(os.path.join(temp_dir, "tgwr.db"), [input_path])
+
+    def test_legacy_day_night_profile_also_requires_3000_messages(self):
+        people = {
+            "small": {"total_messages": 2999, "night_messages": 2000},
+            "large": {"total_messages": 3000, "night_messages": 600},
+        }
+        selected = _pick_person_by_time_profile(people, "night_messages")
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.get("total_messages"), 3000)
+        self.assertEqual(MAX_INFERRED_REPLY_SECONDS, 48 * 60 * 60)
 
     def test_html_group_is_detected_but_personal_chat_is_kept(self):
         group_file = os.path.join(FIXTURES_DIR, "html_group", "messages.html")
@@ -135,10 +198,12 @@ class ImportFixtureTests(unittest.TestCase):
 
             self.assertEqual(report.get("schema_version"), 2)
             self.assertEqual(report.get("meta", {}).get("msk_year_used"), 2024)
-            self.assertEqual(report.get("meta", {}).get("report_cache_revision"), 2)
+            self.assertEqual(report.get("meta", {}).get("report_cache_revision"), 3)
+            self.assertEqual(report.get("meta", {}).get("people_analytics_limit"), 50)
+            self.assertEqual(report.get("meta", {}).get("inferred_reply_window_hours"), 48)
             self.assertNotIn("deleted_messages_count", report.get("periods", {}).get("year", {}))
 
-            cache_path_2024 = os.path.join(temp_dir, "report-cache", "v2", "report-2024.json")
+            cache_path_2024 = os.path.join(temp_dir, "report-cache", "v3", "report-2024.json")
             self.assertTrue(os.path.isfile(cache_path_2024))
 
             os.remove(os.path.join(temp_dir, "report.json"))
@@ -152,11 +217,35 @@ class ImportFixtureTests(unittest.TestCase):
 
             with contextlib.redirect_stdout(io.StringIO()):
                 do_build_report(db_path, requested_year=2025, cache_only=True)
-            cache_path_2025 = os.path.join(temp_dir, "report-cache", "v2", "report-2025.json")
+            cache_path_2025 = os.path.join(temp_dir, "report-cache", "v3", "report-2025.json")
             self.assertTrue(os.path.isfile(cache_path_2025))
             with open(os.path.join(temp_dir, "report.json"), "r", encoding="utf-8") as active_report_file:
                 active_report = json.load(active_report_file)
             self.assertEqual(active_report.get("meta", {}).get("msk_year_used"), 2024)
+
+    def test_missing_report_is_rebuilt_from_existing_database_without_reimport(self):
+        export_dir = os.path.join(FIXTURES_DIR, "result_mixed")
+        with tempfile.TemporaryDirectory(prefix="tgwr-recover-report-") as temp_dir:
+            db_path = os.path.join(temp_dir, "tgwr.db")
+            with contextlib.redirect_stdout(io.StringIO()):
+                do_import(export_dir, "desktop", db_path)
+
+            report_path = os.path.join(temp_dir, "report.json")
+            self.assertFalse(os.path.exists(report_path))
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                do_build_report(db_path)
+
+            events = [json.loads(line) for line in output.getvalue().splitlines() if line.strip()]
+            completed = next(event for event in events if event.get("type") == "report_done")
+            self.assertTrue(os.path.isfile(report_path))
+            self.assertEqual(completed.get("msk_year_used"), 2025)
+
+            with open(report_path, "r", encoding="utf-8") as report_file:
+                report = json.load(report_file)
+            self.assertEqual(report.get("meta", {}).get("msk_year_used"), 2025)
+            self.assertEqual(report.get("schema_version"), 2)
 
     def test_invalid_import_keeps_existing_database_and_report(self):
         with tempfile.TemporaryDirectory(prefix="tgwr-invalid-import-") as temp_dir:
@@ -267,7 +356,7 @@ class ImportFixtureTests(unittest.TestCase):
                 tgwr_worker._CANCEL_EVENT.clear()
 
             events = [json.loads(line) for line in output.getvalue().splitlines() if line.strip()]
-            self.assertIn({"type": "import_error", "message": "Import cancelled"}, events)
+            self.assertIn({"type": "import_error", "message": "Импорт отменён"}, events)
             with open(db_path, "rb") as db_file:
                 self.assertEqual(db_file.read(), b"previous database")
             with open(report_path, "r", encoding="utf-8") as report_file:

@@ -71,6 +71,8 @@ Windows ARM, Linux ARM, мобильные ОС и BSD в версии 0.2 не 
 - поведенческие insights являются объяснимыми эвристиками, а не психологическими диагнозами;
 - installer без подписи ОС может показывать предупреждение до подключения сертификатов релиза.
 
+Формулы, пороги и границы интерпретации описаны в [docs/METRICS.md](docs/METRICS.md).
+
 ## Запуск из исходников
 
 Для разработки нужны:
@@ -82,11 +84,13 @@ Windows ARM, Linux ARM, мобильные ОС и BSD в версии 0.2 не 
 ```bash
 git clone https://github.com/iwannasome/TGWRDSKTP.git
 cd TGWRDSKTP
+python3 -m venv .venv
+.venv/bin/python -m pip install -r worker/requirements-runtime.txt
 npm ci
 npm run dev
 ```
 
-Dev-режим запускает `worker/tgwr_worker.py` через системный Python. PyInstaller для обычной разработки не требуется.
+В Windows используй `.venv\Scripts\python.exe` вместо `.venv/bin/python`. Dev-режим сначала ищет Python в `.venv`, поэтому потоковый парсер большого `result.json` работает одинаково в разработке, тестах и собранном приложении. PyInstaller для обычной разработки не требуется.
 
 ## Проверка и сборка
 
@@ -112,14 +116,18 @@ npm run verify
 
 ```bash
 npm run typecheck       # TypeScript
+npm run test:security   # IPC, файловые границы и локальность Docker/noVNC
 npm run test:worker     # анонимизированные import fixtures
 npm run test:synthetic  # полный synthetic report и browser smoke при наличии Chrome
+npm run test:synthetic:full # browser smoke каждого из 14 слайдов и мобильных состояний
 npm run worker:build    # PyInstaller binary текущей ОС/архитектуры
 npm run worker:smoke    # JSONL ping замороженному worker
 npm run pack            # распакованное Electron-приложение
 npm run release:version-check # совпадение версии package/lock/worker/UI/README
 npm run verify          # весь локальный release gate
 ```
+
+Лицензии компонентов, встроенных в бинарный worker, перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) и автоматически кладутся рядом с лицензией TGWR в каждый пакет.
 
 Установщики:
 

@@ -9,8 +9,46 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    name: Полный release gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+      - name: Разрешить релизный тег только с вершины master
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          git fetch origin master --no-tags
+          if [ "$(git rev-parse origin/master)" != "$GITHUB_SHA" ]; then
+            echo "Релизный тег должен указывать на текущую вершину origin/master" >&2
+            exit 1
+          fi
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: python -m pip install -r worker/requirements-runtime.txt
+      - run: npm audit --audit-level=high
+      - run: npm run release:version-check
+      - run: npm run typecheck
+      - run: npm run test:security
+      - run: npm run test:worker
+      - name: Полный synthetic и browser smoke
+        run: npm run test:synthetic
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+          TGWR_SMOKE_ALL_SLIDES: "1"
+          PYTHONWARNINGS: error::DeprecationWarning
+
   build:
     name: Release ${{ matrix.name }}
+    needs: quality
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +79,7 @@ jobs:
       - run: npm run release:version-check
       - run: python -m pip install -r worker/requirements-build.txt
       - run: npm run typecheck
+      - run: npm run test:security
       - run: npm run test:worker
       - run: npm run ${{ matrix.command }}
       - name: Проверить запуск packaged app и перезапуск worker (Linux)

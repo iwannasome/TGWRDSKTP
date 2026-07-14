@@ -3,7 +3,7 @@ services:
     build:
       context: .
     ports:
-      - "6080:6080"
+      - "127.0.0.1:6080:6080"
     volumes:
       - ./out/docker-data:/data
       - ./out/docker-output:/output

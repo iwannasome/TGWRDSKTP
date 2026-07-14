@@ -20,9 +20,11 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
-    "test:worker": "python -m unittest discover -s worker/tests -p test_*.py -v",
+    "test:security": "node scripts/security-smoke.mjs",
+    "test:worker": "node scripts/run-python.mjs -m unittest discover -s worker/tests -p test_*.py -v",
     "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
-    "verify": "npm run release:version-check && npm run typecheck && npm run test:worker && npm run test:synthetic && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run package:check && npm run app:smoke",
+    "test:synthetic:full": "npm run build && node scripts/synthetic-smoke.mjs --all-slides",
+    "verify": "npm run release:version-check && npm run typecheck && npm run test:security && npm run test:worker && npm run test:synthetic:full && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run package:check && npm run app:smoke",
 
     "worker:build": "node scripts/build-worker.mjs",
     "worker:smoke": "node scripts/worker-binary-smoke.mjs",
@@ -30,7 +32,7 @@
     "pack": "npm run release:prepare && npm run pack:app && npm run package:check",
     "pack:app": "node scripts/electron-builder-safe.mjs --dir",
     "package:check": "node scripts/verify-package-contents.mjs",
-    "app:smoke": "node scripts/packaged-app-smoke.mjs",
+    "app:smoke": "node scripts/packaged-app-smoke.mjs && node scripts/single-instance-smoke.mjs",
     "release:version-check": "node scripts/verify-release-version.mjs",
     "release:checksums": "node scripts/generate-checksums.mjs",
     "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis --publish never && npm run package:check",
@@ -81,6 +83,14 @@
       {
         "from": "LICENSE",
         "to": "LICENSE.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.txt"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "app-icon.png"
       }
     ],
     "asar": true,

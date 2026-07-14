@@ -8,17 +8,18 @@ import sqlite3
 import statistics
 import sys
 import threading
+import ijson
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from html.parser import HTMLParser
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 VERSION = "0.2.0"
 REPORT_SCHEMA_VERSION = 2
-REPORT_CACHE_REVISION = 2
+REPORT_CACHE_REVISION = 3
 REPORT_CACHE_DIR_NAME = "report-cache"
 
 _STDOUT_LOCK = threading.Lock()
@@ -478,9 +479,11 @@ def dedupe_existing_messages_by_msg_id(conn: sqlite3.Connection) -> int:
 MSK_OFFSET_SECONDS = 3 * 60 * 60
 # Owner-required exclusions. Keep these IDs unless the product owner explicitly changes the rule.
 BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
-MAX_INFERRED_REPLY_SECONDS = 7 * 24 * 60 * 60
+MAX_INFERRED_REPLY_SECONDS = 48 * 60 * 60
 PERSON_ANALYTICS_LIMIT = 50
 LONGEST_SILENCE_MIN_MESSAGES = 3000
+MIN_IMPORT_FREE_BYTES = 512 * 1024 * 1024
+IMPORT_FREE_SPACE_MULTIPLIER = 1.25
 
 
 def banned_peer_ids() -> Tuple[str, ...]:
@@ -661,16 +664,27 @@ def extract_self_from_export(result_json_files: List[str]) -> Optional[str]:
     for result_path in sorted(result_json_files, key=lambda p: (len(p), p)):
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
-        data = load_json_safely(result_path)
-        if not isinstance(data, dict):
+        try:
+            with open_export_file(result_path, binary=True) as result_file:
+                for prefix, event, value in ijson.parse(result_file):
+                    if _CANCEL_EVENT.is_set():
+                        raise CancelledError()
+                    # Telegram writes personal_information before chats. Stop at
+                    # chats so an AyuGram export without this block is not read
+                    # in full merely to infer the current user.
+                    if prefix == "" and event == "map_key" and value == "chats":
+                        break
+                    if prefix in ("personal_information.user_id", "personal_information.id") and event in (
+                        "string",
+                        "number",
+                    ):
+                        candidate = canonical_self_from_id(value)
+                        if candidate:
+                            return candidate
+        except CancelledError:
+            raise
+        except Exception:
             continue
-        personal = data.get("personal_information")
-        if not isinstance(personal, dict):
-            continue
-        for key in ("user_id", "id"):
-            candidate = canonical_self_from_id(personal.get(key))
-            if candidate:
-                return candidate
     return None
 
 
@@ -768,7 +782,7 @@ class ChatCandidate:
     json_files: List[str] = field(default_factory=list)
     json_file_msg_counts: Dict[str, int] = field(default_factory=dict)
     result_origin_file: Optional[str] = None
-    result_chat_obj: Optional[Dict[str, Any]] = None
+    result_chat_index: Optional[int] = None
     html_files: List[str] = field(default_factory=list)
     html_file_msg_counts: Dict[str, int] = field(default_factory=dict)
     chat_pk: Optional[int] = None
@@ -790,12 +804,25 @@ def scan_export_dir(export_dir: str) -> Tuple[List[str], List[str], List[str]]:
     result_files: List[str] = []
     html_files: List[str] = []
 
-    for root, _dirs, files in os.walk(export_dir):
+    export_root = os.path.realpath(export_dir)
+
+    def is_allowed_export_path(path: str) -> bool:
+        try:
+            if os.path.islink(path):
+                return False
+            return os.path.commonpath((export_root, os.path.realpath(path))) == export_root
+        except (OSError, ValueError):
+            return False
+
+    for root, dirs, files in os.walk(export_root, followlinks=False):
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
+        dirs[:] = [directory for directory in dirs if is_allowed_export_path(os.path.join(root, directory))]
         for fn in files:
             lower = fn.lower()
             p = os.path.join(root, fn)
+            if not is_allowed_export_path(p):
+                continue
             if lower.endswith(".json"):
                 if lower == "result.json":
                     result_files.append(p)
@@ -810,12 +837,68 @@ def scan_export_dir(export_dir: str) -> Tuple[List[str], List[str], List[str]]:
     return json_files, result_files, html_files
 
 
+def ensure_import_disk_capacity(db_path: str, input_files: Iterable[str]) -> Dict[str, int]:
+    source_size = 0
+    for path in input_files:
+        try:
+            source_size += max(0, int(os.path.getsize(path)))
+        except OSError:
+            continue
+
+    destination_dir = os.path.dirname(db_path) or "."
+    try:
+        free_space = int(shutil.disk_usage(destination_dir).free)
+    except OSError:
+        return {"source_size_bytes": source_size, "free_disk_bytes": 0, "required_disk_bytes": 0}
+
+    required_space = max(MIN_IMPORT_FREE_BYTES, int(math.ceil(source_size * IMPORT_FREE_SPACE_MULTIPLIER)))
+    if free_space < required_space:
+        free_gb = free_space / (1024 ** 3)
+        required_gb = required_space / (1024 ** 3)
+        raise RuntimeError(
+            f"Недостаточно свободного места для безопасного импорта: доступно {free_gb:.2f} ГБ, "
+            f"нужно не менее {required_gb:.2f} ГБ. Освободи место и попробуй снова."
+        )
+    return {
+        "source_size_bytes": source_size,
+        "free_disk_bytes": free_space,
+        "required_disk_bytes": required_space,
+    }
+
+
 def load_json_safely(path: str) -> Optional[Any]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open_export_file(path, binary=False) as f:
             return json.load(f)
     except Exception:
         return None
+
+
+def open_export_file(path: str, binary: bool, errors: Optional[str] = None) -> Any:
+    """Open an export file without following a final symlink where the OS supports it."""
+    if os.path.islink(path):
+        raise OSError("Symlinked export files are not allowed")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        if binary:
+            return os.fdopen(descriptor, "rb")
+        return os.fdopen(descriptor, "r", encoding="utf-8", errors=errors)
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def iter_result_chats(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:
+    """Yield chats from result.json one at a time instead of loading the archive into RAM."""
+    with open_export_file(path, binary=True) as result_file:
+        for index, chat_obj in enumerate(ijson.items(result_file, "chats.list.item")):
+            if _CANCEL_EVENT.is_set():
+                raise CancelledError()
+            if isinstance(chat_obj, dict):
+                yield index, chat_obj
 
 
 def strip_tags_simple(html_fragment: str) -> str:
@@ -826,7 +909,7 @@ def strip_tags_simple(html_fragment: str) -> str:
 
 def extract_html_chat_title(file_path: str) -> str:
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open_export_file(file_path, binary=False, errors="ignore") as f:
             chunk = f.read(262144)
     except Exception:
         return ""
@@ -848,7 +931,7 @@ def extract_html_chat_title(file_path: str) -> str:
 def count_html_messages(file_path: str) -> int:
     cnt = 0
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open_export_file(file_path, binary=False, errors="ignore") as f:
             for line in f:
                 if _CANCEL_EVENT.is_set():
                     raise CancelledError()
@@ -1007,7 +1090,7 @@ def iter_html_message_blocks(file_path: str) -> Iterable[str]:
     start_marker = '<div class="message'
     buf: Optional[List[str]] = None
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open_export_file(file_path, binary=False, errors="ignore") as f:
             for line in f:
                 if _CANCEL_EVENT.is_set():
                     raise CancelledError()
@@ -1152,58 +1235,57 @@ def build_candidates(
     if result_json_files:
         result_json_files_sorted = sorted(result_json_files, key=lambda p: (len(p), p))
         result_path = result_json_files_sorted[0]
+        streamed_candidates: List[ChatCandidate] = []
+        streamed_skip_reasons: Counter[str] = Counter()
+        try:
+            for idx, chat_obj in iter_result_chats(result_path):
+                if not is_chat_export_json(chat_obj):
+                    continue
 
-        data = load_json_safely(result_path)
-        if isinstance(data, dict):
-            chats = data.get("chats")
-            chats_list = None
-            if isinstance(chats, dict):
-                cl = chats.get("list")
-                if isinstance(cl, list):
-                    chats_list = cl
+                name_val = chat_obj.get("name")
+                type_val = chat_obj.get("type")
+                msgs_val = chat_obj.get("messages")
 
-            if chats_list is not None:
-                for idx, chat_obj in enumerate(chats_list):
-                    if _CANCEL_EVENT.is_set():
-                        raise CancelledError()
-                    if not is_chat_export_json(chat_obj):
-                        continue
-                    assert isinstance(chat_obj, dict)
+                name = name_val if isinstance(name_val, str) else (str(name_val) if name_val is not None else "")
+                ctype = type_val if isinstance(type_val, str) else (str(type_val) if type_val is not None else "")
+                if not isinstance(msgs_val, list):
+                    streamed_skip_reasons["invalid_chat_shape"] += 1
+                    continue
 
-                    name_val = chat_obj.get("name")
-                    type_val = chat_obj.get("type")
-                    msgs_val = chat_obj.get("messages")
+                if ctype != "personal_chat":
+                    streamed_skip_reasons["non_personal_chat"] += 1
+                    continue
 
-                    name = name_val if isinstance(name_val, str) else (str(name_val) if name_val is not None else "")
-                    ctype = type_val if isinstance(type_val, str) else (str(type_val) if type_val is not None else "")
-                    if not isinstance(msgs_val, list):
-                        skip_reasons["invalid_chat_shape"] += 1
-                        continue
+                cid = chat_obj.get("id")
+                export_id = str(cid) if cid is not None else f"idx{idx}"
+                msg_count = len(msgs_val)
 
-                    if ctype != "personal_chat":
-                        skip_reasons["non_personal_chat"] += 1
-                        continue
+                if msg_count <= 0:
+                    streamed_skip_reasons["empty_chat"] += 1
+                    continue
 
-                    cid = chat_obj.get("id")
-                    export_id = str(cid) if cid is not None else f"idx{idx}"
-                    msg_count = len(msgs_val)
-
-                    if msg_count <= 0:
-                        skip_reasons["empty_chat"] += 1
-                        continue
-
-                    candidates.append(
-                        ChatCandidate(
-                            source="result",
-                            priority=2,
-                            export_chat_id=f"result:{export_id}",
-                            name=name,
-                            type=ctype,
-                            approx_msgs=msg_count,
-                            result_origin_file=result_path,
-                            result_chat_obj=chat_obj,
-                        )
+                streamed_candidates.append(
+                    ChatCandidate(
+                        source="result",
+                        priority=2,
+                        export_chat_id=f"result:{export_id}",
+                        name=name,
+                        type=ctype,
+                        approx_msgs=msg_count,
+                        result_origin_file=result_path,
+                        result_chat_index=idx,
                     )
+                )
+        except CancelledError:
+            raise
+        except Exception:
+            # A truncated result.json must never turn a valid prefix into a
+            # seemingly successful, incomplete import.
+            streamed_candidates = []
+            streamed_skip_reasons = Counter({"invalid_result_json": 1})
+
+        candidates.extend(streamed_candidates)
+        skip_reasons.update(streamed_skip_reasons)
 
     html_by_dir: Dict[str, List[str]] = {}
     for pth in html_files:
@@ -1745,6 +1827,9 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
     json_files, result_files, html_files = scan_export_dir(export_dir)
 
     progress("scan_files", 3, "", "")
+    preflight = ensure_import_disk_capacity(db_path, [*json_files, *result_files, *html_files])
+    write_json({"type": "import_preflight", **preflight})
+    progress("check_space", 4, "", "")
     preferred_self_from_id = extract_self_from_export(result_files)
     candidates, candidate_skip_reasons = build_candidates(export_dir, json_files, result_files, html_files)
     progress("scan_files", 5, "", "")
@@ -1796,7 +1881,15 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
             pass
 
         units: List[Unit] = []
-        accepted_sorted = sorted(accepted, key=lambda c: (-c.priority, normalize_name(c.name), c.export_chat_id))
+        accepted_sorted = sorted(
+            accepted,
+            key=lambda c: (
+                -c.priority,
+                (c.result_origin_file or "") if c.source == "result" else normalize_name(c.name),
+                c.result_chat_index if c.source == "result" and c.result_chat_index is not None else -1,
+                c.export_chat_id,
+            ),
+        )
         for c in accepted_sorted:
             if c.source == "json":
                 for fp in c.json_files:
@@ -1811,6 +1904,8 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         total_units = len(units)
         if total_units <= 0:
             raise RuntimeError("В найденных чатах нет файлов сообщений, которые TGWR может прочитать.")
+
+        result_streams: Dict[str, Iterator[Tuple[int, Dict[str, Any]]]] = {}
 
         for ui, unit in enumerate(units):
             if _CANCEL_EVENT.is_set():
@@ -1832,15 +1927,31 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
                     est_msgs=unit.est_msgs,
                 )
             elif unit.kind == "result_chat":
-                if unit.chat.result_chat_obj is None:
-                    continue
+                target_index = unit.chat.result_chat_index
+                if target_index is None:
+                    raise RuntimeError("Не удалось определить позицию чата в result.json. Повтори экспорт Telegram.")
+                stream = result_streams.get(unit.file_path)
+                if stream is None:
+                    stream = iter(iter_result_chats(unit.file_path))
+                    result_streams[unit.file_path] = stream
+                chat_obj: Optional[Dict[str, Any]] = None
+                for streamed_index, streamed_chat in stream:
+                    if streamed_index < target_index:
+                        continue
+                    if streamed_index == target_index:
+                        chat_obj = streamed_chat
+                    break
+                if chat_obj is None:
+                    raise RuntimeError(
+                        "result.json изменился или повреждён во время импорта. Повтори экспорт Telegram и попробуй снова."
+                    )
                 inserted_messages += insert_result_chat_messages(
                     conn=conn,
                     chat_pk=chat_pk,
                     chat_name=chat_name,
                     export_dir=export_dir,
                     origin_file=unit.file_path,
-                    chat_obj=unit.chat.result_chat_obj,
+                    chat_obj=chat_obj,
                     unit_index=ui,
                     total_units=total_units,
                     est_msgs=unit.est_msgs,
@@ -1946,7 +2057,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         remove_sqlite_artifacts(staging_db_path)
 
         mark_import_idle()
-        write_json({"type": "import_error", "message": "Import cancelled"})
+        write_json({"type": "import_error", "message": "Импорт отменён"})
         return
 
     except Exception:
@@ -1978,7 +2089,7 @@ def start_import_thread(export_dir: str, mode: str, db_path: str) -> None:
         except CancelledError:
             remove_sqlite_artifacts(import_staging_db_path(db_path))
             mark_import_idle()
-            write_json({"type": "import_error", "message": "Import cancelled"})
+            write_json({"type": "import_error", "message": "Импорт отменён"})
         except Exception as e:
             remove_sqlite_artifacts(import_staging_db_path(db_path))
             mark_import_idle()
@@ -1987,10 +2098,10 @@ def start_import_thread(export_dir: str, mode: str, db_path: str) -> None:
     with _IMPORT_LOCK:
         with _STATE_LOCK:
             if _REPORT_BUSY:
-                write_json({"type": "import_error", "message": "Report generation already running"})
+                write_json({"type": "import_error", "message": "Сейчас уже собирается Wrapped. Дождись завершения и повтори импорт."})
                 return
             if _IMPORT_BUSY:
-                write_json({"type": "import_error", "message": "Import already running"})
+                write_json({"type": "import_error", "message": "Импорт уже запущен. Дождись завершения или отмени его."})
                 return
             _IMPORT_BUSY = True
 
@@ -3092,12 +3203,14 @@ def _pick_person_by_metric(people: Dict[str, Dict[str, Any]], key: str, reverse:
     return lst[0] if lst else None
 
 
-def _pick_person_by_time_profile(people: Dict[str, Dict[str, Any]], count_key: str) -> Optional[Dict[str, Any]]:
+def _pick_person_by_time_profile(
+    people: Dict[str, Dict[str, Any]], count_key: str, minimum_total: int = 3000
+) -> Optional[Dict[str, Any]]:
     candidates: List[Tuple[float, int, int, Dict[str, Any]]] = []
     for person in people.values():
         total = int(person.get("total_messages", 0) or 0)
         count = int(person.get(count_key, 0) or 0)
-        if total < 20 or count <= 0:
+        if total < minimum_total or count <= 0:
             continue
         ratio = float(_safe_div(count, total))
         score = float(count) * ratio
@@ -3107,7 +3220,7 @@ def _pick_person_by_time_profile(people: Dict[str, Dict[str, Any]], count_key: s
         candidates.append((score, count, total, enriched))
 
     if not candidates:
-        return _pick_person_by_metric(people, count_key, reverse=True)
+        return None
 
     candidates.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
     return candidates[0][3]
@@ -4950,6 +5063,9 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None, cache_on
                 "available_years": year_options,
                 "self_from_id": self_from_id,
                 "report_cache_revision": REPORT_CACHE_REVISION,
+                "people_analytics_limit": PERSON_ANALYTICS_LIMIT,
+                "people_analytics_total_dialogs": len(all_peers),
+                "inferred_reply_window_hours": int(MAX_INFERRED_REPLY_SECONDS // 3600),
             },
             "periods": {
                 "all_time": metrics_all,
@@ -5078,7 +5194,7 @@ def start_report_thread(db_path: str, requested_year: Optional[int] = None) -> N
     with _REPORT_LOCK:
         with _STATE_LOCK:
             if _IMPORT_BUSY:
-                write_json({"type": "report_error", "message": "Import is running"})
+                write_json({"type": "report_error", "message": "Сначала дождись завершения импорта или отмени его."})
                 return
             report_busy = _REPORT_BUSY
 
@@ -5095,7 +5211,7 @@ def preload_report_years(db_path: str, requested_years: List[int]) -> None:
     with _REPORT_LOCK:
         with _STATE_LOCK:
             if _IMPORT_BUSY:
-                write_json({"type": "report_preload_error", "message": "Import is running"})
+                write_json({"type": "report_preload_error", "message": "Сначала дождись завершения импорта или отмени его."})
                 return
             report_busy = _REPORT_BUSY
 
@@ -5132,7 +5248,7 @@ def cancel_worker_jobs() -> None:
 
 def handle_command(cmd_obj: Any) -> None:
     if not isinstance(cmd_obj, dict):
-        write_json({"type": "error", "message": "Command must be a JSON object"})
+        write_json({"type": "error", "message": "Внутренняя команда модуля анализа имеет неверный формат"})
         return
 
     cmd = cmd_obj.get("cmd")
@@ -5151,16 +5267,16 @@ def handle_command(cmd_obj: Any) -> None:
         db_path = cmd_obj.get("db_path")
 
         if not isinstance(export_dir, str) or not export_dir:
-            write_json({"type": "import_error", "message": "import_export: export_dir must be a non-empty string"})
+            write_json({"type": "import_error", "message": "Для импорта не выбрана папка Telegram Export"})
             return
         if not isinstance(mode, str) or not mode:
-            write_json({"type": "import_error", "message": "import_export: mode must be a non-empty string"})
+            write_json({"type": "import_error", "message": "Не удалось определить режим импорта"})
             return
         if not isinstance(db_path, str) or not db_path:
-            write_json({"type": "import_error", "message": "import_export: db_path must be a non-empty string"})
+            write_json({"type": "import_error", "message": "Не удалось определить путь локальной базы"})
             return
         if not os.path.isdir(export_dir):
-            write_json({"type": "import_error", "message": "Export directory does not exist or is not a directory"})
+            write_json({"type": "import_error", "message": "Выбранная папка больше недоступна. Выбери экспорт Telegram заново."})
             return
 
         start_import_thread(export_dir=export_dir, mode=mode, db_path=db_path)
@@ -5170,13 +5286,13 @@ def handle_command(cmd_obj: Any) -> None:
         db_path = cmd_obj.get("db_path")
         requested_year = cmd_obj.get("year")
         if not isinstance(db_path, str) or not db_path:
-            write_json({"type": "report_error", "message": "build_report: db_path must be a non-empty string"})
+            write_json({"type": "report_error", "message": "Не удалось определить путь локальной базы"})
             return
         if not os.path.isfile(db_path):
-            write_json({"type": "report_error", "message": "DB path does not exist"})
+            write_json({"type": "report_error", "message": "Локальная база не найдена. Запусти импорт Telegram заново."})
             return
         if requested_year is not None and (isinstance(requested_year, bool) or not isinstance(requested_year, int)):
-            write_json({"type": "report_error", "message": "build_report: year must be an integer"})
+            write_json({"type": "report_error", "message": "Выбран некорректный год отчёта"})
             return
         start_report_thread(db_path=db_path, requested_year=requested_year)
         return
@@ -5185,25 +5301,25 @@ def handle_command(cmd_obj: Any) -> None:
         db_path = cmd_obj.get("db_path")
         requested_years = cmd_obj.get("years")
         if not isinstance(db_path, str) or not db_path:
-            write_json({"type": "report_preload_error", "message": "preload_reports: db_path must be a non-empty string"})
+            write_json({"type": "report_preload_error", "message": "Не удалось определить путь локальной базы"})
             return
         if not os.path.isfile(db_path):
-            write_json({"type": "report_preload_error", "message": "DB path does not exist"})
+            write_json({"type": "report_preload_error", "message": "Локальная база не найдена"})
             return
         if not isinstance(requested_years, list):
-            write_json({"type": "report_preload_error", "message": "preload_reports: years must be an array"})
+            write_json({"type": "report_preload_error", "message": "Не удалось подготовить список годов"})
             return
         years: List[int] = []
         for value in requested_years:
             if isinstance(value, bool) or not isinstance(value, int) or value < 2000 or value > 2200:
-                write_json({"type": "report_preload_error", "message": "preload_reports: every year must be an integer"})
+                write_json({"type": "report_preload_error", "message": "Список годов содержит некорректное значение"})
                 return
             if value not in years:
                 years.append(value)
         preload_report_years(db_path, years)
         return
 
-    write_json({"type": "error", "message": f"unknown_cmd: {cmd}"})
+    write_json({"type": "error", "message": "Модуль анализа получил неизвестную внутреннюю команду"})
 
 
 def main() -> None:

@@ -26,6 +26,7 @@ import {
 } from './report'
 import type { SlideCommonProps, SlideDef, ThemeId } from './slideTypes'
 import YearSelect, { type YearCacheState } from './YearSelect'
+import { useDialogFocusTrap } from '../useDialogFocusTrap'
 
 import Slide01Cover from './slides/Slide01Cover'
 import Slide02TotalMessages from './slides/Slide02TotalMessages'
@@ -195,6 +196,7 @@ export default function SlidesView({
   const exportReport = useMemo(() => sanitizeReportForSharing(parsed, privacy), [parsed, privacy])
   const stageRef = useRef<HTMLDivElement>(null)
   const exportStageRef = useRef<HTMLDivElement>(null)
+  const previewDialogRef = useRef<HTMLDivElement>(null)
   const previewCloseRef = useRef<HTMLButtonElement>(null)
   const lastWheelAtRef = useRef(0)
   const exportRunningRef = useRef(false)
@@ -215,21 +217,8 @@ export default function SlidesView({
     setPreviewSlideIndex((current) => clamp(current, 0, Math.max(0, storySlides.length - 1)))
   }, [storySlides.length])
 
-  useEffect(() => {
-    if (!pendingExportKind) return
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      setPendingExportKind(null)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    requestAnimationFrame(() => previewCloseRef.current?.focus())
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      previousFocus?.focus()
-    }
-  }, [pendingExportKind])
+  const closeExportPreview = useCallback(() => setPendingExportKind(null), [])
+  useDialogFocusTrap(Boolean(pendingExportKind), previewDialogRef, previewCloseRef, closeExportPreview)
 
   const go = useCallback((delta: number) => {
     if (exporting || pendingExportKind) return
@@ -387,8 +376,9 @@ export default function SlidesView({
       <div className="flex h-full w-full items-center justify-center pb-[96px] md:pl-[208px] md:pb-0">
         <motion.div
           ref={stageRef}
+          data-tgwr-slide-stage="true"
           style={{ width: SLIDE_W, height: SLIDE_H, scale, transformOrigin: 'center' }}
-          className="relative rounded-[32px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.22)] shadow-[0_24px_110px_rgba(0,0,0,0.42)]"
+          className="relative shrink-0 rounded-[32px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.22)] shadow-[0_24px_110px_rgba(0,0,0,0.42)]"
         >
           <AnimatePresence initial={false} custom={direction}>
             <motion.div
@@ -492,7 +482,15 @@ export default function SlidesView({
       ) : null}
 
       {pendingExportKind && PreviewSlide ? (
-        <div data-tgwr-share-preview="true" role="dialog" aria-modal="true" aria-labelledby="tgwr-share-preview-title" className="fixed inset-0 z-[180] flex items-center justify-center overflow-auto bg-black/80 p-5 backdrop-blur-md">
+        <div
+          ref={previewDialogRef}
+          data-tgwr-share-preview="true"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tgwr-share-preview-title"
+          tabIndex={-1}
+          className="fixed inset-0 z-[180] flex items-center justify-center overflow-auto bg-black/80 p-5 backdrop-blur-md"
+        >
           <div className="w-full max-w-[1120px] rounded-[28px] border border-white/10 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.72)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -500,7 +498,7 @@ export default function SlidesView({
                 <div id="tgwr-share-preview-title" className="mt-2 text-2xl font-bold text-slate-50">Именно эти данные попадут в {pendingExportKind.toUpperCase()}</div>
                 <div className="mt-2 text-sm text-slate-300/80">{storySlides.length} слайдов · имена, текст и даты можно скрыть независимо.</div>
               </div>
-              <button ref={previewCloseRef} type="button" onClick={() => setPendingExportKind(null)} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Закрыть</button>
+              <button ref={previewCloseRef} type="button" onClick={closeExportPreview} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Закрыть</button>
             </div>
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import type { OpenDialogOptions } from 'electron'
+import type { IpcMainEvent, IpcMainInvokeEvent, OpenDialogOptions } from 'electron'
 import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync, promises as fsp } from 'node:fs'
@@ -25,8 +25,13 @@ const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
 const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
 
-const REPORT_CACHE_REVISION = 2
+const REPORT_CACHE_REVISION = 3
 const REPORT_CACHE_DIR_NAME = 'report-cache'
+const MAX_OUTPUT_FILE_BYTES = 128 * 1024 * 1024
+const MAX_EXPORT_DIRECTORY_GRANTS = 8
+const MAX_OUTPUT_DIRECTORY_GRANTS = 16
+const ALLOWED_EXTERNAL_HOSTS = new Set(['t.me', 'github.com'])
+const ALLOWED_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 const PACKAGED_CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
@@ -39,6 +44,9 @@ const PACKAGED_CONTENT_SECURITY_POLICY = [
   "form-action 'none'",
   "frame-ancestors 'none'"
 ].join('; ')
+
+const singleInstanceLockAcquired = app.requestSingleInstanceLock()
+if (!singleInstanceLockAcquired) app.quit()
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -89,13 +97,29 @@ let smokePackagedCspApplied = false
 let workerRestartPromise: Promise<void> | null = null
 let dataDeletionRunning = false
 
+if (singleInstanceLockAcquired) {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    if (!mainWindow.isVisible()) mainWindow.show()
+    mainWindow.focus()
+  })
+}
+
 function nowIso(): string {
   return new Date().toISOString()
 }
 
 function finishPackagedSmokeWhenReady(): void {
-  if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1') return
+  const singleInstancePrimarySmoke = process.env.TGWR_SMOKE_SINGLE_INSTANCE_PRIMARY === '1'
+  if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1' && !singleInstancePrimarySmoke) return
   if (!smokeWorkerPong || !smokeRendererReady || !smokePackagedCspApplied || smokeExitScheduled) return
+
+  if (singleInstancePrimarySmoke) {
+    smokeExitScheduled = true
+    console.log('tgwr_single_instance_primary=ready')
+    return
+  }
 
   if (process.env.TGWR_SMOKE_RESTART_WORKER === '1' && !smokeRestartStarted) {
     smokeRestartStarted = true
@@ -112,6 +136,34 @@ function finishPackagedSmokeWhenReady(): void {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isTrustedIpcSender(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  if (event.sender !== mainWindow.webContents) return false
+  return event.senderFrame !== null && event.senderFrame === event.sender.mainFrame
+}
+
+function recordBlockedIpc(channel: string): void {
+  emitHost('error', 'Заблокирован IPC-вызов не из основного окна', { channel })
+}
+
+function rememberBoundedGrant<T>(map: Map<string, T>, key: string, value: T, limit: number): void {
+  while (map.size >= limit) {
+    const oldest = map.keys().next().value
+    if (typeof oldest !== 'string') break
+    map.delete(oldest)
+  }
+  map.set(key, value)
+}
+
+function rememberBoundedDirectory(set: Set<string>, value: string, limit: number): void {
+  while (set.size >= limit) {
+    const oldest = set.values().next().value
+    if (typeof oldest !== 'string') break
+    set.delete(oldest)
+  }
+  set.add(value)
 }
 
 function canSendToRenderer(): boolean {
@@ -160,9 +212,18 @@ function emitHost(level: 'info' | 'error', message: string, details?: JsonObject
 function openExternalIfAllowed(rawUrl: string): boolean {
   try {
     const url = new URL(rawUrl)
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false
+    if (url.protocol !== 'https:' || !ALLOWED_EXTERNAL_HOSTS.has(url.hostname)) return false
     void shell.openExternal(url.toString())
     return true
+  } catch {
+    return false
+  }
+}
+
+function isAllowedDevServerUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    return url.protocol === 'http:' && ALLOWED_DEV_HOSTS.has(url.hostname)
   } catch {
     return false
   }
@@ -353,6 +414,12 @@ function startWorker(): void {
   } else {
     const scriptPath = join(process.cwd(), 'worker', 'tgwr_worker.py')
     diagnosticPath = scriptPath
+    const localPython = process.platform === 'win32'
+      ? join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+      : join(process.cwd(), '.venv', 'bin', 'python')
+    if (existsSync(localPython)) {
+      candidates.push({ command: localPython, args: ['-u', scriptPath], label: '.venv', cwd: process.cwd() })
+    }
     const pythonCommands = process.platform === 'win32' ? ['py', 'python'] : ['python', 'python3']
     for (const command of pythonCommands) {
       const args = process.platform === 'win32' && command === 'py'
@@ -431,14 +498,18 @@ function createWindow(): void {
   ]
 
   const preloadPath = preloadCandidates.find((p) => existsSync(p))
+  const appIconPath = app.isPackaged
+    ? join(process.resourcesPath, 'app-icon.png')
+    : join(process.cwd(), 'build', 'icon.png')
 
   const win = new BrowserWindow({
     width: 1360,
     height: 820,
-    minWidth: 1024,
-    minHeight: 680,
-    show: true,
+    minWidth: 760,
+    minHeight: 560,
+    show: false,
     backgroundColor: '#05070a',
+    icon: existsSync(appIconPath) ? appIconPath : undefined,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -452,6 +523,17 @@ function createWindow(): void {
   win.setMenuBarVisibility(false)
   mainWindow = win
 
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show()
+  })
+  win.webContents.on('did-fail-load', () => {
+    if (!win.isDestroyed()) win.show()
+  })
+
+  win.webContents.session.setPermissionCheckHandler(() => false)
+  win.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  win.webContents.session.on('will-download', (event) => event.preventDefault())
+
   if (app.isPackaged) {
     win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
       if (!details.url.startsWith('file:')) {
@@ -464,7 +546,10 @@ function createWindow(): void {
           'Content-Security-Policy': [PACKAGED_CONTENT_SECURITY_POLICY]
         }
       })
-      if (process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' && !smokePackagedCspApplied) {
+      if (
+        (process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' || process.env.TGWR_SMOKE_SINGLE_INSTANCE_PRIMARY === '1') &&
+        !smokePackagedCspApplied
+      ) {
         smokePackagedCspApplied = true
         console.log('tgwr_packaged_csp=applied')
         finishPackagedSmokeWhenReady()
@@ -498,9 +583,10 @@ function createWindow(): void {
       ? process.env.ELECTRON_RENDERER_URL
       : undefined)
 
-  if (!app.isPackaged && devUrl) {
+  if (!app.isPackaged && devUrl && isAllowedDevServerUrl(devUrl)) {
     void win.loadURL(devUrl)
   } else {
+    if (!app.isPackaged && devUrl) emitHost('error', 'Отклонён небезопасный адрес dev-сервера')
     void win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
@@ -511,7 +597,8 @@ function createWindow(): void {
 
 async function computeDbPath(): Promise<{ db_path: string; location: 'userData' }> {
   const userDataDir = app.getPath('userData')
-  await fsp.mkdir(userDataDir, { recursive: true })
+  await fsp.mkdir(userDataDir, { recursive: true, mode: 0o700 })
+  if (process.platform !== 'win32') await fsp.chmod(userDataDir, 0o700)
   return { db_path: join(userDataDir, 'tgwr.db'), location: 'userData' }
 }
 
@@ -605,13 +692,30 @@ function isAllowedOutputFilename(name: string): boolean {
   return ext === '.png' || ext === '.pdf'
 }
 
+function hasValidOutputSignature(filename: string, bytes: Uint8Array): boolean {
+  const ext = extname(filename).toLowerCase()
+  if (ext === '.png') {
+    const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+    return bytes.length >= pngSignature.length && pngSignature.every((value, index) => bytes[index] === value)
+  }
+  if (ext === '.pdf') {
+    const pdfSignature = [0x25, 0x50, 0x44, 0x46, 0x2d]
+    return bytes.length >= pdfSignature.length && pdfSignature.every((value, index) => bytes[index] === value)
+  }
+  return false
+}
+
 function isPathInsideDir(parentDir: string, childPath: string): boolean {
   const parent = resolve(parentDir)
   const child = resolve(childPath)
   return child === parent || child.startsWith(parent.endsWith(sep) ? parent : `${parent}${sep}`)
 }
 
-ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
+ipcMain.handle(IPC_PICK_EXPORT_DIR, async (event) => {
+  if (!isTrustedIpcSender(event)) {
+    recordBlockedIpc(IPC_PICK_EXPORT_DIR)
+    return null
+  }
   const parent = mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined
   const options: OpenDialogOptions = {
     title: 'Выберите папку экспорта Telegram Desktop',
@@ -622,12 +726,16 @@ ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
   if (res.canceled) return null
   const selected = res.filePaths[0]
   if (!selected) return null
-  const normalized = resolve(selected)
-  selectedExportDirs.add(normalized)
-  return normalized
+  const canonical = await fsp.realpath(selected)
+  rememberBoundedDirectory(selectedExportDirs, canonical, MAX_EXPORT_DIRECTORY_GRANTS)
+  return canonical
 })
 
-ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
+ipcMain.handle(IPC_PICK_OUTPUT_DIR, async (event) => {
+  if (!isTrustedIpcSender(event)) {
+    recordBlockedIpc(IPC_PICK_OUTPUT_DIR)
+    return null
+  }
   const parent = mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined
   const options: OpenDialogOptions = {
     title: 'Выберите папку для экспорта слайдов TGWR',
@@ -638,14 +746,18 @@ ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
   if (res.canceled) return null
   const selected = res.filePaths[0]
   if (!selected) return null
-  const normalized = resolve(selected)
+  const canonical = await fsp.realpath(selected)
   const token = randomUUID()
-  outputDirectoryGrants.set(token, normalized)
-  return { token, display_path: normalized }
+  rememberBoundedGrant(outputDirectoryGrants, token, canonical, MAX_OUTPUT_DIRECTORY_GRANTS)
+  return { token, display_path: canonical }
 })
 
-ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
+ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (event, payload: unknown) => {
   try {
+    if (!isTrustedIpcSender(event)) {
+      recordBlockedIpc(IPC_WRITE_OUTPUT_FILE)
+      return { ok: false, error: 'Запрос сохранения отклонён' }
+    }
     if (!isPlainObject(payload)) {
       return { ok: false, error: 'Некорректные данные для сохранения файла' }
     }
@@ -670,14 +782,6 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
         bytes = new Uint8Array(bytesAny)
       } else if (ArrayBuffer.isView(bytesAny)) {
         bytes = new Uint8Array(bytesAny.buffer, bytesAny.byteOffset, bytesAny.byteLength)
-      } else if (Array.isArray(bytesAny)) {
-        bytes = Buffer.from(bytesAny)
-      } else if (typeof bytesAny === 'object' && bytesAny !== null) {
-        if ('length' in (bytesAny as any)) {
-          bytes = Buffer.from(bytesAny as any)
-        } else {
-          bytes = Buffer.from(Object.values(bytesAny) as number[])
-        }
       } else {
         return { ok: false, error: `Не удалось подготовить содержимое файла (тип: ${typeof bytesAny})` }
       }
@@ -685,7 +789,18 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
       return { ok: false, error: `Не удалось подготовить содержимое файла: ${String(e)}` }
     }
 
-    await fsp.mkdir(dirPath, { recursive: true })
+    if (bytes.byteLength === 0) return { ok: false, error: 'Нельзя сохранить пустой файл' }
+    if (bytes.byteLength > MAX_OUTPUT_FILE_BYTES) {
+      return { ok: false, error: 'Файл слишком большой: максимальный размер — 128 МБ' }
+    }
+    if (!hasValidOutputSignature(filename, bytes)) {
+      return { ok: false, error: 'Содержимое файла не соответствует выбранному формату PNG/PDF' }
+    }
+
+    const currentDirPath = await fsp.realpath(dirPath)
+    if (currentDirPath !== dirPath) {
+      return { ok: false, error: 'Выбранная папка изменилась после подтверждения. Выбери её заново.' }
+    }
     const outPath = resolve(dirPath, filename)
     if (!isPathInsideDir(dirPath, outPath)) {
       return { ok: false, error: 'Путь файла вышел за пределы выбранной папки' }
@@ -703,32 +818,73 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
     return { ok: true, path: outPath }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: msg }
+    emitHost('error', 'Не удалось сохранить экспортированный файл', { message: msg })
+    return { ok: false, error: 'Не удалось сохранить файл. Проверь доступ к выбранной папке.' }
   }
 })
 
-ipcMain.handle(IPC_LOAD_REPORT, async () => {
+ipcMain.handle(IPC_LOAD_REPORT, async (event) => {
+  if (!isTrustedIpcSender(event)) {
+    recordBlockedIpc(IPC_LOAD_REPORT)
+    return { ok: false, error: 'Запрос локального отчёта отклонён' }
+  }
+  let dbPath = ''
+  let reportPath = ''
   try {
     const { db_path } = await computeDbPath()
-    const report_path = join(dirname(db_path), 'report.json')
+    dbPath = db_path
+    reportPath = join(dirname(db_path), 'report.json')
+    const db_exists = existsSync(dbPath)
+    const report_exists = existsSync(reportPath)
+    const local_data_exists = db_exists || report_exists || existsSync(reportCacheRootForDb(dbPath))
 
-    if (!existsSync(report_path)) {
-      return { ok: false, db_path, report_path, error: 'Сохранённый отчёт не найден' }
+    if (!report_exists) {
+      return {
+        ok: false,
+        db_path: dbPath,
+        report_path: reportPath,
+        db_exists,
+        report_exists,
+        local_data_exists,
+        error: db_exists
+          ? 'Локальная база найдена, но сохранённый отчёт отсутствует'
+          : 'Сохранённый отчёт не найден'
+      }
     }
 
-    const txt = await fsp.readFile(report_path, { encoding: 'utf8' })
+    const txt = await fsp.readFile(reportPath, { encoding: 'utf8' })
     const report = JSON.parse(txt) as unknown
     const meta = isPlainObject(report) && isPlainObject(report.meta) ? report.meta : {}
     const report_stale = Number(meta.report_cache_revision ?? 0) !== REPORT_CACHE_REVISION
-    const cached_years = await listCachedReportYears(db_path)
-    return { ok: true, db_path, report_path, report, cached_years, report_stale }
+    const cached_years = await listCachedReportYears(dbPath)
+    return { ok: true, db_path: dbPath, report_path: reportPath, report, cached_years, report_stale }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: msg }
+    emitHost('error', 'Не удалось прочитать локальный отчёт', { message: msg })
+    return {
+      ok: false,
+      ...(dbPath ? { db_path: dbPath, db_exists: existsSync(dbPath) } : {}),
+      ...(reportPath ? { report_path: reportPath, report_exists: existsSync(reportPath) } : {}),
+      ...(dbPath
+        ? {
+            local_data_exists:
+              existsSync(dbPath) ||
+              (reportPath ? existsSync(reportPath) : false) ||
+              existsSync(reportCacheRootForDb(dbPath))
+          }
+        : {}),
+      error: reportPath && existsSync(reportPath)
+        ? 'Сохранённый отчёт повреждён или не читается'
+        : 'Не удалось проверить локальные данные. Перезапусти приложение и повтори попытку.'
+    }
   }
 })
 
-ipcMain.handle(IPC_RESET_REPORT, async () => {
+ipcMain.handle(IPC_RESET_REPORT, async (event) => {
+  if (!isTrustedIpcSender(event)) {
+    recordBlockedIpc(IPC_RESET_REPORT)
+    return { ok: false, error: 'Запрос удаления отчёта отклонён' }
+  }
   try {
     const { db_path } = await computeDbPath()
     const report_path = join(dirname(db_path), 'report.json')
@@ -736,11 +892,16 @@ ipcMain.handle(IPC_RESET_REPORT, async () => {
     return { ok: true, db_path, report_path, deleted: existed }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: msg }
+    emitHost('error', 'Не удалось удалить готовый отчёт', { message: msg })
+    return { ok: false, error: 'Не удалось подготовить новый отчёт. Проверь доступ к папке данных приложения.' }
   }
 })
 
-ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
+ipcMain.handle(IPC_DELETE_ALL_DATA, async (event) => {
+  if (!isTrustedIpcSender(event)) {
+    recordBlockedIpc(IPC_DELETE_ALL_DATA)
+    return { ok: false, error: 'Запрос удаления данных отклонён' }
+  }
   if (dataDeletionRunning) {
     return { ok: false, error: 'Полное удаление данных уже выполняется' }
   }
@@ -779,7 +940,8 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: msg }
+    emitHost('error', 'Не удалось удалить локальные данные', { message: msg })
+    return { ok: false, error: 'Не удалось удалить локальные данные. Закрой другие экземпляры TGWR и повтори попытку.' }
   } finally {
     dataDeletionRunning = false
     startWorker()
@@ -797,7 +959,13 @@ async function forwardImportExport(exportDir: unknown): Promise<void> {
   }
 
   const normalizedExportDir = resolve(exportDir)
-  if (!selectedExportDirs.has(normalizedExportDir)) {
+  let canonicalExportDir = ''
+  try {
+    canonicalExportDir = await fsp.realpath(normalizedExportDir)
+  } catch {
+    canonicalExportDir = ''
+  }
+  if (!canonicalExportDir || !selectedExportDirs.has(canonicalExportDir)) {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
       ts: nowIso(),
@@ -812,34 +980,40 @@ async function forwardImportExport(exportDir: unknown): Promise<void> {
   sendToWorker({
     cmd: 'import_export',
     mode: 'desktop',
-    export_dir: normalizedExportDir,
+    export_dir: canonicalExportDir,
     db_path
   })
 }
 
-ipcMain.on(IPC_WORKER_PING, () => {
+ipcMain.on(IPC_WORKER_PING, (event) => {
+  if (!isTrustedIpcSender(event)) return recordBlockedIpc(IPC_WORKER_PING)
   sendToWorker({ cmd: 'ping' })
 })
 
-ipcMain.on(IPC_RENDERER_READY, () => {
+ipcMain.on(IPC_RENDERER_READY, (event) => {
+  if (!isTrustedIpcSender(event)) return recordBlockedIpc(IPC_RENDERER_READY)
   smokeRendererReady = true
   finishPackagedSmokeWhenReady()
 })
 
-ipcMain.on(IPC_WORKER_CANCEL, () => {
+ipcMain.on(IPC_WORKER_CANCEL, (event) => {
+  if (!isTrustedIpcSender(event)) return recordBlockedIpc(IPC_WORKER_CANCEL)
   sendToWorker({ cmd: 'cancel' })
 })
 
-ipcMain.on(IPC_WORKER_RESTART, () => {
+ipcMain.on(IPC_WORKER_RESTART, (event) => {
+  if (!isTrustedIpcSender(event)) return recordBlockedIpc(IPC_WORKER_RESTART)
   if (dataDeletionRunning) return
   void restartWorkerProcess()
 })
 
-ipcMain.on(IPC_WORKER_IMPORT, (_event, exportDir: unknown) => {
+ipcMain.on(IPC_WORKER_IMPORT, (event, exportDir: unknown) => {
+  if (!isTrustedIpcSender(event)) return recordBlockedIpc(IPC_WORKER_IMPORT)
   void forwardImportExport(exportDir)
 })
 
-ipcMain.on(IPC_WORKER_BUILD_REPORT, (_event, year: unknown) => {
+ipcMain.on(IPC_WORKER_BUILD_REPORT, (event, year: unknown) => {
+  if (!isTrustedIpcSender(event)) return recordBlockedIpc(IPC_WORKER_BUILD_REPORT)
   if (year !== undefined && (!Number.isInteger(year) || Number(year) < 2000 || Number(year) > 2200)) {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
@@ -854,7 +1028,8 @@ ipcMain.on(IPC_WORKER_BUILD_REPORT, (_event, year: unknown) => {
   })
 })
 
-ipcMain.on(IPC_WORKER_PRELOAD_REPORTS, (_event, years: unknown) => {
+ipcMain.on(IPC_WORKER_PRELOAD_REPORTS, (event, years: unknown) => {
+  if (!isTrustedIpcSender(event)) return recordBlockedIpc(IPC_WORKER_PRELOAD_REPORTS)
   if (!Array.isArray(years)) {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
@@ -884,6 +1059,7 @@ app.on('before-quit', () => {
 })
 
 app.whenReady().then(async () => {
+  if (!singleInstanceLockAcquired) return
   await migrateLegacyDataIfNeeded()
   createWindow()
   startWorker()

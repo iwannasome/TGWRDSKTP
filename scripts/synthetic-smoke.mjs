@@ -15,6 +15,23 @@ const dbPath = join(outDir, 'tgwr.db')
 const selfId = 'user100000000'
 const SLIDE_COUNT = 14
 
+function pythonCandidates() {
+  const localPython = process.platform === 'win32'
+    ? join(root, '.venv', 'Scripts', 'python.exe')
+    : join(root, '.venv', 'bin', 'python')
+  return [process.env.PYTHON, localPython, process.platform === 'win32' ? 'python' : 'python3', 'python']
+    .filter((value, index, values) => typeof value === 'string' && value.length > 0 && values.indexOf(value) === index)
+}
+
+function findWorkerPython() {
+  for (const candidate of pythonCandidates()) {
+    if ((candidate.includes('/') || candidate.includes('\\')) && !existsSync(candidate)) continue
+    const probe = spawnSync(candidate, ['-c', 'import ijson'], { cwd: root, stdio: 'ignore' })
+    if (probe.status === 0) return candidate
+  }
+  throw new Error('Python-модуль ijson не найден. Установи зависимости из worker/requirements-runtime.txt')
+}
+
 function isoDate(baseMs, index, stepMinutes = 37) {
   return new Date(baseMs + index * stepMinutes * 60_000).toISOString().replace('.000Z', '')
 }
@@ -407,7 +424,7 @@ async function generateExport() {
 }
 
 function startWorker() {
-  const proc = spawn('python3', ['worker/tgwr_worker.py'], {
+  const proc = spawn(findWorkerPython(), ['worker/tgwr_worker.py'], {
     cwd: root,
     stdio: ['pipe', 'pipe', 'pipe']
   })
@@ -758,7 +775,9 @@ function assertReport(report) {
     ['report.schema_version', report?.schema_version === 2],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
-    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 2],
+    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 3],
+    ['meta.people_analytics_limit', report?.meta?.people_analytics_limit === 50],
+    ['meta.inferred_reply_window_hours', report?.meta?.inferred_reply_window_hours === 48],
     ['meta.available_years', Array.isArray(report?.meta?.available_years) && report.meta.available_years.some((item) => item?.year === 2025 && item?.messages === 25468)],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
@@ -1036,6 +1055,23 @@ function renderHarnessHtml(report, assets, slideIndex) {
         const buttons = Array.from(document.querySelectorAll('button'));
         return buttons.find((button) => (button.textContent || '').trim() === text) || null;
       }
+      function checkDialogKeyboardTrap(dialog, preferredButtonText) {
+        const focusable = Array.from(dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
+          .filter((element) => element.getClientRects().length > 0);
+        const preferred = focusable.find((element) => (element.textContent || '').trim() === preferredButtonText);
+        if (!preferred || document.activeElement !== preferred || focusable.length < 2) return false;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        last.focus();
+        last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        if (document.activeElement !== first) throw new Error('Tab escaped the dialog instead of wrapping to its first control');
+        first.focus();
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        if (document.activeElement !== last) throw new Error('Shift+Tab escaped the dialog instead of wrapping to its last control');
+        preferred.focus();
+        return true;
+      }
       function prepareInsightExportCardCheck() {
         const card = document.querySelector('[data-tgwr-insight-export-card]');
         if (!card) return false;
@@ -1052,6 +1088,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
       function runPeopleViewCheck() {
         const deadline = Date.now() + 7000;
         let openedExisting = false;
+        let startupKeyboardChecked = false;
         let clickedPeople = false;
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
@@ -1059,6 +1096,21 @@ function renderHarnessHtml(report, assets, slideIndex) {
 
           if (!openedExisting) {
             const openOld = findButtonByText('Открыть старый');
+            const prompt = document.querySelector('[data-tgwr-existing-report-prompt="true"]');
+            if (openOld && prompt && !startupKeyboardChecked) {
+              try {
+                startupKeyboardChecked = checkDialogKeyboardTrap(prompt, 'Открыть старый');
+              } catch (error) {
+                document.body.setAttribute('data-people-check', 'fail:keyboard');
+                showHarnessError(error instanceof Error ? error.message : String(error));
+                return;
+              }
+              if (!startupKeyboardChecked) {
+                setTimeout(tick, 80);
+                return;
+              }
+              document.body.setAttribute('data-startup-dialog-keyboard-check', 'ok');
+            }
             if (openOld) {
               openedExisting = true;
               openOld.click();
@@ -1107,6 +1159,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         let openedExisting = false;
         let clickedExport = false;
         let previewSlideChecked = 0;
+        let keyboardChecked = false;
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
           const view = root && root.getAttribute('data-tgwr-view');
@@ -1133,6 +1186,20 @@ function renderHarnessHtml(report, assets, slideIndex) {
 
           const preview = document.querySelector('[data-tgwr-share-preview="true"]');
           if (preview) {
+            if (!keyboardChecked) {
+              try {
+                keyboardChecked = checkDialogKeyboardTrap(preview, 'Закрыть');
+              } catch (error) {
+                document.body.setAttribute('data-share-preview-check', 'fail:keyboard');
+                showHarnessError(error instanceof Error ? error.message : String(error));
+                return;
+              }
+              if (!keyboardChecked) {
+                setTimeout(tick, 80);
+                return;
+              }
+              document.body.setAttribute('data-dialog-keyboard-check', 'ok');
+            }
             const previewText = preview.textContent || '';
             const checked = Array.from(preview.querySelectorAll('input[type="checkbox"]')).every((input) => input.checked);
             const counter = previewText.match(/([0-9]+)[/]([0-9]+) *·/);
@@ -1148,7 +1215,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
             }
 
             if (currentSlide > previewSlideChecked) previewSlideChecked = currentSlide;
-            if (totalSlides > 0 && currentSlide === totalSlides && previewSlideChecked === totalSlides) {
+            if (keyboardChecked && totalSlides > 0 && currentSlide === totalSlides && previewSlideChecked === totalSlides) {
               document.body.setAttribute('data-share-preview-check', 'ok');
               return;
             }
@@ -1170,8 +1237,61 @@ function renderHarnessHtml(report, assets, slideIndex) {
         };
         tick();
       }
+      function runRecoverableDataCheck() {
+        const deadline = Date.now() + 7000;
+        let clickedRecover = false;
+        let keyboardChecked = false;
+        const tick = () => {
+          const prompt = document.querySelector('[data-tgwr-recovery-prompt="true"]');
+          const recover = findButtonByText('Восстановить Wrapped');
+          const remove = findButtonByText('Удалить локальные данные');
+
+          if (prompt && recover && remove && !recover.disabled && !remove.disabled && !keyboardChecked) {
+            try {
+              keyboardChecked = checkDialogKeyboardTrap(prompt, 'Восстановить Wrapped');
+            } catch (error) {
+              document.body.setAttribute('data-recovery-check', 'fail:keyboard');
+              showHarnessError(error instanceof Error ? error.message : String(error));
+              return;
+            }
+            if (keyboardChecked) {
+              document.body.setAttribute('data-dialog-keyboard-check', 'ok');
+            }
+          }
+
+          if (keyboardChecked && prompt && recover && remove && !recover.disabled && !remove.disabled && !clickedRecover) {
+            clickedRecover = true;
+            recover.click();
+            setTimeout(tick, 80);
+            return;
+          }
+
+          if (
+            clickedRecover &&
+            document.body.getAttribute('data-recovery-build-requested') === '1' &&
+            prompt &&
+            (prompt.textContent || '').includes('Восстанавливаю Wrapped из локальной базы')
+          ) {
+            document.body.setAttribute('data-recovery-check', 'ok');
+            return;
+          }
+
+          if (Date.now() > deadline) {
+            document.body.setAttribute('data-recovery-check', 'fail');
+            const active = document.activeElement;
+            showHarnessError('Recovery prompt check failed. Prompt=' + Boolean(prompt) + ', recover=' + Boolean(recover) + ', remove=' + Boolean(remove) + ', active=' + (active ? active.tagName + ':' + (active.textContent || '').trim().slice(0, 120) : 'none'));
+            return;
+          }
+          setTimeout(tick, 80);
+        };
+        tick();
+      }
       function waitForSlidesReady() {
         const deadline = Date.now() + 7000;
+        if (new URLSearchParams(window.location.search).get('tgwr_recovery_check') === '1') {
+          runRecoverableDataCheck();
+          return;
+        }
         if (new URLSearchParams(window.location.search).get('tgwr_share_preview_check') === '1') {
           runSharePreviewCheck();
           return;
@@ -1183,6 +1303,16 @@ function renderHarnessHtml(report, assets, slideIndex) {
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
           if (root && root.getAttribute('data-tgwr-view') === 'slides') {
+            const stage = document.querySelector('[data-tgwr-slide-stage="true"]');
+            const bounds = stage && stage.getBoundingClientRect();
+            const aspect = bounds && bounds.height > 0 ? bounds.width / bounds.height : 0;
+            document.body.setAttribute('data-slide-aspect', aspect.toFixed(3));
+            if (aspect < 1.72 || aspect > 1.84) {
+              document.body.setAttribute('data-layout-check', 'fail');
+              showHarnessError('Slide aspect ratio is broken: ' + aspect.toFixed(3));
+              return;
+            }
+            document.body.setAttribute('data-layout-check', 'ok');
             document.body.setAttribute('data-smoke-ready', '1');
             if (new URLSearchParams(window.location.search).get('tgwr_nav_stress') === '1') {
               runNavigationStress(root);
@@ -1207,12 +1337,16 @@ function renderHarnessHtml(report, assets, slideIndex) {
         showHarnessError(reason && reason.stack ? reason.stack : reason);
       });
       window.__TGWR_REPORT__ = ${JSON.stringify(report)};
+      const tgwrRecoveryMode = new URLSearchParams(window.location.search).get('tgwr_recovery_check') === '1';
       window.tgwr = {
         rendererReady: () => {},
-        onWorkerEvent: () => () => {},
+        onWorkerEvent: (cb) => {
+          const timer = setTimeout(() => cb({ type: 'pong', version: '0.2.0' }), 20);
+          return () => clearTimeout(timer);
+        },
         pingWorker: () => {},
         importExport: () => {},
-        buildReport: () => {},
+        buildReport: () => document.body.setAttribute('data-recovery-build-requested', '1'),
         preloadReports: () => {},
         cancelWorker: () => {},
         restartWorker: () => {},
@@ -1221,14 +1355,24 @@ function renderHarnessHtml(report, assets, slideIndex) {
         writeOutputFile: async () => ({ ok: true, path: '' }),
         resetReport: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted: true }),
         deleteAllData: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted_files: 2 }),
-        loadReport: async () => ({
-          ok: true,
-          db_path: ${JSON.stringify(dbPath)},
-          report_path: ${JSON.stringify(join(outDir, 'report.json'))},
-          cached_years: [2025],
-          report_stale: false,
-          report: window.__TGWR_REPORT__
-        })
+        loadReport: async () => tgwrRecoveryMode
+          ? ({
+              ok: false,
+              db_path: ${JSON.stringify(dbPath)},
+              report_path: ${JSON.stringify(join(outDir, 'report.json'))},
+              db_exists: true,
+              report_exists: false,
+              local_data_exists: true,
+              error: 'Локальная база найдена, но сохранённый отчёт отсутствует'
+            })
+          : ({
+              ok: true,
+              db_path: ${JSON.stringify(dbPath)},
+              report_path: ${JSON.stringify(join(outDir, 'report.json'))},
+              cached_years: [2025],
+              report_stale: false,
+              report: window.__TGWR_REPORT__
+            })
       };
     </script>
   </head>
@@ -1307,6 +1451,7 @@ async function runScreenshots(report, options = {}) {
         '--headless=new',
         '--disable-gpu',
         '--no-sandbox',
+        `--window-size=${viewport.width},${viewport.height}`,
         '--virtual-time-budget=12000',
         '--dump-dom',
         pageUrl
@@ -1319,6 +1464,10 @@ async function runScreenshots(report, options = {}) {
 
       if (!domRes.stdout.includes('data-tgwr-view="slides"')) {
         throw new Error(`DOM check did not reach slides view for ${label} slide ${slideIndex + 1}`)
+      }
+      if (!domRes.stdout.includes('data-layout-check="ok"')) {
+        const aspect = domRes.stdout.match(/data-slide-aspect="([^"]+)"/)?.[1] ?? 'missing'
+        throw new Error(`DOM check found broken slide aspect ratio for ${label} slide ${slideIndex + 1}: ${aspect}`)
       }
 
       const totalMatch = domRes.stdout.match(/data-tgwr-slide-total="(\d+)"/)
@@ -1544,6 +1693,33 @@ async function runSharePreviewSmoke(report) {
   }
 }
 
+async function runRecoverableDataSmoke(report) {
+  const chrome = findChrome()
+  if (!chrome) {
+    console.log('recoverable_data=skipped chrome_not_found')
+    return
+  }
+
+  const harness = await startHarnessServer(report)
+  try {
+    const pageUrl = `${harness.origin}/?tgwr_recovery_check=1`
+    const dom = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--virtual-time-budget=12000',
+      '--dump-dom',
+      pageUrl
+    ], 30_000)
+    if (dom.code !== 0 || !dom.stdout.includes('data-recovery-check="ok"')) {
+      throw new Error(`Recoverable data DOM check failed: ${dom.stderr || dom.stdout.slice(-3000)}`)
+    }
+    console.log('recoverable_data=ok restore=enabled delete=enabled')
+  } finally {
+    await new Promise((resolvePromise) => harness.server.close(resolvePromise))
+  }
+}
+
 async function main() {
   if (!existsSync(join(root, 'dist/renderer/index.html'))) {
     throw new Error('dist/renderer/index.html not found. Run npm run build first.')
@@ -1554,13 +1730,14 @@ async function main() {
   const report = JSON.parse(await readFile(reportPath, 'utf8'))
   assertReport(report)
   assertHarnessInlineScriptParses(report)
-  const baseTargets = process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? allSlideTargets() : undefined
+  const allSlides = process.argv.includes('--all-slides') || process.env.TGWR_SMOKE_ALL_SLIDES === '1'
+  const baseTargets = allSlides ? allSlideTargets() : undefined
   const expandedMobileTargets = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
   const screenshots = [
     ...(await runScreenshots(report, { label: 'base', targets: baseTargets })),
     ...(await runScreenshots(report, {
       label: 'mobile',
-      targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 9, 13],
+      targets: allSlides ? expandedMobileTargets : [0, 1, 9, 13],
       viewport: { width: 390, height: 844 },
       minScreenshotBytes: 15_000
     })),
@@ -1571,6 +1748,7 @@ async function main() {
   await runPeopleViewSmoke(report)
   await runInsightExportCardSmoke(report)
   await runSharePreviewSmoke(report)
+  await runRecoverableDataSmoke(report)
 
   console.log(`synthetic_export=${exportDir}`)
   console.log(`db=${dbPath}`)

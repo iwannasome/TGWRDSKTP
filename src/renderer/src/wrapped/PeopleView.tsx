@@ -483,11 +483,16 @@ export default function PeopleView({ report, period, onClose, onOpenDetails, onP
           <div className="mt-6 grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
             <aside className="tgwr-telegram-panel min-h-0 rounded-[24px] p-4 xl:sticky xl:top-[116px] xl:max-h-[calc(100vh-140px)]">
               <input
+                aria-label="Поиск среди подробно проанализированных диалогов"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Поиск"
                 className="w-full rounded-full border border-white/10 bg-[rgba(var(--tgwr-surface-rgb),0.54)] px-4 py-2.5 text-sm font-semibold text-slate-100 outline-none transition placeholder:text-[rgba(var(--tgwr-muted-rgb),0.55)] focus:border-[rgba(var(--tgwr-accent1-rgb),0.45)]"
               />
+
+              <div className="mt-3 text-[12px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.70)]">
+                Подробные карточки строятся максимум для 50 самых активных личных диалогов. Общие рейтинги учитывают весь архив.
+              </div>
 
               <div className="mt-4 max-h-[calc(100vh-220px)] space-y-2 overflow-auto pr-1">
                 {visiblePeople.length === 0 ? (
