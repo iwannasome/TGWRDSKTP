@@ -76,6 +76,12 @@ body {
   height: 100%;
 }
 
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid rgba(var(--tgwr-accent1-rgb), 0.92);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(var(--tgwr-accent1-rgb), 0.18);
+}
+
 body {
   margin: 0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, 'Apple Color Emoji',
@@ -480,4 +486,19 @@ body::before {
 .tgwr-hour-bar-group:hover .tgwr-hour-hover-label,
 .tgwr-hour-hover-label-peak {
   opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .tgwr-float {
+    animation: none !important;
+  }
 }

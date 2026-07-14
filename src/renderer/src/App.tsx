@@ -6,6 +6,7 @@ import YearSelect, { type YearCacheState, type YearOption } from './wrapped/Year
 import type { PeriodKey } from './wrapped/report'
 import type { ThemeId } from './wrapped/slideTypes'
 import { isRecord } from './wrapped/safe'
+import { useDialogFocusTrap } from './useDialogFocusTrap'
 
 type WorkerStatus = {
   status: 'ok' | 'fail'
@@ -124,6 +125,26 @@ function directionQualityLabel(quality?: ImportQuality): string {
   return 'Не удалось уверенно определить направление сообщений'
 }
 
+function friendlyWorkerMessage(value: unknown, fallback: string): string {
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (!raw) return fallback
+  if (/[А-Яа-яЁё]/.test(raw)) return raw
+
+  const known: Record<string, string> = {
+    'Import cancelled': 'Импорт отменён',
+    'Report generation already running': 'Сейчас уже собирается Wrapped. Дождись завершения и повтори импорт.',
+    'Import already running': 'Импорт уже запущен. Дождись завершения или отмени его.',
+    'Import is running': 'Сначала дождись завершения импорта или отмени его.',
+    'DB path does not exist': 'Локальная база не найдена. Выбери экспорт Telegram и запусти импорт заново.',
+    'Export directory does not exist or is not a directory': 'Выбранная папка больше недоступна. Выбери экспорт Telegram заново.'
+  }
+  const translated = known[raw]
+  if (translated) return translated
+
+  console.error('TGWR worker returned a technical error', raw)
+  return fallback
+}
+
 function loadThemeFromStorage(): ThemeId {
   const v = localStorage.getItem('tgwr_theme')
   if (v === 'neon' || v === 'cyber' || v === 'midnight') return v
@@ -221,6 +242,25 @@ export default function App(): JSX.Element {
   const [existingReportError, setExistingReportError] = useState<string | null>(null)
   const [dataMutationRunning, setDataMutationRunning] = useState(false)
   const dataMutationRunningRef = useRef(false)
+  const existingReportDialogRef = useRef<HTMLDivElement>(null)
+  const existingOpenButtonRef = useRef<HTMLButtonElement>(null)
+  const recoveryDialogRef = useRef<HTMLDivElement>(null)
+  const recoveryPrimaryButtonRef = useRef<HTMLButtonElement>(null)
+
+  useDialogFocusTrap(
+    Boolean(existingReportPrompt),
+    existingReportDialogRef,
+    existingOpenButtonRef,
+    undefined,
+    dataMutationRunning
+  )
+  useDialogFocusTrap(
+    Boolean(recoverableDataPrompt),
+    recoveryDialogRef,
+    recoverableDataPrompt?.canRecover ? recoveryPrimaryButtonRef : recoveryDialogRef,
+    undefined,
+    `${workerStatus.status}:${dataMutationRunning}:${reportBuild.running}`
+  )
 
   useEffect(() => {
     applyTheme(theme)
@@ -316,7 +356,10 @@ export default function App(): JSX.Element {
         setReportBuild((prev) => ({
           ...prev,
           running: false,
-          error: `Ошибка связи с модулем анализа: ${String(err)}`
+          error: friendlyWorkerMessage(
+            err instanceof Error ? err.message : String(err),
+            'Не удалось связаться с модулем анализа. Перезапусти его и повтори действие.'
+          )
         }))
       }
       return false
@@ -441,7 +484,10 @@ export default function App(): JSX.Element {
       window.tgwr.buildReport()
     } catch (err) {
       reportBuildRunningRef.current = false
-      const message = err instanceof Error ? err.message : String(err)
+      const message = friendlyWorkerMessage(
+        err instanceof Error ? err.message : String(err),
+        'Не удалось запустить восстановление. Перезапусти модуль анализа и повтори действие.'
+      )
       setReportBuild({ running: false, error: message })
       setExistingReportError(message)
     }
@@ -699,7 +745,10 @@ export default function App(): JSX.Element {
       }
 
       if (type === 'report_error') {
-        const msg = typeof payload.message === 'string' ? payload.message : 'Не удалось собрать отчёт'
+        const msg = friendlyWorkerMessage(
+          payload.message,
+          'Не удалось собрать Wrapped. Повтори попытку; если ошибка вернётся, перезапусти приложение.'
+        )
         setReportBuild({ running: false, error: msg })
         if (recoverableDataPrompt) setExistingReportError(msg)
         reportBuildRunningRef.current = false
@@ -708,17 +757,25 @@ export default function App(): JSX.Element {
       }
 
       if (type === 'import_error') {
-        const msg = typeof payload.message === 'string' ? payload.message : 'Не удалось импортировать экспорт Telegram'
+        const rawMessage = typeof payload.message === 'string' ? payload.message : ''
+        const cancelled = rawMessage === 'Import cancelled' || rawMessage === 'Импорт отменён'
+        const msg = friendlyWorkerMessage(
+          rawMessage,
+          'Не удалось обработать экспорт Telegram. Проверь выбранную папку и повтори импорт.'
+        )
         setImportRunning(false)
         importRunningRef.current = false
         setImportProgress(undefined)
-        setImportError(msg === 'Import cancelled' ? null : msg)
-        setImportNotice(msg === 'Import cancelled' ? 'Импорт отменён. Предыдущий Wrapped и база остались без изменений.' : null)
+        setImportError(cancelled ? null : msg)
+        setImportNotice(cancelled ? 'Импорт отменён. Предыдущий Wrapped и база остались без изменений.' : null)
         return
       }
 
       if (type === 'error') {
-        const msg = typeof payload.message === 'string' ? payload.message : 'Ошибка модуля анализа'
+        const msg = friendlyWorkerMessage(
+          payload.message,
+          'Внутренняя ошибка модуля анализа. Перезапусти его кнопкой ниже и повтори действие.'
+        )
         if (importRunning) {
           setImportRunning(false)
           importRunningRef.current = false
@@ -830,7 +887,10 @@ export default function App(): JSX.Element {
       importRunningRef.current = false
       setImportRunning(false)
       setImportProgress(undefined)
-      setImportError(err instanceof Error ? err.message : String(err))
+      setImportError(friendlyWorkerMessage(
+        err instanceof Error ? err.message : String(err),
+        'Не удалось запустить импорт. Перезапусти модуль анализа и повтори действие.'
+      ))
       setImportNotice(null)
     }
   }, [exportDir, workerStatus.status])
@@ -856,7 +916,10 @@ export default function App(): JSX.Element {
       setLoadingYear(undefined)
       setReportBuild({
         running: false,
-        error: err instanceof Error ? err.message : String(err)
+        error: friendlyWorkerMessage(
+          err instanceof Error ? err.message : String(err),
+          'Не удалось запустить сборку Wrapped. Перезапусти модуль анализа и повтори действие.'
+        )
       })
     }
   }, [])
@@ -1327,7 +1390,15 @@ export default function App(): JSX.Element {
         </div>
 
         {existingReportPrompt ? (
-          <div role="dialog" aria-modal="true" aria-labelledby="tgwr-existing-report-title" className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+          <div
+            ref={existingReportDialogRef}
+            data-tgwr-existing-report-prompt="true"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tgwr-existing-report-title"
+            tabIndex={-1}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md"
+          >
             <div className="w-full max-w-[560px] rounded-2xl border border-white/10 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.75)]">
               <div className="text-[13px] font-semibold uppercase tracking-[0.20em] text-[rgba(var(--tgwr-muted-rgb),0.78)]">
                 Найден старый отчёт
@@ -1361,6 +1432,7 @@ export default function App(): JSX.Element {
                   Собрать новый отчёт
                 </button>
                 <button
+                  ref={existingOpenButtonRef}
                   type="button"
                   disabled={dataMutationRunning}
                   onClick={onOpenExistingReport}
@@ -1375,10 +1447,12 @@ export default function App(): JSX.Element {
 
         {recoverableDataPrompt ? (
           <div
+            ref={recoveryDialogRef}
             data-tgwr-recovery-prompt="true"
             role="dialog"
             aria-modal="true"
             aria-labelledby="tgwr-recovery-title"
+            tabIndex={-1}
             className="fixed inset-0 z-[205] flex items-center justify-center bg-black/75 px-4 backdrop-blur-md"
           >
             <div className="w-full max-w-[600px] rounded-2xl border border-amber-300/20 bg-[#080d16] p-6 shadow-[0_40px_140px_rgba(0,0,0,0.75)]">
@@ -1431,6 +1505,7 @@ export default function App(): JSX.Element {
                 </button>
                 {recoverableDataPrompt.canRecover ? (
                   <button
+                    ref={recoveryPrimaryButtonRef}
                     type="button"
                     disabled={workerStatus.status !== 'ok' || dataMutationRunning || reportBuild.running}
                     onClick={onRecoverExistingData}

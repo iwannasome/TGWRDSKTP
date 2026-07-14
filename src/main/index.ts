@@ -860,6 +860,7 @@ ipcMain.handle(IPC_LOAD_REPORT, async (event) => {
     return { ok: true, db_path: dbPath, report_path: reportPath, report, cached_years, report_stale }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
+    emitHost('error', 'Не удалось прочитать локальный отчёт', { message: msg })
     return {
       ok: false,
       ...(dbPath ? { db_path: dbPath, db_exists: existsSync(dbPath) } : {}),
@@ -873,8 +874,8 @@ ipcMain.handle(IPC_LOAD_REPORT, async (event) => {
           }
         : {}),
       error: reportPath && existsSync(reportPath)
-        ? `Сохранённый отчёт повреждён или не читается: ${msg}`
-        : msg
+        ? 'Сохранённый отчёт повреждён или не читается'
+        : 'Не удалось проверить локальные данные. Перезапусти приложение и повтори попытку.'
     }
   }
 })
@@ -891,7 +892,8 @@ ipcMain.handle(IPC_RESET_REPORT, async (event) => {
     return { ok: true, db_path, report_path, deleted: existed }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: msg }
+    emitHost('error', 'Не удалось удалить готовый отчёт', { message: msg })
+    return { ok: false, error: 'Не удалось подготовить новый отчёт. Проверь доступ к папке данных приложения.' }
   }
 })
 
@@ -938,7 +940,8 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async (event) => {
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: msg }
+    emitHost('error', 'Не удалось удалить локальные данные', { message: msg })
+    return { ok: false, error: 'Не удалось удалить локальные данные. Закрой другие экземпляры TGWR и повтори попытку.' }
   } finally {
     dataDeletionRunning = false
     startWorker()

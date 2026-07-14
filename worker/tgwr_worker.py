@@ -2057,7 +2057,7 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         remove_sqlite_artifacts(staging_db_path)
 
         mark_import_idle()
-        write_json({"type": "import_error", "message": "Import cancelled"})
+        write_json({"type": "import_error", "message": "Импорт отменён"})
         return
 
     except Exception:
@@ -2089,7 +2089,7 @@ def start_import_thread(export_dir: str, mode: str, db_path: str) -> None:
         except CancelledError:
             remove_sqlite_artifacts(import_staging_db_path(db_path))
             mark_import_idle()
-            write_json({"type": "import_error", "message": "Import cancelled"})
+            write_json({"type": "import_error", "message": "Импорт отменён"})
         except Exception as e:
             remove_sqlite_artifacts(import_staging_db_path(db_path))
             mark_import_idle()
@@ -2098,10 +2098,10 @@ def start_import_thread(export_dir: str, mode: str, db_path: str) -> None:
     with _IMPORT_LOCK:
         with _STATE_LOCK:
             if _REPORT_BUSY:
-                write_json({"type": "import_error", "message": "Report generation already running"})
+                write_json({"type": "import_error", "message": "Сейчас уже собирается Wrapped. Дождись завершения и повтори импорт."})
                 return
             if _IMPORT_BUSY:
-                write_json({"type": "import_error", "message": "Import already running"})
+                write_json({"type": "import_error", "message": "Импорт уже запущен. Дождись завершения или отмени его."})
                 return
             _IMPORT_BUSY = True
 
@@ -5194,7 +5194,7 @@ def start_report_thread(db_path: str, requested_year: Optional[int] = None) -> N
     with _REPORT_LOCK:
         with _STATE_LOCK:
             if _IMPORT_BUSY:
-                write_json({"type": "report_error", "message": "Import is running"})
+                write_json({"type": "report_error", "message": "Сначала дождись завершения импорта или отмени его."})
                 return
             report_busy = _REPORT_BUSY
 
@@ -5211,7 +5211,7 @@ def preload_report_years(db_path: str, requested_years: List[int]) -> None:
     with _REPORT_LOCK:
         with _STATE_LOCK:
             if _IMPORT_BUSY:
-                write_json({"type": "report_preload_error", "message": "Import is running"})
+                write_json({"type": "report_preload_error", "message": "Сначала дождись завершения импорта или отмени его."})
                 return
             report_busy = _REPORT_BUSY
 
@@ -5248,7 +5248,7 @@ def cancel_worker_jobs() -> None:
 
 def handle_command(cmd_obj: Any) -> None:
     if not isinstance(cmd_obj, dict):
-        write_json({"type": "error", "message": "Command must be a JSON object"})
+        write_json({"type": "error", "message": "Внутренняя команда модуля анализа имеет неверный формат"})
         return
 
     cmd = cmd_obj.get("cmd")
@@ -5267,16 +5267,16 @@ def handle_command(cmd_obj: Any) -> None:
         db_path = cmd_obj.get("db_path")
 
         if not isinstance(export_dir, str) or not export_dir:
-            write_json({"type": "import_error", "message": "import_export: export_dir must be a non-empty string"})
+            write_json({"type": "import_error", "message": "Для импорта не выбрана папка Telegram Export"})
             return
         if not isinstance(mode, str) or not mode:
-            write_json({"type": "import_error", "message": "import_export: mode must be a non-empty string"})
+            write_json({"type": "import_error", "message": "Не удалось определить режим импорта"})
             return
         if not isinstance(db_path, str) or not db_path:
-            write_json({"type": "import_error", "message": "import_export: db_path must be a non-empty string"})
+            write_json({"type": "import_error", "message": "Не удалось определить путь локальной базы"})
             return
         if not os.path.isdir(export_dir):
-            write_json({"type": "import_error", "message": "Export directory does not exist or is not a directory"})
+            write_json({"type": "import_error", "message": "Выбранная папка больше недоступна. Выбери экспорт Telegram заново."})
             return
 
         start_import_thread(export_dir=export_dir, mode=mode, db_path=db_path)
@@ -5286,13 +5286,13 @@ def handle_command(cmd_obj: Any) -> None:
         db_path = cmd_obj.get("db_path")
         requested_year = cmd_obj.get("year")
         if not isinstance(db_path, str) or not db_path:
-            write_json({"type": "report_error", "message": "build_report: db_path must be a non-empty string"})
+            write_json({"type": "report_error", "message": "Не удалось определить путь локальной базы"})
             return
         if not os.path.isfile(db_path):
-            write_json({"type": "report_error", "message": "DB path does not exist"})
+            write_json({"type": "report_error", "message": "Локальная база не найдена. Запусти импорт Telegram заново."})
             return
         if requested_year is not None and (isinstance(requested_year, bool) or not isinstance(requested_year, int)):
-            write_json({"type": "report_error", "message": "build_report: year must be an integer"})
+            write_json({"type": "report_error", "message": "Выбран некорректный год отчёта"})
             return
         start_report_thread(db_path=db_path, requested_year=requested_year)
         return
@@ -5301,25 +5301,25 @@ def handle_command(cmd_obj: Any) -> None:
         db_path = cmd_obj.get("db_path")
         requested_years = cmd_obj.get("years")
         if not isinstance(db_path, str) or not db_path:
-            write_json({"type": "report_preload_error", "message": "preload_reports: db_path must be a non-empty string"})
+            write_json({"type": "report_preload_error", "message": "Не удалось определить путь локальной базы"})
             return
         if not os.path.isfile(db_path):
-            write_json({"type": "report_preload_error", "message": "DB path does not exist"})
+            write_json({"type": "report_preload_error", "message": "Локальная база не найдена"})
             return
         if not isinstance(requested_years, list):
-            write_json({"type": "report_preload_error", "message": "preload_reports: years must be an array"})
+            write_json({"type": "report_preload_error", "message": "Не удалось подготовить список годов"})
             return
         years: List[int] = []
         for value in requested_years:
             if isinstance(value, bool) or not isinstance(value, int) or value < 2000 or value > 2200:
-                write_json({"type": "report_preload_error", "message": "preload_reports: every year must be an integer"})
+                write_json({"type": "report_preload_error", "message": "Список годов содержит некорректное значение"})
                 return
             if value not in years:
                 years.append(value)
         preload_report_years(db_path, years)
         return
 
-    write_json({"type": "error", "message": f"unknown_cmd: {cmd}"})
+    write_json({"type": "error", "message": "Модуль анализа получил неизвестную внутреннюю команду"})
 
 
 def main() -> None:

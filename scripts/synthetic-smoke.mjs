@@ -1055,6 +1055,23 @@ function renderHarnessHtml(report, assets, slideIndex) {
         const buttons = Array.from(document.querySelectorAll('button'));
         return buttons.find((button) => (button.textContent || '').trim() === text) || null;
       }
+      function checkDialogKeyboardTrap(dialog, preferredButtonText) {
+        const focusable = Array.from(dialog.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'))
+          .filter((element) => element.getClientRects().length > 0);
+        const preferred = focusable.find((element) => (element.textContent || '').trim() === preferredButtonText);
+        if (!preferred || document.activeElement !== preferred || focusable.length < 2) return false;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        last.focus();
+        last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        if (document.activeElement !== first) throw new Error('Tab escaped the dialog instead of wrapping to its first control');
+        first.focus();
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        if (document.activeElement !== last) throw new Error('Shift+Tab escaped the dialog instead of wrapping to its last control');
+        preferred.focus();
+        return true;
+      }
       function prepareInsightExportCardCheck() {
         const card = document.querySelector('[data-tgwr-insight-export-card]');
         if (!card) return false;
@@ -1071,6 +1088,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
       function runPeopleViewCheck() {
         const deadline = Date.now() + 7000;
         let openedExisting = false;
+        let startupKeyboardChecked = false;
         let clickedPeople = false;
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
@@ -1078,6 +1096,21 @@ function renderHarnessHtml(report, assets, slideIndex) {
 
           if (!openedExisting) {
             const openOld = findButtonByText('Открыть старый');
+            const prompt = document.querySelector('[data-tgwr-existing-report-prompt="true"]');
+            if (openOld && prompt && !startupKeyboardChecked) {
+              try {
+                startupKeyboardChecked = checkDialogKeyboardTrap(prompt, 'Открыть старый');
+              } catch (error) {
+                document.body.setAttribute('data-people-check', 'fail:keyboard');
+                showHarnessError(error instanceof Error ? error.message : String(error));
+                return;
+              }
+              if (!startupKeyboardChecked) {
+                setTimeout(tick, 80);
+                return;
+              }
+              document.body.setAttribute('data-startup-dialog-keyboard-check', 'ok');
+            }
             if (openOld) {
               openedExisting = true;
               openOld.click();
@@ -1126,6 +1159,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         let openedExisting = false;
         let clickedExport = false;
         let previewSlideChecked = 0;
+        let keyboardChecked = false;
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
           const view = root && root.getAttribute('data-tgwr-view');
@@ -1152,6 +1186,20 @@ function renderHarnessHtml(report, assets, slideIndex) {
 
           const preview = document.querySelector('[data-tgwr-share-preview="true"]');
           if (preview) {
+            if (!keyboardChecked) {
+              try {
+                keyboardChecked = checkDialogKeyboardTrap(preview, 'Закрыть');
+              } catch (error) {
+                document.body.setAttribute('data-share-preview-check', 'fail:keyboard');
+                showHarnessError(error instanceof Error ? error.message : String(error));
+                return;
+              }
+              if (!keyboardChecked) {
+                setTimeout(tick, 80);
+                return;
+              }
+              document.body.setAttribute('data-dialog-keyboard-check', 'ok');
+            }
             const previewText = preview.textContent || '';
             const checked = Array.from(preview.querySelectorAll('input[type="checkbox"]')).every((input) => input.checked);
             const counter = previewText.match(/([0-9]+)[/]([0-9]+) *·/);
@@ -1167,7 +1215,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
             }
 
             if (currentSlide > previewSlideChecked) previewSlideChecked = currentSlide;
-            if (totalSlides > 0 && currentSlide === totalSlides && previewSlideChecked === totalSlides) {
+            if (keyboardChecked && totalSlides > 0 && currentSlide === totalSlides && previewSlideChecked === totalSlides) {
               document.body.setAttribute('data-share-preview-check', 'ok');
               return;
             }
@@ -1192,12 +1240,26 @@ function renderHarnessHtml(report, assets, slideIndex) {
       function runRecoverableDataCheck() {
         const deadline = Date.now() + 7000;
         let clickedRecover = false;
+        let keyboardChecked = false;
         const tick = () => {
           const prompt = document.querySelector('[data-tgwr-recovery-prompt="true"]');
           const recover = findButtonByText('Восстановить Wrapped');
           const remove = findButtonByText('Удалить локальные данные');
 
-          if (prompt && recover && remove && !recover.disabled && !remove.disabled && !clickedRecover) {
+          if (prompt && recover && remove && !recover.disabled && !remove.disabled && !keyboardChecked) {
+            try {
+              keyboardChecked = checkDialogKeyboardTrap(prompt, 'Восстановить Wrapped');
+            } catch (error) {
+              document.body.setAttribute('data-recovery-check', 'fail:keyboard');
+              showHarnessError(error instanceof Error ? error.message : String(error));
+              return;
+            }
+            if (keyboardChecked) {
+              document.body.setAttribute('data-dialog-keyboard-check', 'ok');
+            }
+          }
+
+          if (keyboardChecked && prompt && recover && remove && !recover.disabled && !remove.disabled && !clickedRecover) {
             clickedRecover = true;
             recover.click();
             setTimeout(tick, 80);
@@ -1216,7 +1278,8 @@ function renderHarnessHtml(report, assets, slideIndex) {
 
           if (Date.now() > deadline) {
             document.body.setAttribute('data-recovery-check', 'fail');
-            showHarnessError('Recovery prompt check failed. Prompt=' + Boolean(prompt) + ', recover=' + Boolean(recover) + ', remove=' + Boolean(remove));
+            const active = document.activeElement;
+            showHarnessError('Recovery prompt check failed. Prompt=' + Boolean(prompt) + ', recover=' + Boolean(recover) + ', remove=' + Boolean(remove) + ', active=' + (active ? active.tagName + ':' + (active.textContent || '').trim().slice(0, 120) : 'none'));
             return;
           }
           setTimeout(tick, 80);

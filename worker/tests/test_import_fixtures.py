@@ -356,7 +356,7 @@ class ImportFixtureTests(unittest.TestCase):
                 tgwr_worker._CANCEL_EVENT.clear()
 
             events = [json.loads(line) for line in output.getvalue().splitlines() if line.strip()]
-            self.assertIn({"type": "import_error", "message": "Import cancelled"}, events)
+            self.assertIn({"type": "import_error", "message": "Импорт отменён"}, events)
             with open(db_path, "rb") as db_file:
                 self.assertEqual(db_file.read(), b"previous database")
             with open(report_path, "r", encoding="utf-8") as report_file:
