@@ -663,7 +663,7 @@ def extract_self_from_export(result_json_files: List[str]) -> Optional[str]:
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
         try:
-            with open(result_path, "rb") as result_file:
+            with open_export_file(result_path, binary=True) as result_file:
                 for prefix, event, value in ijson.parse(result_file):
                     if _CANCEL_EVENT.is_set():
                         raise CancelledError()
@@ -802,12 +802,25 @@ def scan_export_dir(export_dir: str) -> Tuple[List[str], List[str], List[str]]:
     result_files: List[str] = []
     html_files: List[str] = []
 
-    for root, _dirs, files in os.walk(export_dir):
+    export_root = os.path.realpath(export_dir)
+
+    def is_allowed_export_path(path: str) -> bool:
+        try:
+            if os.path.islink(path):
+                return False
+            return os.path.commonpath((export_root, os.path.realpath(path))) == export_root
+        except (OSError, ValueError):
+            return False
+
+    for root, dirs, files in os.walk(export_root, followlinks=False):
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
+        dirs[:] = [directory for directory in dirs if is_allowed_export_path(os.path.join(root, directory))]
         for fn in files:
             lower = fn.lower()
             p = os.path.join(root, fn)
+            if not is_allowed_export_path(p):
+                continue
             if lower.endswith(".json"):
                 if lower == "result.json":
                     result_files.append(p)
@@ -824,15 +837,32 @@ def scan_export_dir(export_dir: str) -> Tuple[List[str], List[str], List[str]]:
 
 def load_json_safely(path: str) -> Optional[Any]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open_export_file(path, binary=False) as f:
             return json.load(f)
     except Exception:
         return None
 
 
+def open_export_file(path: str, binary: bool, errors: Optional[str] = None) -> Any:
+    """Open an export file without following a final symlink where the OS supports it."""
+    if os.path.islink(path):
+        raise OSError("Symlinked export files are not allowed")
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
+        if binary:
+            return os.fdopen(descriptor, "rb")
+        return os.fdopen(descriptor, "r", encoding="utf-8", errors=errors)
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
 def iter_result_chats(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:
     """Yield chats from result.json one at a time instead of loading the archive into RAM."""
-    with open(path, "rb") as result_file:
+    with open_export_file(path, binary=True) as result_file:
         for index, chat_obj in enumerate(ijson.items(result_file, "chats.list.item")):
             if _CANCEL_EVENT.is_set():
                 raise CancelledError()
@@ -848,7 +878,7 @@ def strip_tags_simple(html_fragment: str) -> str:
 
 def extract_html_chat_title(file_path: str) -> str:
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open_export_file(file_path, binary=False, errors="ignore") as f:
             chunk = f.read(262144)
     except Exception:
         return ""
@@ -870,7 +900,7 @@ def extract_html_chat_title(file_path: str) -> str:
 def count_html_messages(file_path: str) -> int:
     cnt = 0
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open_export_file(file_path, binary=False, errors="ignore") as f:
             for line in f:
                 if _CANCEL_EVENT.is_set():
                     raise CancelledError()
@@ -1029,7 +1059,7 @@ def iter_html_message_blocks(file_path: str) -> Iterable[str]:
     start_marker = '<div class="message'
     buf: Optional[List[str]] = None
     try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        with open_export_file(file_path, binary=False, errors="ignore") as f:
             for line in f:
                 if _CANCEL_EVENT.is_set():
                     raise CancelledError()

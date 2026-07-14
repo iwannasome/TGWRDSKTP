@@ -28,6 +28,7 @@ RUN apt-get update \
     procps \
     python-is-python3 \
     python3 \
+    python3-venv \
     tini \
     websockify \
     x11vnc \
@@ -43,7 +44,9 @@ RUN npm ci
 
 COPY . .
 
-RUN chmod +x docker/entrypoint.sh \
+RUN python3 -m venv /app/.venv \
+  && /app/.venv/bin/python -m pip install --no-cache-dir -r worker/requirements-runtime.txt \
+  && chmod +x docker/entrypoint.sh \
   && mkdir -p /data /output /home/node/.cache /home/node/.config /tmp/.X11-unix \
   && chown -R node:node /app /data /output /home/node/.cache /home/node/.config \
   && chmod 1777 /tmp/.X11-unix \

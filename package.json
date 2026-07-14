@@ -20,9 +20,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test:security": "node scripts/security-smoke.mjs",
     "test:worker": "node scripts/run-python.mjs -m unittest discover -s worker/tests -p test_*.py -v",
     "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
-    "verify": "npm run release:version-check && npm run typecheck && npm run test:worker && npm run test:synthetic && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run package:check && npm run app:smoke",
+    "verify": "npm run release:version-check && npm run typecheck && npm run test:security && npm run test:worker && npm run test:synthetic && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run package:check && npm run app:smoke",
 
     "worker:build": "node scripts/build-worker.mjs",
     "worker:smoke": "node scripts/worker-binary-smoke.mjs",

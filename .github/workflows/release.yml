@@ -41,6 +41,7 @@ jobs:
       - run: npm run release:version-check
       - run: python -m pip install -r worker/requirements-build.txt
       - run: npm run typecheck
+      - run: npm run test:security
       - run: npm run test:worker
       - run: npm run ${{ matrix.command }}
       - name: Проверить запуск packaged app и перезапуск worker (Linux)

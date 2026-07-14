@@ -24,6 +24,7 @@ npm run verify
 `verify` должен закончиться следующими подтверждениями:
 
 - TypeScript typecheck;
+- отрицательный security-smoke для IPC, экспортируемых файлов, симлинков и Docker/noVNC;
 - worker fixture tests;
 - synthetic metric contract;
 - desktop/mobile/empty/extreme screenshots при наличии Chrome;

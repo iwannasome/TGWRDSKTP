@@ -28,6 +28,7 @@ from tgwr_worker import (  # noqa: E402
     html_looks_like_group_chat,
     recommend_report_year,
     scan_export_dir,
+    load_json_safely,
 )
 
 
@@ -78,6 +79,24 @@ class ImportFixtureTests(unittest.TestCase):
             candidates, reasons = build_candidates(export_dir, [], [result_path], [])
             self.assertEqual(candidates, [])
             self.assertEqual(reasons.get("invalid_result_json"), 1)
+
+    def test_symlinked_export_file_is_never_read(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-symlink-export-") as temp_dir:
+            export_dir = os.path.join(temp_dir, "export")
+            os.makedirs(export_dir)
+            outside_path = os.path.join(temp_dir, "outside.json")
+            with open(outside_path, "w", encoding="utf-8") as outside_file:
+                json.dump({"chats": {"list": []}}, outside_file)
+
+            link_path = os.path.join(export_dir, "result.json")
+            try:
+                os.symlink(outside_path, link_path)
+            except (OSError, NotImplementedError):
+                self.skipTest("Симлинки недоступны на этой тестовой системе")
+
+            json_files, result_files, html_files = scan_export_dir(export_dir)
+            self.assertEqual((json_files, result_files, html_files), ([], [], []))
+            self.assertIsNone(load_json_safely(link_path))
 
     def test_html_group_is_detected_but_personal_chat_is_kept(self):
         group_file = os.path.join(FIXTURES_DIR, "html_group", "messages.html")

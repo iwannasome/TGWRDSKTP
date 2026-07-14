@@ -114,6 +114,7 @@ npm run verify
 
 ```bash
 npm run typecheck       # TypeScript
+npm run test:security   # IPC, файловые границы и локальность Docker/noVNC
 npm run test:worker     # анонимизированные import fixtures
 npm run test:synthetic  # полный synthetic report и browser smoke при наличии Chrome
 npm run worker:build    # PyInstaller binary текущей ОС/архитектуры
