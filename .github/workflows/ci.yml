@@ -26,6 +26,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: npm ci
+      - run: python -m pip install -r worker/requirements-runtime.txt
       - run: npm run release:version-check
       - run: npm run typecheck
       - run: npm run test:worker

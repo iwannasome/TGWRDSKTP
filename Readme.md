@@ -82,11 +82,13 @@ Windows ARM, Linux ARM, мобильные ОС и BSD в версии 0.2 не 
 ```bash
 git clone https://github.com/iwannasome/TGWRDSKTP.git
 cd TGWRDSKTP
+python3 -m venv .venv
+.venv/bin/python -m pip install -r worker/requirements-runtime.txt
 npm ci
 npm run dev
 ```
 
-Dev-режим запускает `worker/tgwr_worker.py` через системный Python. PyInstaller для обычной разработки не требуется.
+В Windows используй `.venv\Scripts\python.exe` вместо `.venv/bin/python`. Dev-режим сначала ищет Python в `.venv`, поэтому потоковый парсер большого `result.json` работает одинаково в разработке, тестах и собранном приложении. PyInstaller для обычной разработки не требуется.
 
 ## Проверка и сборка
 

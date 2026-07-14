@@ -112,6 +112,7 @@ function skipReasonLabel(reason: string): string {
     case 'duplicate_by_id': return 'Дубликаты по Telegram ID'
     case 'duplicate_by_name_and_size': return 'Дубликаты экспортов'
     case 'invalid_chat_shape': return 'Неполные данные чата'
+    case 'invalid_result_json': return 'Повреждённый result.json'
     default: return reason.replaceAll('_', ' ')
   }
 }

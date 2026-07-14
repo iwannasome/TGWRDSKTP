@@ -372,6 +372,12 @@ function startWorker(): void {
   } else {
     const scriptPath = join(process.cwd(), 'worker', 'tgwr_worker.py')
     diagnosticPath = scriptPath
+    const localPython = process.platform === 'win32'
+      ? join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+      : join(process.cwd(), '.venv', 'bin', 'python')
+    if (existsSync(localPython)) {
+      candidates.push({ command: localPython, args: ['-u', scriptPath], label: '.venv', cwd: process.cwd() })
+    }
     const pythonCommands = process.platform === 'win32' ? ['py', 'python'] : ['python', 'python3']
     for (const command of pythonCommands) {
       const args = process.platform === 'win32' && command === 'py'

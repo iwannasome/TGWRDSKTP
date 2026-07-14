@@ -58,6 +58,27 @@ class ImportFixtureTests(unittest.TestCase):
         self.assertEqual(reasons.get("empty_chat"), 1)
         self.assertEqual(reasons.get("duplicate_by_id"), 1)
 
+    def test_result_candidates_keep_only_stream_position_not_message_objects(self):
+        accepted, _reasons = self.candidates_for("result_mixed")
+        result_candidates = [candidate for candidate in accepted if candidate.source == "result"]
+        self.assertTrue(result_candidates)
+        self.assertTrue(all(candidate.result_chat_index is not None for candidate in result_candidates))
+        self.assertFalse(any(hasattr(candidate, "result_chat_obj") for candidate in result_candidates))
+
+    def test_truncated_result_discards_every_partial_candidate(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-truncated-result-") as export_dir:
+            result_path = os.path.join(export_dir, "result.json")
+            with open(result_path, "w", encoding="utf-8") as result_file:
+                result_file.write(
+                    '{"chats":{"list":['
+                    '{"id":1,"type":"personal_chat","name":"Partial",'
+                    '"messages":[{"id":1,"type":"message","date_unixtime":"1735732800"}]},'
+                )
+
+            candidates, reasons = build_candidates(export_dir, [], [result_path], [])
+            self.assertEqual(candidates, [])
+            self.assertEqual(reasons.get("invalid_result_json"), 1)
+
     def test_html_group_is_detected_but_personal_chat_is_kept(self):
         group_file = os.path.join(FIXTURES_DIR, "html_group", "messages.html")
         personal_file = os.path.join(FIXTURES_DIR, "html_personal", "messages.html")

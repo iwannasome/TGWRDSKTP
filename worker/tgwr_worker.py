@@ -8,13 +8,14 @@ import sqlite3
 import statistics
 import sys
 import threading
+import ijson
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from html.parser import HTMLParser
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 VERSION = "0.2.0"
 REPORT_SCHEMA_VERSION = 2
@@ -661,16 +662,27 @@ def extract_self_from_export(result_json_files: List[str]) -> Optional[str]:
     for result_path in sorted(result_json_files, key=lambda p: (len(p), p)):
         if _CANCEL_EVENT.is_set():
             raise CancelledError()
-        data = load_json_safely(result_path)
-        if not isinstance(data, dict):
+        try:
+            with open(result_path, "rb") as result_file:
+                for prefix, event, value in ijson.parse(result_file):
+                    if _CANCEL_EVENT.is_set():
+                        raise CancelledError()
+                    # Telegram writes personal_information before chats. Stop at
+                    # chats so an AyuGram export without this block is not read
+                    # in full merely to infer the current user.
+                    if prefix == "" and event == "map_key" and value == "chats":
+                        break
+                    if prefix in ("personal_information.user_id", "personal_information.id") and event in (
+                        "string",
+                        "number",
+                    ):
+                        candidate = canonical_self_from_id(value)
+                        if candidate:
+                            return candidate
+        except CancelledError:
+            raise
+        except Exception:
             continue
-        personal = data.get("personal_information")
-        if not isinstance(personal, dict):
-            continue
-        for key in ("user_id", "id"):
-            candidate = canonical_self_from_id(personal.get(key))
-            if candidate:
-                return candidate
     return None
 
 
@@ -768,7 +780,7 @@ class ChatCandidate:
     json_files: List[str] = field(default_factory=list)
     json_file_msg_counts: Dict[str, int] = field(default_factory=dict)
     result_origin_file: Optional[str] = None
-    result_chat_obj: Optional[Dict[str, Any]] = None
+    result_chat_index: Optional[int] = None
     html_files: List[str] = field(default_factory=list)
     html_file_msg_counts: Dict[str, int] = field(default_factory=dict)
     chat_pk: Optional[int] = None
@@ -816,6 +828,16 @@ def load_json_safely(path: str) -> Optional[Any]:
             return json.load(f)
     except Exception:
         return None
+
+
+def iter_result_chats(path: str) -> Iterable[Tuple[int, Dict[str, Any]]]:
+    """Yield chats from result.json one at a time instead of loading the archive into RAM."""
+    with open(path, "rb") as result_file:
+        for index, chat_obj in enumerate(ijson.items(result_file, "chats.list.item")):
+            if _CANCEL_EVENT.is_set():
+                raise CancelledError()
+            if isinstance(chat_obj, dict):
+                yield index, chat_obj
 
 
 def strip_tags_simple(html_fragment: str) -> str:
@@ -1152,58 +1174,57 @@ def build_candidates(
     if result_json_files:
         result_json_files_sorted = sorted(result_json_files, key=lambda p: (len(p), p))
         result_path = result_json_files_sorted[0]
+        streamed_candidates: List[ChatCandidate] = []
+        streamed_skip_reasons: Counter[str] = Counter()
+        try:
+            for idx, chat_obj in iter_result_chats(result_path):
+                if not is_chat_export_json(chat_obj):
+                    continue
 
-        data = load_json_safely(result_path)
-        if isinstance(data, dict):
-            chats = data.get("chats")
-            chats_list = None
-            if isinstance(chats, dict):
-                cl = chats.get("list")
-                if isinstance(cl, list):
-                    chats_list = cl
+                name_val = chat_obj.get("name")
+                type_val = chat_obj.get("type")
+                msgs_val = chat_obj.get("messages")
 
-            if chats_list is not None:
-                for idx, chat_obj in enumerate(chats_list):
-                    if _CANCEL_EVENT.is_set():
-                        raise CancelledError()
-                    if not is_chat_export_json(chat_obj):
-                        continue
-                    assert isinstance(chat_obj, dict)
+                name = name_val if isinstance(name_val, str) else (str(name_val) if name_val is not None else "")
+                ctype = type_val if isinstance(type_val, str) else (str(type_val) if type_val is not None else "")
+                if not isinstance(msgs_val, list):
+                    streamed_skip_reasons["invalid_chat_shape"] += 1
+                    continue
 
-                    name_val = chat_obj.get("name")
-                    type_val = chat_obj.get("type")
-                    msgs_val = chat_obj.get("messages")
+                if ctype != "personal_chat":
+                    streamed_skip_reasons["non_personal_chat"] += 1
+                    continue
 
-                    name = name_val if isinstance(name_val, str) else (str(name_val) if name_val is not None else "")
-                    ctype = type_val if isinstance(type_val, str) else (str(type_val) if type_val is not None else "")
-                    if not isinstance(msgs_val, list):
-                        skip_reasons["invalid_chat_shape"] += 1
-                        continue
+                cid = chat_obj.get("id")
+                export_id = str(cid) if cid is not None else f"idx{idx}"
+                msg_count = len(msgs_val)
 
-                    if ctype != "personal_chat":
-                        skip_reasons["non_personal_chat"] += 1
-                        continue
+                if msg_count <= 0:
+                    streamed_skip_reasons["empty_chat"] += 1
+                    continue
 
-                    cid = chat_obj.get("id")
-                    export_id = str(cid) if cid is not None else f"idx{idx}"
-                    msg_count = len(msgs_val)
-
-                    if msg_count <= 0:
-                        skip_reasons["empty_chat"] += 1
-                        continue
-
-                    candidates.append(
-                        ChatCandidate(
-                            source="result",
-                            priority=2,
-                            export_chat_id=f"result:{export_id}",
-                            name=name,
-                            type=ctype,
-                            approx_msgs=msg_count,
-                            result_origin_file=result_path,
-                            result_chat_obj=chat_obj,
-                        )
+                streamed_candidates.append(
+                    ChatCandidate(
+                        source="result",
+                        priority=2,
+                        export_chat_id=f"result:{export_id}",
+                        name=name,
+                        type=ctype,
+                        approx_msgs=msg_count,
+                        result_origin_file=result_path,
+                        result_chat_index=idx,
                     )
+                )
+        except CancelledError:
+            raise
+        except Exception:
+            # A truncated result.json must never turn a valid prefix into a
+            # seemingly successful, incomplete import.
+            streamed_candidates = []
+            streamed_skip_reasons = Counter({"invalid_result_json": 1})
+
+        candidates.extend(streamed_candidates)
+        skip_reasons.update(streamed_skip_reasons)
 
     html_by_dir: Dict[str, List[str]] = {}
     for pth in html_files:
@@ -1796,7 +1817,15 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
             pass
 
         units: List[Unit] = []
-        accepted_sorted = sorted(accepted, key=lambda c: (-c.priority, normalize_name(c.name), c.export_chat_id))
+        accepted_sorted = sorted(
+            accepted,
+            key=lambda c: (
+                -c.priority,
+                (c.result_origin_file or "") if c.source == "result" else normalize_name(c.name),
+                c.result_chat_index if c.source == "result" and c.result_chat_index is not None else -1,
+                c.export_chat_id,
+            ),
+        )
         for c in accepted_sorted:
             if c.source == "json":
                 for fp in c.json_files:
@@ -1811,6 +1840,8 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
         total_units = len(units)
         if total_units <= 0:
             raise RuntimeError("В найденных чатах нет файлов сообщений, которые TGWR может прочитать.")
+
+        result_streams: Dict[str, Iterator[Tuple[int, Dict[str, Any]]]] = {}
 
         for ui, unit in enumerate(units):
             if _CANCEL_EVENT.is_set():
@@ -1832,15 +1863,31 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
                     est_msgs=unit.est_msgs,
                 )
             elif unit.kind == "result_chat":
-                if unit.chat.result_chat_obj is None:
-                    continue
+                target_index = unit.chat.result_chat_index
+                if target_index is None:
+                    raise RuntimeError("Не удалось определить позицию чата в result.json. Повтори экспорт Telegram.")
+                stream = result_streams.get(unit.file_path)
+                if stream is None:
+                    stream = iter(iter_result_chats(unit.file_path))
+                    result_streams[unit.file_path] = stream
+                chat_obj: Optional[Dict[str, Any]] = None
+                for streamed_index, streamed_chat in stream:
+                    if streamed_index < target_index:
+                        continue
+                    if streamed_index == target_index:
+                        chat_obj = streamed_chat
+                    break
+                if chat_obj is None:
+                    raise RuntimeError(
+                        "result.json изменился или повреждён во время импорта. Повтори экспорт Telegram и попробуй снова."
+                    )
                 inserted_messages += insert_result_chat_messages(
                     conn=conn,
                     chat_pk=chat_pk,
                     chat_name=chat_name,
                     export_dir=export_dir,
                     origin_file=unit.file_path,
-                    chat_obj=unit.chat.result_chat_obj,
+                    chat_obj=chat_obj,
                     unit_index=ui,
                     total_units=total_units,
                     est_msgs=unit.est_msgs,

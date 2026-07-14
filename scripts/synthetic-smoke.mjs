@@ -15,6 +15,23 @@ const dbPath = join(outDir, 'tgwr.db')
 const selfId = 'user100000000'
 const SLIDE_COUNT = 14
 
+function pythonCandidates() {
+  const localPython = process.platform === 'win32'
+    ? join(root, '.venv', 'Scripts', 'python.exe')
+    : join(root, '.venv', 'bin', 'python')
+  return [process.env.PYTHON, localPython, process.platform === 'win32' ? 'python' : 'python3', 'python']
+    .filter((value, index, values) => typeof value === 'string' && value.length > 0 && values.indexOf(value) === index)
+}
+
+function findWorkerPython() {
+  for (const candidate of pythonCandidates()) {
+    if ((candidate.includes('/') || candidate.includes('\\')) && !existsSync(candidate)) continue
+    const probe = spawnSync(candidate, ['-c', 'import ijson'], { cwd: root, stdio: 'ignore' })
+    if (probe.status === 0) return candidate
+  }
+  throw new Error('Python-модуль ijson не найден. Установи зависимости из worker/requirements-runtime.txt')
+}
+
 function isoDate(baseMs, index, stepMinutes = 37) {
   return new Date(baseMs + index * stepMinutes * 60_000).toISOString().replace('.000Z', '')
 }
@@ -407,7 +424,7 @@ async function generateExport() {
 }
 
 function startWorker() {
-  const proc = spawn('python3', ['worker/tgwr_worker.py'], {
+  const proc = spawn(findWorkerPython(), ['worker/tgwr_worker.py'], {
     cwd: root,
     stdio: ['pipe', 'pipe', 'pipe']
   })
