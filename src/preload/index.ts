@@ -84,7 +84,7 @@ export interface TgwrApi {
 
 function normalizeDataMutationResult(value: unknown): DataMutationResult {
   if (isPlainObject(value) && typeof value.ok === 'boolean') return value as DataMutationResult
-  return { ok: false, error: 'Invalid response from main process' }
+  return { ok: false, error: 'Приложение вернуло некорректный ответ' }
 }
 
 const api: TgwrApi = {
@@ -125,15 +125,15 @@ const api: TgwrApi = {
       if (res.ok) {
         return { ok: true, path: typeof res.path === 'string' ? res.path : '' }
       }
-      return { ok: false, error: typeof res.error === 'string' ? res.error : 'Unknown error' }
+      return { ok: false, error: typeof res.error === 'string' ? res.error : 'Неизвестная ошибка сохранения' }
     }
-    return { ok: false, error: 'Invalid response from main process' }
+    return { ok: false, error: 'Приложение вернуло некорректный ответ' }
   },
 
   loadReport: async () => {
     const res = await ipcRenderer.invoke(IPC_LOAD_REPORT)
     if (isPlainObject(res) && typeof res.ok === 'boolean') return res as LoadReportResult
-    return { ok: false, error: 'Invalid response from main process' }
+    return { ok: false, error: 'Приложение вернуло некорректный ответ' }
   },
 
   resetReport: async () => normalizeDataMutationResult(await ipcRenderer.invoke(IPC_RESET_REPORT)),

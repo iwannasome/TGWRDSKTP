@@ -19,6 +19,14 @@ if (!preloadSource.includes('require("electron")')) {
   throw new Error('Preload собран не в CommonJS и не сможет работать внутри Electron sandbox')
 }
 
+const rendererHtml = await readFile(join(root, 'dist', 'renderer', 'index.html'), 'utf8')
+if (!/<html\s+lang=["']ru["']/i.test(rendererHtml)) {
+  throw new Error('Renderer не помечен как русскоязычный документ')
+}
+for (const directive of ["object-src 'none'", "base-uri 'none'", "form-action 'none'"]) {
+  if (!rendererHtml.includes(directive)) throw new Error(`В renderer CSP отсутствует ${directive}`)
+}
+
 async function walk(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const fullPath = join(directory, entry.name)

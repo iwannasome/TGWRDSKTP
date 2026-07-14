@@ -27,6 +27,18 @@ const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
 
 const REPORT_CACHE_REVISION = 2
 const REPORT_CACHE_DIR_NAME = 'report-cache'
+const PACKAGED_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'"
+].join('; ')
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -73,6 +85,7 @@ let smokeWorkerPong = false
 let smokeRendererReady = false
 let smokeExitScheduled = false
 let smokeRestartStarted = false
+let smokePackagedCspApplied = false
 let workerRestartPromise: Promise<void> | null = null
 let dataDeletionRunning = false
 
@@ -82,7 +95,7 @@ function nowIso(): string {
 
 function finishPackagedSmokeWhenReady(): void {
   if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1') return
-  if (!smokeWorkerPong || !smokeRendererReady || smokeExitScheduled) return
+  if (!smokeWorkerPong || !smokeRendererReady || !smokePackagedCspApplied || smokeExitScheduled) return
 
   if (process.env.TGWR_SMOKE_RESTART_WORKER === '1' && !smokeRestartStarted) {
     smokeRestartStarted = true
@@ -430,12 +443,36 @@ function createWindow(): void {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webSecurity: true,
+      devTools: !app.isPackaged
     }
   })
 
   win.setMenuBarVisibility(false)
   mainWindow = win
+
+  if (app.isPackaged) {
+    win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      if (!details.url.startsWith('file:')) {
+        callback({ responseHeaders: details.responseHeaders })
+        return
+      }
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [PACKAGED_CONTENT_SECURITY_POLICY]
+        }
+      })
+      if (process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' && !smokePackagedCspApplied) {
+        smokePackagedCspApplied = true
+        console.log('tgwr_packaged_csp=applied')
+        finishPackagedSmokeWhenReady()
+      }
+    })
+  } else {
+    smokePackagedCspApplied = true
+  }
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     openExternalIfAllowed(url)
@@ -610,7 +647,7 @@ ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
 ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
   try {
     if (!isPlainObject(payload)) {
-      return { ok: false, error: 'Invalid payload (expected object)' }
+      return { ok: false, error: 'Некорректные данные для сохранения файла' }
     }
 
     const directoryToken = typeof payload.directory_token === 'string' ? payload.directory_token : ''
@@ -619,7 +656,9 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
 
     const dirPath = outputDirectoryGrants.get(directoryToken)
     if (!dirPath) return { ok: false, error: 'Папка экспорта не была выбрана в текущем сеансе' }
-    if (!isAllowedOutputFilename(filename)) return { ok: false, error: 'Unsafe filename or unsupported extension' }
+    if (!isAllowedOutputFilename(filename)) {
+      return { ok: false, error: 'Недопустимое имя файла или формат: разрешены только PNG и PDF' }
+    }
 
     let bytes: Uint8Array
     try {
@@ -640,16 +679,16 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
           bytes = Buffer.from(Object.values(bytesAny) as number[])
         }
       } else {
-        return { ok: false, error: 'bytes must be Uint8Array/ArrayBuffer, got ' + typeof bytesAny }
+        return { ok: false, error: `Не удалось подготовить содержимое файла (тип: ${typeof bytesAny})` }
       }
     } catch (e) {
-      return { ok: false, error: 'Failed to parse bytes: ' + String(e) }
+      return { ok: false, error: `Не удалось подготовить содержимое файла: ${String(e)}` }
     }
 
     await fsp.mkdir(dirPath, { recursive: true })
     const outPath = resolve(dirPath, filename)
     if (!isPathInsideDir(dirPath, outPath)) {
-      return { ok: false, error: 'Output path escaped selected directory' }
+      return { ok: false, error: 'Путь файла вышел за пределы выбранной папки' }
     }
 
     // Записываем рядом и атомарно заменяем цель: не оставляем частичный файл
@@ -674,7 +713,7 @@ ipcMain.handle(IPC_LOAD_REPORT, async () => {
     const report_path = join(dirname(db_path), 'report.json')
 
     if (!existsSync(report_path)) {
-      return { ok: false, db_path, report_path, error: `report.json not found at: ${report_path}` }
+      return { ok: false, db_path, report_path, error: 'Сохранённый отчёт не найден' }
     }
 
     const txt = await fsp.readFile(report_path, { encoding: 'utf8' })
@@ -752,7 +791,7 @@ async function forwardImportExport(exportDir: unknown): Promise<void> {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
       ts: nowIso(),
-      message: 'import_export requires export_dir: string'
+      message: 'Для импорта нужно выбрать папку Telegram Export'
     })
     return
   }
