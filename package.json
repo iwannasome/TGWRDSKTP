@@ -77,6 +77,10 @@
         "from": "worker-bin",
         "to": "worker-bin",
         "filter": ["**/*"]
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.txt"
       }
     ],
     "asar": true,

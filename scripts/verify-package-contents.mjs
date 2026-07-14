@@ -39,6 +39,9 @@ await walk(releaseDir)
 const normalized = files.map((filePath) => relative(releaseDir, filePath).split(sep).join('/'))
 const workerRelative = normalized.find((filePath) => filePath.endsWith(expectedSuffix))
 if (!workerRelative) throw new Error(`В package не найден ${expectedSuffix}`)
+if (!normalized.some((filePath) => filePath.endsWith('resources/LICENSE.txt'))) {
+  throw new Error('В package не найден текст MIT-лицензии resources/LICENSE.txt')
+}
 if (normalized.some((filePath) => filePath.endsWith('worker/tgwr_worker.py'))) {
   throw new Error('В package неожиданно попал исходный tgwr_worker.py')
 }
