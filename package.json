@@ -33,11 +33,11 @@
     "app:smoke": "node scripts/packaged-app-smoke.mjs",
     "release:version-check": "node scripts/verify-release-version.mjs",
     "release:checksums": "node scripts/generate-checksums.mjs",
-    "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis && npm run package:check",
-    "dist:win:portable": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win portable && npm run package:check",
-    "dist:mac": "npm run release:prepare && node scripts/electron-builder-safe.mjs --mac dmg && npm run package:check",
-    "dist:linux": "npm run release:prepare && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm && npm run package:check",
-    "dist:current": "npm run release:prepare && node scripts/electron-builder-safe.mjs && npm run package:check"
+    "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis --publish never && npm run package:check",
+    "dist:win:portable": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win portable --publish never && npm run package:check",
+    "dist:mac": "npm run release:prepare && node scripts/electron-builder-safe.mjs --mac dmg --publish never && npm run package:check",
+    "dist:linux": "npm run release:prepare && node scripts/electron-builder-safe.mjs --linux AppImage deb rpm --publish never && npm run package:check",
+    "dist:current": "npm run release:prepare && node scripts/electron-builder-safe.mjs --publish never && npm run package:check"
   },
   "dependencies": {
     "framer-motion": "^11.0.0",
