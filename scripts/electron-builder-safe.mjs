@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveSigningPolicy } from './release-signing-policy.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const builderCli = join(root, 'node_modules', 'electron-builder', 'cli.js')
@@ -12,11 +13,19 @@ if (!existsSync(builderCli)) {
   process.exit(1)
 }
 
-const child = spawn(process.execPath, [builderCli, ...args], {
+let signingPolicy
+try {
+  signingPolicy = resolveSigningPolicy(args)
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error))
+  process.exit(1)
+}
+
+const child = spawn(process.execPath, [builderCli, ...signingPolicy.builderArgs], {
   cwd: root,
   env: {
     ...process.env,
-    CSC_IDENTITY_AUTO_DISCOVERY: process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? 'false'
+    CSC_IDENTITY_AUTO_DISCOVERY: signingPolicy.identityAutoDiscovery
   },
   stdio: 'inherit'
 })

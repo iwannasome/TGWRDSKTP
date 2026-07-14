@@ -9,6 +9,45 @@ permissions:
   contents: read
 
 jobs:
+  release-credentials:
+    name: Проверить сертификаты stable-релиза
+    runs-on: ubuntu-24.04
+    env:
+      TGWR_TAG_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+    steps:
+      - name: Не допустить неподписанный stable-тег
+        shell: bash
+        run: |
+          if [ "$TGWR_TAG_RELEASE" != "true" ]; then
+            echo "Ручной прогон собирает проверочные artifacts без требования сертификатов."
+            exit 0
+          fi
+
+          missing=()
+          for name in \
+            WIN_CSC_LINK WIN_CSC_KEY_PASSWORD \
+            MAC_CSC_LINK MAC_CSC_KEY_PASSWORD \
+            APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER
+          do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf '::error::Для stable-релиза отсутствует GitHub Secret %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+          echo "Все секреты подписи Windows и notarization macOS доступны."
+
   quality:
     name: Полный release gate
     runs-on: ubuntu-24.04
@@ -48,7 +87,7 @@ jobs:
 
   build:
     name: Release ${{ matrix.name }}
-    needs: quality
+    needs: [release-credentials, quality]
     strategy:
       fail-fast: false
       matrix:
@@ -81,7 +120,97 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:security
       - run: npm run test:worker
-      - run: npm run ${{ matrix.command }}
+      - name: Собрать Linux artifacts
+        if: runner.os == 'Linux'
+        run: npm run ${{ matrix.command }}
+      - name: Собрать и подписать Windows installer
+        if: runner.os == 'Windows'
+        run: npm run ${{ matrix.command }}
+        env:
+          TGWR_REQUIRE_CODE_SIGNING: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Подготовить App Store Connect API key
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+        run: |
+          key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          umask 077
+          printf '%s' "$APPLE_API_KEY_BASE64" | python3 -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.buffer.read(), validate=True))' > "$key_path"
+          chmod 600 "$key_path"
+          echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
+      - name: Собрать, подписать и notarize macOS DMG
+        if: runner.os == 'macOS'
+        run: npm run ${{ matrix.command }}
+        env:
+          TGWR_REQUIRE_CODE_SIGNING: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      - name: Проверить Authenticode stable-installer
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem release/*.exe)
+          if ($installers.Count -eq 0) {
+            throw "Windows installer не найден"
+          }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature $installer.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "Недействительная Authenticode-подпись $($installer.Name): $($signature.Status)"
+            }
+            Write-Host "Authenticode подтверждён: $($installer.Name)"
+          }
+      - name: Проверить подпись и notarization stable-DMG
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          app_path="$(find release -maxdepth 3 -type d -name '*.app' -print -quit)"
+          if [ -z "$app_path" ]; then
+            echo "TGWR.app не найден внутри release" >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+
+          found_dmg=0
+          for dmg in release/*.dmg; do
+            if [ ! -f "$dmg" ]; then
+              continue
+            fi
+            found_dmg=1
+            mount_dir="$(mktemp -d)"
+            cleanup_mount() {
+              hdiutil detach "$mount_dir" -quiet >/dev/null 2>&1 || true
+              rmdir "$mount_dir" >/dev/null 2>&1 || true
+            }
+            trap cleanup_mount EXIT
+            hdiutil attach "$dmg" -mountpoint "$mount_dir" -nobrowse -readonly -quiet
+            shipped_app="$(find "$mount_dir" -maxdepth 2 -type d -name '*.app' -print -quit)"
+            if [ -z "$shipped_app" ]; then
+              echo "Приложение не найдено внутри $dmg" >&2
+              exit 1
+            fi
+            codesign --verify --deep --strict --verbose=2 "$shipped_app"
+            xcrun stapler validate "$shipped_app"
+            cleanup_mount
+            trap - EXIT
+          done
+          if [ "$found_dmg" -ne 1 ]; then
+            echo "macOS DMG не найден" >&2
+            exit 1
+          fi
+      - name: Удалить временный App Store Connect API key
+        if: always() && runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          if [ -n "${APPLE_API_KEY:-}" ]; then
+            rm -f -- "$APPLE_API_KEY"
+          fi
       - name: Проверить запуск packaged app и перезапуск worker (Linux)
         if: runner.os == 'Linux'
         run: |
