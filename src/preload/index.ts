@@ -32,6 +32,9 @@ export type LoadReportResult =
       ok: false
       db_path?: string
       report_path?: string
+      db_exists?: boolean
+      report_exists?: boolean
+      local_data_exists?: boolean
       error?: string
     }
 

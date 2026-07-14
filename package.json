@@ -30,7 +30,7 @@
     "pack": "npm run release:prepare && npm run pack:app && npm run package:check",
     "pack:app": "node scripts/electron-builder-safe.mjs --dir",
     "package:check": "node scripts/verify-package-contents.mjs",
-    "app:smoke": "node scripts/packaged-app-smoke.mjs",
+    "app:smoke": "node scripts/packaged-app-smoke.mjs && node scripts/single-instance-smoke.mjs",
     "release:version-check": "node scripts/verify-release-version.mjs",
     "release:checksums": "node scripts/generate-checksums.mjs",
     "dist:win": "npm run release:prepare && node scripts/electron-builder-safe.mjs --win nsis --publish never && npm run package:check",

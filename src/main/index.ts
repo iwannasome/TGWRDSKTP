@@ -40,6 +40,9 @@ const PACKAGED_CONTENT_SECURITY_POLICY = [
   "frame-ancestors 'none'"
 ].join('; ')
 
+const singleInstanceLockAcquired = app.requestSingleInstanceLock()
+if (!singleInstanceLockAcquired) app.quit()
+
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu')
@@ -89,13 +92,29 @@ let smokePackagedCspApplied = false
 let workerRestartPromise: Promise<void> | null = null
 let dataDeletionRunning = false
 
+if (singleInstanceLockAcquired) {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    if (!mainWindow.isVisible()) mainWindow.show()
+    mainWindow.focus()
+  })
+}
+
 function nowIso(): string {
   return new Date().toISOString()
 }
 
 function finishPackagedSmokeWhenReady(): void {
-  if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1') return
+  const singleInstancePrimarySmoke = process.env.TGWR_SMOKE_SINGLE_INSTANCE_PRIMARY === '1'
+  if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1' && !singleInstancePrimarySmoke) return
   if (!smokeWorkerPong || !smokeRendererReady || !smokePackagedCspApplied || smokeExitScheduled) return
+
+  if (singleInstancePrimarySmoke) {
+    smokeExitScheduled = true
+    console.log('tgwr_single_instance_primary=ready')
+    return
+  }
 
   if (process.env.TGWR_SMOKE_RESTART_WORKER === '1' && !smokeRestartStarted) {
     smokeRestartStarted = true
@@ -468,7 +487,10 @@ function createWindow(): void {
           'Content-Security-Policy': [PACKAGED_CONTENT_SECURITY_POLICY]
         }
       })
-      if (process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' && !smokePackagedCspApplied) {
+      if (
+        (process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' || process.env.TGWR_SMOKE_SINGLE_INSTANCE_PRIMARY === '1') &&
+        !smokePackagedCspApplied
+      ) {
         smokePackagedCspApplied = true
         console.log('tgwr_packaged_csp=applied')
         finishPackagedSmokeWhenReady()
@@ -712,23 +734,54 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
 })
 
 ipcMain.handle(IPC_LOAD_REPORT, async () => {
+  let dbPath = ''
+  let reportPath = ''
   try {
     const { db_path } = await computeDbPath()
-    const report_path = join(dirname(db_path), 'report.json')
+    dbPath = db_path
+    reportPath = join(dirname(db_path), 'report.json')
+    const db_exists = existsSync(dbPath)
+    const report_exists = existsSync(reportPath)
+    const local_data_exists = db_exists || report_exists || existsSync(reportCacheRootForDb(dbPath))
 
-    if (!existsSync(report_path)) {
-      return { ok: false, db_path, report_path, error: 'Сохранённый отчёт не найден' }
+    if (!report_exists) {
+      return {
+        ok: false,
+        db_path: dbPath,
+        report_path: reportPath,
+        db_exists,
+        report_exists,
+        local_data_exists,
+        error: db_exists
+          ? 'Локальная база найдена, но сохранённый отчёт отсутствует'
+          : 'Сохранённый отчёт не найден'
+      }
     }
 
-    const txt = await fsp.readFile(report_path, { encoding: 'utf8' })
+    const txt = await fsp.readFile(reportPath, { encoding: 'utf8' })
     const report = JSON.parse(txt) as unknown
     const meta = isPlainObject(report) && isPlainObject(report.meta) ? report.meta : {}
     const report_stale = Number(meta.report_cache_revision ?? 0) !== REPORT_CACHE_REVISION
-    const cached_years = await listCachedReportYears(db_path)
-    return { ok: true, db_path, report_path, report, cached_years, report_stale }
+    const cached_years = await listCachedReportYears(dbPath)
+    return { ok: true, db_path: dbPath, report_path: reportPath, report, cached_years, report_stale }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: msg }
+    return {
+      ok: false,
+      ...(dbPath ? { db_path: dbPath, db_exists: existsSync(dbPath) } : {}),
+      ...(reportPath ? { report_path: reportPath, report_exists: existsSync(reportPath) } : {}),
+      ...(dbPath
+        ? {
+            local_data_exists:
+              existsSync(dbPath) ||
+              (reportPath ? existsSync(reportPath) : false) ||
+              existsSync(reportCacheRootForDb(dbPath))
+          }
+        : {}),
+      error: reportPath && existsSync(reportPath)
+        ? `Сохранённый отчёт повреждён или не читается: ${msg}`
+        : msg
+    }
   }
 })
 
@@ -888,6 +941,7 @@ app.on('before-quit', () => {
 })
 
 app.whenReady().then(async () => {
+  if (!singleInstanceLockAcquired) return
   await migrateLegacyDataIfNeeded()
   createWindow()
   startWorker()

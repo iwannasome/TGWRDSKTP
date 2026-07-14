@@ -158,6 +158,30 @@ class ImportFixtureTests(unittest.TestCase):
                 active_report = json.load(active_report_file)
             self.assertEqual(active_report.get("meta", {}).get("msk_year_used"), 2024)
 
+    def test_missing_report_is_rebuilt_from_existing_database_without_reimport(self):
+        export_dir = os.path.join(FIXTURES_DIR, "result_mixed")
+        with tempfile.TemporaryDirectory(prefix="tgwr-recover-report-") as temp_dir:
+            db_path = os.path.join(temp_dir, "tgwr.db")
+            with contextlib.redirect_stdout(io.StringIO()):
+                do_import(export_dir, "desktop", db_path)
+
+            report_path = os.path.join(temp_dir, "report.json")
+            self.assertFalse(os.path.exists(report_path))
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                do_build_report(db_path)
+
+            events = [json.loads(line) for line in output.getvalue().splitlines() if line.strip()]
+            completed = next(event for event in events if event.get("type") == "report_done")
+            self.assertTrue(os.path.isfile(report_path))
+            self.assertEqual(completed.get("msk_year_used"), 2025)
+
+            with open(report_path, "r", encoding="utf-8") as report_file:
+                report = json.load(report_file)
+            self.assertEqual(report.get("meta", {}).get("msk_year_used"), 2025)
+            self.assertEqual(report.get("schema_version"), 2)
+
     def test_invalid_import_keeps_existing_database_and_report(self):
         with tempfile.TemporaryDirectory(prefix="tgwr-invalid-import-") as temp_dir:
             export_dir = os.path.join(temp_dir, "empty-export")

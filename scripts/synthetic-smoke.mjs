@@ -1170,8 +1170,46 @@ function renderHarnessHtml(report, assets, slideIndex) {
         };
         tick();
       }
+      function runRecoverableDataCheck() {
+        const deadline = Date.now() + 7000;
+        let clickedRecover = false;
+        const tick = () => {
+          const prompt = document.querySelector('[data-tgwr-recovery-prompt="true"]');
+          const recover = findButtonByText('Восстановить Wrapped');
+          const remove = findButtonByText('Удалить локальные данные');
+
+          if (prompt && recover && remove && !recover.disabled && !remove.disabled && !clickedRecover) {
+            clickedRecover = true;
+            recover.click();
+            setTimeout(tick, 80);
+            return;
+          }
+
+          if (
+            clickedRecover &&
+            document.body.getAttribute('data-recovery-build-requested') === '1' &&
+            prompt &&
+            (prompt.textContent || '').includes('Восстанавливаю Wrapped из локальной базы')
+          ) {
+            document.body.setAttribute('data-recovery-check', 'ok');
+            return;
+          }
+
+          if (Date.now() > deadline) {
+            document.body.setAttribute('data-recovery-check', 'fail');
+            showHarnessError('Recovery prompt check failed. Prompt=' + Boolean(prompt) + ', recover=' + Boolean(recover) + ', remove=' + Boolean(remove));
+            return;
+          }
+          setTimeout(tick, 80);
+        };
+        tick();
+      }
       function waitForSlidesReady() {
         const deadline = Date.now() + 7000;
+        if (new URLSearchParams(window.location.search).get('tgwr_recovery_check') === '1') {
+          runRecoverableDataCheck();
+          return;
+        }
         if (new URLSearchParams(window.location.search).get('tgwr_share_preview_check') === '1') {
           runSharePreviewCheck();
           return;
@@ -1207,12 +1245,16 @@ function renderHarnessHtml(report, assets, slideIndex) {
         showHarnessError(reason && reason.stack ? reason.stack : reason);
       });
       window.__TGWR_REPORT__ = ${JSON.stringify(report)};
+      const tgwrRecoveryMode = new URLSearchParams(window.location.search).get('tgwr_recovery_check') === '1';
       window.tgwr = {
         rendererReady: () => {},
-        onWorkerEvent: () => () => {},
+        onWorkerEvent: (cb) => {
+          const timer = setTimeout(() => cb({ type: 'pong', version: '0.2.0' }), 20);
+          return () => clearTimeout(timer);
+        },
         pingWorker: () => {},
         importExport: () => {},
-        buildReport: () => {},
+        buildReport: () => document.body.setAttribute('data-recovery-build-requested', '1'),
         preloadReports: () => {},
         cancelWorker: () => {},
         restartWorker: () => {},
@@ -1221,14 +1263,24 @@ function renderHarnessHtml(report, assets, slideIndex) {
         writeOutputFile: async () => ({ ok: true, path: '' }),
         resetReport: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted: true }),
         deleteAllData: async () => ({ ok: true, db_path: ${JSON.stringify(dbPath)}, report_path: ${JSON.stringify(join(outDir, 'report.json'))}, deleted_files: 2 }),
-        loadReport: async () => ({
-          ok: true,
-          db_path: ${JSON.stringify(dbPath)},
-          report_path: ${JSON.stringify(join(outDir, 'report.json'))},
-          cached_years: [2025],
-          report_stale: false,
-          report: window.__TGWR_REPORT__
-        })
+        loadReport: async () => tgwrRecoveryMode
+          ? ({
+              ok: false,
+              db_path: ${JSON.stringify(dbPath)},
+              report_path: ${JSON.stringify(join(outDir, 'report.json'))},
+              db_exists: true,
+              report_exists: false,
+              local_data_exists: true,
+              error: 'Локальная база найдена, но сохранённый отчёт отсутствует'
+            })
+          : ({
+              ok: true,
+              db_path: ${JSON.stringify(dbPath)},
+              report_path: ${JSON.stringify(join(outDir, 'report.json'))},
+              cached_years: [2025],
+              report_stale: false,
+              report: window.__TGWR_REPORT__
+            })
       };
     </script>
   </head>
@@ -1544,6 +1596,33 @@ async function runSharePreviewSmoke(report) {
   }
 }
 
+async function runRecoverableDataSmoke(report) {
+  const chrome = findChrome()
+  if (!chrome) {
+    console.log('recoverable_data=skipped chrome_not_found')
+    return
+  }
+
+  const harness = await startHarnessServer(report)
+  try {
+    const pageUrl = `${harness.origin}/?tgwr_recovery_check=1`
+    const dom = await runChrome(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--virtual-time-budget=12000',
+      '--dump-dom',
+      pageUrl
+    ], 30_000)
+    if (dom.code !== 0 || !dom.stdout.includes('data-recovery-check="ok"')) {
+      throw new Error(`Recoverable data DOM check failed: ${dom.stderr || dom.stdout.slice(-3000)}`)
+    }
+    console.log('recoverable_data=ok restore=enabled delete=enabled')
+  } finally {
+    await new Promise((resolvePromise) => harness.server.close(resolvePromise))
+  }
+}
+
 async function main() {
   if (!existsSync(join(root, 'dist/renderer/index.html'))) {
     throw new Error('dist/renderer/index.html not found. Run npm run build first.')
@@ -1571,6 +1650,7 @@ async function main() {
   await runPeopleViewSmoke(report)
   await runInsightExportCardSmoke(report)
   await runSharePreviewSmoke(report)
+  await runRecoverableDataSmoke(report)
 
   console.log(`synthetic_export=${exportDir}`)
   console.log(`db=${dbPath}`)
