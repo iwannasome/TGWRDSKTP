@@ -25,7 +25,7 @@ const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
 const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
 
-const REPORT_CACHE_REVISION = 2
+const REPORT_CACHE_REVISION = 3
 const REPORT_CACHE_DIR_NAME = 'report-cache'
 const MAX_OUTPUT_FILE_BYTES = 128 * 1024 * 1024
 const MAX_EXPORT_DIRECTORY_GRANTS = 8
@@ -505,9 +505,9 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 1360,
     height: 820,
-    minWidth: 1024,
-    minHeight: 680,
-    show: true,
+    minWidth: 760,
+    minHeight: 560,
+    show: false,
     backgroundColor: '#05070a',
     icon: existsSync(appIconPath) ? appIconPath : undefined,
     webPreferences: {
@@ -522,6 +522,13 @@ function createWindow(): void {
 
   win.setMenuBarVisibility(false)
   mainWindow = win
+
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show()
+  })
+  win.webContents.on('did-fail-load', () => {
+    if (!win.isDestroyed()) win.show()
+  })
 
   win.webContents.session.setPermissionCheckHandler(() => false)
   win.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))

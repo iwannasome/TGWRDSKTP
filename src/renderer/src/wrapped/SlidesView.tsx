@@ -387,8 +387,9 @@ export default function SlidesView({
       <div className="flex h-full w-full items-center justify-center pb-[96px] md:pl-[208px] md:pb-0">
         <motion.div
           ref={stageRef}
+          data-tgwr-slide-stage="true"
           style={{ width: SLIDE_W, height: SLIDE_H, scale, transformOrigin: 'center' }}
-          className="relative rounded-[32px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.22)] shadow-[0_24px_110px_rgba(0,0,0,0.42)]"
+          className="relative shrink-0 rounded-[32px] border border-white/10 bg-[rgba(var(--tgwr-card-rgb),0.22)] shadow-[0_24px_110px_rgba(0,0,0,0.42)]"
         >
           <AnimatePresence initial={false} custom={direction}>
             <motion.div

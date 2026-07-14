@@ -120,7 +120,7 @@ function skipReasonLabel(reason: string): string {
 function directionQualityLabel(quality?: ImportQuality): string {
   if (!quality) return 'Нет диагностики'
   if (quality.direction_source === 'export_metadata') return 'Направление сообщений подтверждено метаданными Telegram'
-  if (quality.direction_source === 'inferred') return 'Направление сообщений определено по структуре переписок'
+  if (quality.direction_source === 'inferred') return 'Направление сообщений восстановлено по структуре переписок и может ошибаться — проверь баланс «отправлено / получено»'
   return 'Не удалось уверенно определить направление сообщений'
 }
 
@@ -157,6 +157,8 @@ function stageLabel(stage: string): string {
   switch (stage) {
     case 'scan_files':
       return 'Поиск файлов'
+    case 'check_space':
+      return 'Проверка свободного места'
     case 'parse_chat':
       return 'Парсинг чатов'
     case 'insert_db':
@@ -613,6 +615,15 @@ export default function App(): JSX.Element {
         return
       }
 
+      if (type === 'import_preflight') {
+        const sourceSize = typeof payload.source_size_bytes === 'number' ? payload.source_size_bytes : 0
+        const freeSpace = typeof payload.free_disk_bytes === 'number' ? payload.free_disk_bytes : 0
+        if (freeSpace > 0) {
+          setImportNotice(`Экспорт занимает ${formatBytes(sourceSize)} · свободно ${formatBytes(freeSpace)}. Импорт продолжится локально.`)
+        }
+        return
+      }
+
       if (type === 'report_done') {
         const completedYear = typeof payload.msk_year_used === 'number' ? payload.msk_year_used : undefined
         if (completedYear !== undefined) {
@@ -866,12 +877,13 @@ export default function App(): JSX.Element {
       .map((option) => option.year)
       .filter((year) => year !== selectedYear)
       .sort((left, right) => Math.abs(left - (selectedYear ?? left)) - Math.abs(right - (selectedYear ?? right)))
+      .slice(0, 2)
     const sessionKey = `${dbPath ?? ''}:${years.join(',')}`
     if (!years.length || preloadSessionKeyRef.current === sessionKey) return
     const timer = window.setTimeout(() => {
       preloadSessionKeyRef.current = sessionKey
       window.tgwr.preloadReports(years)
-    }, 900)
+    }, 1500)
     return () => window.clearTimeout(timer)
   }, [availableYears, dbPath, report, selectedYear, workerStatus.status])
 

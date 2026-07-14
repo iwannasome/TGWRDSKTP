@@ -775,7 +775,9 @@ function assertReport(report) {
     ['report.schema_version', report?.schema_version === 2],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
-    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 2],
+    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 3],
+    ['meta.people_analytics_limit', report?.meta?.people_analytics_limit === 50],
+    ['meta.inferred_reply_window_hours', report?.meta?.inferred_reply_window_hours === 48],
     ['meta.available_years', Array.isArray(report?.meta?.available_years) && report.meta.available_years.some((item) => item?.year === 2025 && item?.messages === 25468)],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
@@ -1238,6 +1240,16 @@ function renderHarnessHtml(report, assets, slideIndex) {
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
           if (root && root.getAttribute('data-tgwr-view') === 'slides') {
+            const stage = document.querySelector('[data-tgwr-slide-stage="true"]');
+            const bounds = stage && stage.getBoundingClientRect();
+            const aspect = bounds && bounds.height > 0 ? bounds.width / bounds.height : 0;
+            document.body.setAttribute('data-slide-aspect', aspect.toFixed(3));
+            if (aspect < 1.72 || aspect > 1.84) {
+              document.body.setAttribute('data-layout-check', 'fail');
+              showHarnessError('Slide aspect ratio is broken: ' + aspect.toFixed(3));
+              return;
+            }
+            document.body.setAttribute('data-layout-check', 'ok');
             document.body.setAttribute('data-smoke-ready', '1');
             if (new URLSearchParams(window.location.search).get('tgwr_nav_stress') === '1') {
               runNavigationStress(root);
@@ -1376,6 +1388,7 @@ async function runScreenshots(report, options = {}) {
         '--headless=new',
         '--disable-gpu',
         '--no-sandbox',
+        `--window-size=${viewport.width},${viewport.height}`,
         '--virtual-time-budget=12000',
         '--dump-dom',
         pageUrl
@@ -1388,6 +1401,10 @@ async function runScreenshots(report, options = {}) {
 
       if (!domRes.stdout.includes('data-tgwr-view="slides"')) {
         throw new Error(`DOM check did not reach slides view for ${label} slide ${slideIndex + 1}`)
+      }
+      if (!domRes.stdout.includes('data-layout-check="ok"')) {
+        const aspect = domRes.stdout.match(/data-slide-aspect="([^"]+)"/)?.[1] ?? 'missing'
+        throw new Error(`DOM check found broken slide aspect ratio for ${label} slide ${slideIndex + 1}: ${aspect}`)
       }
 
       const totalMatch = domRes.stdout.match(/data-tgwr-slide-total="(\d+)"/)

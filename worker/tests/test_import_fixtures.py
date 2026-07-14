@@ -29,6 +29,9 @@ from tgwr_worker import (  # noqa: E402
     recommend_report_year,
     scan_export_dir,
     load_json_safely,
+    ensure_import_disk_capacity,
+    _pick_person_by_time_profile,
+    MAX_INFERRED_REPLY_SECONDS,
 )
 
 
@@ -97,6 +100,26 @@ class ImportFixtureTests(unittest.TestCase):
             json_files, result_files, html_files = scan_export_dir(export_dir)
             self.assertEqual((json_files, result_files, html_files), ([], [], []))
             self.assertIsNone(load_json_safely(link_path))
+
+    def test_import_preflight_rejects_insufficient_disk_space(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-disk-preflight-") as temp_dir:
+            input_path = os.path.join(temp_dir, "result.json")
+            with open(input_path, "wb") as input_file:
+                input_file.write(b"{}")
+            fake_usage = type("DiskUsage", (), {"free": 32 * 1024 * 1024})()
+            with mock.patch.object(tgwr_worker.shutil, "disk_usage", return_value=fake_usage):
+                with self.assertRaisesRegex(RuntimeError, "Недостаточно свободного места"):
+                    ensure_import_disk_capacity(os.path.join(temp_dir, "tgwr.db"), [input_path])
+
+    def test_legacy_day_night_profile_also_requires_3000_messages(self):
+        people = {
+            "small": {"total_messages": 2999, "night_messages": 2000},
+            "large": {"total_messages": 3000, "night_messages": 600},
+        }
+        selected = _pick_person_by_time_profile(people, "night_messages")
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.get("total_messages"), 3000)
+        self.assertEqual(MAX_INFERRED_REPLY_SECONDS, 48 * 60 * 60)
 
     def test_html_group_is_detected_but_personal_chat_is_kept(self):
         group_file = os.path.join(FIXTURES_DIR, "html_group", "messages.html")
@@ -175,10 +198,12 @@ class ImportFixtureTests(unittest.TestCase):
 
             self.assertEqual(report.get("schema_version"), 2)
             self.assertEqual(report.get("meta", {}).get("msk_year_used"), 2024)
-            self.assertEqual(report.get("meta", {}).get("report_cache_revision"), 2)
+            self.assertEqual(report.get("meta", {}).get("report_cache_revision"), 3)
+            self.assertEqual(report.get("meta", {}).get("people_analytics_limit"), 50)
+            self.assertEqual(report.get("meta", {}).get("inferred_reply_window_hours"), 48)
             self.assertNotIn("deleted_messages_count", report.get("periods", {}).get("year", {}))
 
-            cache_path_2024 = os.path.join(temp_dir, "report-cache", "v2", "report-2024.json")
+            cache_path_2024 = os.path.join(temp_dir, "report-cache", "v3", "report-2024.json")
             self.assertTrue(os.path.isfile(cache_path_2024))
 
             os.remove(os.path.join(temp_dir, "report.json"))
@@ -192,7 +217,7 @@ class ImportFixtureTests(unittest.TestCase):
 
             with contextlib.redirect_stdout(io.StringIO()):
                 do_build_report(db_path, requested_year=2025, cache_only=True)
-            cache_path_2025 = os.path.join(temp_dir, "report-cache", "v2", "report-2025.json")
+            cache_path_2025 = os.path.join(temp_dir, "report-cache", "v3", "report-2025.json")
             self.assertTrue(os.path.isfile(cache_path_2025))
             with open(os.path.join(temp_dir, "report.json"), "r", encoding="utf-8") as active_report_file:
                 active_report = json.load(active_report_file)

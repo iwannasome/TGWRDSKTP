@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 VERSION = "0.2.0"
 REPORT_SCHEMA_VERSION = 2
-REPORT_CACHE_REVISION = 2
+REPORT_CACHE_REVISION = 3
 REPORT_CACHE_DIR_NAME = "report-cache"
 
 _STDOUT_LOCK = threading.Lock()
@@ -479,9 +479,11 @@ def dedupe_existing_messages_by_msg_id(conn: sqlite3.Connection) -> int:
 MSK_OFFSET_SECONDS = 3 * 60 * 60
 # Owner-required exclusions. Keep these IDs unless the product owner explicitly changes the rule.
 BANNED_PEER_IDS = {'user1098898489', 'user6686969898'}
-MAX_INFERRED_REPLY_SECONDS = 7 * 24 * 60 * 60
+MAX_INFERRED_REPLY_SECONDS = 48 * 60 * 60
 PERSON_ANALYTICS_LIMIT = 50
 LONGEST_SILENCE_MIN_MESSAGES = 3000
+MIN_IMPORT_FREE_BYTES = 512 * 1024 * 1024
+IMPORT_FREE_SPACE_MULTIPLIER = 1.25
 
 
 def banned_peer_ids() -> Tuple[str, ...]:
@@ -833,6 +835,35 @@ def scan_export_dir(export_dir: str) -> Tuple[List[str], List[str], List[str]]:
     result_files.sort()
     html_files.sort()
     return json_files, result_files, html_files
+
+
+def ensure_import_disk_capacity(db_path: str, input_files: Iterable[str]) -> Dict[str, int]:
+    source_size = 0
+    for path in input_files:
+        try:
+            source_size += max(0, int(os.path.getsize(path)))
+        except OSError:
+            continue
+
+    destination_dir = os.path.dirname(db_path) or "."
+    try:
+        free_space = int(shutil.disk_usage(destination_dir).free)
+    except OSError:
+        return {"source_size_bytes": source_size, "free_disk_bytes": 0, "required_disk_bytes": 0}
+
+    required_space = max(MIN_IMPORT_FREE_BYTES, int(math.ceil(source_size * IMPORT_FREE_SPACE_MULTIPLIER)))
+    if free_space < required_space:
+        free_gb = free_space / (1024 ** 3)
+        required_gb = required_space / (1024 ** 3)
+        raise RuntimeError(
+            f"Недостаточно свободного места для безопасного импорта: доступно {free_gb:.2f} ГБ, "
+            f"нужно не менее {required_gb:.2f} ГБ. Освободи место и попробуй снова."
+        )
+    return {
+        "source_size_bytes": source_size,
+        "free_disk_bytes": free_space,
+        "required_disk_bytes": required_space,
+    }
 
 
 def load_json_safely(path: str) -> Optional[Any]:
@@ -1796,6 +1827,9 @@ def do_import(export_dir: str, mode: str, db_path: str) -> None:
     json_files, result_files, html_files = scan_export_dir(export_dir)
 
     progress("scan_files", 3, "", "")
+    preflight = ensure_import_disk_capacity(db_path, [*json_files, *result_files, *html_files])
+    write_json({"type": "import_preflight", **preflight})
+    progress("check_space", 4, "", "")
     preferred_self_from_id = extract_self_from_export(result_files)
     candidates, candidate_skip_reasons = build_candidates(export_dir, json_files, result_files, html_files)
     progress("scan_files", 5, "", "")
@@ -3169,12 +3203,14 @@ def _pick_person_by_metric(people: Dict[str, Dict[str, Any]], key: str, reverse:
     return lst[0] if lst else None
 
 
-def _pick_person_by_time_profile(people: Dict[str, Dict[str, Any]], count_key: str) -> Optional[Dict[str, Any]]:
+def _pick_person_by_time_profile(
+    people: Dict[str, Dict[str, Any]], count_key: str, minimum_total: int = 3000
+) -> Optional[Dict[str, Any]]:
     candidates: List[Tuple[float, int, int, Dict[str, Any]]] = []
     for person in people.values():
         total = int(person.get("total_messages", 0) or 0)
         count = int(person.get(count_key, 0) or 0)
-        if total < 20 or count <= 0:
+        if total < minimum_total or count <= 0:
             continue
         ratio = float(_safe_div(count, total))
         score = float(count) * ratio
@@ -3184,7 +3220,7 @@ def _pick_person_by_time_profile(people: Dict[str, Dict[str, Any]], count_key: s
         candidates.append((score, count, total, enriched))
 
     if not candidates:
-        return _pick_person_by_metric(people, count_key, reverse=True)
+        return None
 
     candidates.sort(key=lambda x: (x[0], x[1], x[2]), reverse=True)
     return candidates[0][3]
@@ -5027,6 +5063,9 @@ def do_build_report(db_path: str, requested_year: Optional[int] = None, cache_on
                 "available_years": year_options,
                 "self_from_id": self_from_id,
                 "report_cache_revision": REPORT_CACHE_REVISION,
+                "people_analytics_limit": PERSON_ANALYTICS_LIMIT,
+                "people_analytics_total_dialogs": len(all_peers),
+                "inferred_reply_window_hours": int(MAX_INFERRED_REPLY_SECONDS // 3600),
             },
             "periods": {
                 "all_time": metrics_all,
