@@ -42,6 +42,9 @@ if (!workerRelative) throw new Error(`В package не найден ${expectedSuf
 if (!normalized.some((filePath) => filePath.toLowerCase().endsWith('resources/license.txt'))) {
   throw new Error('В package не найден текст MIT-лицензии resources/LICENSE.txt')
 }
+if (!normalized.some((filePath) => filePath.toLowerCase().endsWith('resources/third_party_notices.txt'))) {
+  throw new Error('В package не найдены лицензии встроенных сторонних компонентов')
+}
 if (!normalized.some((filePath) => filePath.toLowerCase().endsWith('resources/app-icon.png'))) {
   throw new Error('В package не найдена иконка приложения resources/app-icon.png')
 }

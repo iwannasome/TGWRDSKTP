@@ -23,7 +23,8 @@
     "test:security": "node scripts/security-smoke.mjs",
     "test:worker": "node scripts/run-python.mjs -m unittest discover -s worker/tests -p test_*.py -v",
     "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
-    "verify": "npm run release:version-check && npm run typecheck && npm run test:security && npm run test:worker && npm run test:synthetic && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run package:check && npm run app:smoke",
+    "test:synthetic:full": "npm run build && node scripts/synthetic-smoke.mjs --all-slides",
+    "verify": "npm run release:version-check && npm run typecheck && npm run test:security && npm run test:worker && npm run test:synthetic:full && npm run worker:build && npm run worker:smoke && npm run pack:app && npm run package:check && npm run app:smoke",
 
     "worker:build": "node scripts/build-worker.mjs",
     "worker:smoke": "node scripts/worker-binary-smoke.mjs",
@@ -82,6 +83,10 @@
       {
         "from": "LICENSE",
         "to": "LICENSE.txt"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.txt"
       },
       {
         "from": "build/icon.png",

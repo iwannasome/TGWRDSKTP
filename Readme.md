@@ -119,12 +119,15 @@ npm run typecheck       # TypeScript
 npm run test:security   # IPC, файловые границы и локальность Docker/noVNC
 npm run test:worker     # анонимизированные import fixtures
 npm run test:synthetic  # полный synthetic report и browser smoke при наличии Chrome
+npm run test:synthetic:full # browser smoke каждого из 14 слайдов и мобильных состояний
 npm run worker:build    # PyInstaller binary текущей ОС/архитектуры
 npm run worker:smoke    # JSONL ping замороженному worker
 npm run pack            # распакованное Electron-приложение
 npm run release:version-check # совпадение версии package/lock/worker/UI/README
 npm run verify          # весь локальный release gate
 ```
+
+Лицензии компонентов, встроенных в бинарный worker, перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) и автоматически кладутся рядом с лицензией TGWR в каждый пакет.
 
 Установщики:
 

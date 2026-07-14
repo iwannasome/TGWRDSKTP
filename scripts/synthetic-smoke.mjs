@@ -1730,13 +1730,14 @@ async function main() {
   const report = JSON.parse(await readFile(reportPath, 'utf8'))
   assertReport(report)
   assertHarnessInlineScriptParses(report)
-  const baseTargets = process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? allSlideTargets() : undefined
+  const allSlides = process.argv.includes('--all-slides') || process.env.TGWR_SMOKE_ALL_SLIDES === '1'
+  const baseTargets = allSlides ? allSlideTargets() : undefined
   const expandedMobileTargets = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
   const screenshots = [
     ...(await runScreenshots(report, { label: 'base', targets: baseTargets })),
     ...(await runScreenshots(report, {
       label: 'mobile',
-      targets: process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? expandedMobileTargets : [0, 1, 9, 13],
+      targets: allSlides ? expandedMobileTargets : [0, 1, 9, 13],
       viewport: { width: 390, height: 844 },
       minScreenshotBytes: 15_000
     })),
