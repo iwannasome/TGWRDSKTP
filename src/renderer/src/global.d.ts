@@ -16,6 +16,8 @@ declare global {
     db_path: string
     report_path: string
     report: unknown
+    cached_years: number[]
+    report_stale: boolean
   }
 
   interface TgwrLoadReportFail {
@@ -45,11 +47,14 @@ declare global {
 
   interface Window {
     tgwr: {
+      rendererReady: () => void
       onWorkerEvent: (cb: (payload: unknown) => void) => () => void
       pingWorker: () => void
       importExport: (exportDir: string) => void
       buildReport: (year?: number) => void
+      preloadReports: (years: number[]) => void
       cancelWorker: () => void
+      restartWorker: () => void
 
       pickExportDir: () => Promise<string | null>
       pickOutputDir: () => Promise<TgwrOutputDirectoryGrant | null>

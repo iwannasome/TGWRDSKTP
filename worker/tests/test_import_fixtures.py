@@ -6,6 +6,8 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from unittest import mock
+from datetime import datetime
 
 
 WORKER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -13,11 +15,15 @@ FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 if WORKER_DIR not in sys.path:
     sys.path.insert(0, WORKER_DIR)
 
+import tgwr_worker  # noqa: E402
 from tgwr_worker import (  # noqa: E402
     available_report_years,
     build_candidates,
     dedupe_candidates,
     do_build_report,
+    _effective_bounded_period_end,
+    _moscow_tzinfo,
+    _quietest_month_candidates,
     do_import,
     html_looks_like_group_chat,
     recommend_report_year,
@@ -70,10 +76,36 @@ class ImportFixtureTests(unittest.TestCase):
         ]
         self.assertEqual(recommend_report_year(years), 2025)
 
+    def test_current_calendar_window_stops_at_present_but_past_year_stays_complete(self):
+        msk = _moscow_tzinfo()
+        current_start = int(datetime(2026, 1, 1, tzinfo=msk).timestamp())
+        current_end = int(datetime(2027, 1, 1, tzinfo=msk).timestamp())
+        current_now = int(datetime(2026, 7, 13, 12, 0, tzinfo=msk).timestamp())
+        self.assertEqual(_effective_bounded_period_end(current_start, current_end, current_now), current_now)
+
+        past_start = int(datetime(2025, 1, 1, tzinfo=msk).timestamp())
+        past_end = int(datetime(2026, 1, 1, tzinfo=msk).timestamp())
+        self.assertEqual(_effective_bounded_period_end(past_start, past_end, current_now), past_end)
+
+        months = [
+            {"value": "2026-01", "count": 200},
+            {"value": "2026-02", "count": 100},
+            {"value": "2026-07", "count": 1},
+        ]
+        quietest_candidates = _quietest_month_candidates(months, current_start, current_end, current_now)
+        self.assertEqual([item["value"] for item in quietest_candidates], ["2026-01", "2026-02"])
+
     def test_fixture_import_builds_schema_v2_for_requested_year(self):
         export_dir = os.path.join(FIXTURES_DIR, "result_mixed")
         with tempfile.TemporaryDirectory(prefix="tgwr-fixture-") as temp_dir:
             db_path = os.path.join(temp_dir, "tgwr.db")
+            old_report_path = os.path.join(temp_dir, "report.json")
+            old_cache_path = os.path.join(temp_dir, "report-cache", "v2", "report-2024.json")
+            os.makedirs(os.path.dirname(old_cache_path), exist_ok=True)
+            with open(old_report_path, "w", encoding="utf-8") as old_report_file:
+                old_report_file.write('{"old": true}')
+            with open(old_cache_path, "w", encoding="utf-8") as old_cache_file:
+                old_cache_file.write('{"old": true}')
             import_output = io.StringIO()
             with contextlib.redirect_stdout(import_output):
                 do_import(export_dir, "desktop", db_path)
@@ -86,6 +118,8 @@ class ImportFixtureTests(unittest.TestCase):
             self.assertEqual(reason_counts.get("duplicate_by_id"), 1)
             self.assertEqual(import_done.get("import_quality", {}).get("direction_source"), "export_metadata")
             self.assertEqual(import_done.get("import_quality", {}).get("direction_confidence"), "high")
+            self.assertFalse(os.path.exists(old_report_path))
+            self.assertFalse(os.path.exists(os.path.join(temp_dir, "report-cache")))
 
             conn = sqlite3.connect(db_path)
             try:
@@ -101,7 +135,146 @@ class ImportFixtureTests(unittest.TestCase):
 
             self.assertEqual(report.get("schema_version"), 2)
             self.assertEqual(report.get("meta", {}).get("msk_year_used"), 2024)
+            self.assertEqual(report.get("meta", {}).get("report_cache_revision"), 2)
             self.assertNotIn("deleted_messages_count", report.get("periods", {}).get("year", {}))
+
+            cache_path_2024 = os.path.join(temp_dir, "report-cache", "v2", "report-2024.json")
+            self.assertTrue(os.path.isfile(cache_path_2024))
+
+            os.remove(os.path.join(temp_dir, "report.json"))
+            cached_output = io.StringIO()
+            with contextlib.redirect_stdout(cached_output):
+                do_build_report(db_path, requested_year=2024)
+            cached_events = [json.loads(line) for line in cached_output.getvalue().splitlines() if line.strip()]
+            cached_done = next(event for event in cached_events if event.get("type") == "report_done")
+            self.assertEqual(cached_done.get("source"), "cache")
+            self.assertTrue(os.path.isfile(os.path.join(temp_dir, "report.json")))
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                do_build_report(db_path, requested_year=2025, cache_only=True)
+            cache_path_2025 = os.path.join(temp_dir, "report-cache", "v2", "report-2025.json")
+            self.assertTrue(os.path.isfile(cache_path_2025))
+            with open(os.path.join(temp_dir, "report.json"), "r", encoding="utf-8") as active_report_file:
+                active_report = json.load(active_report_file)
+            self.assertEqual(active_report.get("meta", {}).get("msk_year_used"), 2024)
+
+    def test_invalid_import_keeps_existing_database_and_report(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-invalid-import-") as temp_dir:
+            export_dir = os.path.join(temp_dir, "empty-export")
+            os.makedirs(export_dir)
+            db_path = os.path.join(temp_dir, "tgwr.db")
+            report_path = os.path.join(temp_dir, "report.json")
+            cache_path = os.path.join(temp_dir, "report-cache", "v2", "report-2025.json")
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(db_path, "wb") as db_file:
+                db_file.write(b"previous database")
+            with open(report_path, "w", encoding="utf-8") as report_file:
+                report_file.write('{"previous": true}')
+            with open(cache_path, "w", encoding="utf-8") as cache_file:
+                cache_file.write('{"previous": true}')
+
+            with self.assertRaisesRegex(RuntimeError, "не найден экспорт Telegram"):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    do_import(export_dir, "desktop", db_path)
+
+            with open(db_path, "rb") as db_file:
+                self.assertEqual(db_file.read(), b"previous database")
+            with open(report_path, "r", encoding="utf-8") as report_file:
+                self.assertEqual(report_file.read(), '{"previous": true}')
+            with open(cache_path, "r", encoding="utf-8") as cache_file:
+                self.assertEqual(cache_file.read(), '{"previous": true}')
+
+    def test_service_only_import_is_rejected_and_keeps_previous_result(self):
+        with tempfile.TemporaryDirectory(prefix="tgwr-service-only-import-") as temp_dir:
+            export_dir = os.path.join(temp_dir, "service-only-export")
+            os.makedirs(export_dir)
+            with open(os.path.join(export_dir, "result.json"), "w", encoding="utf-8") as export_file:
+                json.dump(
+                    {
+                        "personal_information": {"user_id": 100000000},
+                        "chats": {
+                            "list": [
+                                {
+                                    "id": 900001,
+                                    "type": "personal_chat",
+                                    "name": "Service only",
+                                    "messages": [
+                                        {
+                                            "id": 1,
+                                            "type": "service",
+                                            "date": "2025-01-01T12:00:00",
+                                            "date_unixtime": "1735732800",
+                                            "actor": "Synthetic Self",
+                                            "actor_id": "user100000000",
+                                            "action": "phone_call",
+                                            "text": ""
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    export_file,
+                    ensure_ascii=False
+                )
+
+            db_path = os.path.join(temp_dir, "tgwr.db")
+            report_path = os.path.join(temp_dir, "report.json")
+            cache_path = os.path.join(temp_dir, "report-cache", "v2", "report-2025.json")
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(db_path, "wb") as db_file:
+                db_file.write(b"previous database")
+            with open(report_path, "w", encoding="utf-8") as report_file:
+                report_file.write('{"previous": true}')
+            with open(cache_path, "w", encoding="utf-8") as cache_file:
+                cache_file.write('{"previous": true}')
+
+            with self.assertRaisesRegex(RuntimeError, "не найдено обычных сообщений"):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    do_import(export_dir, "desktop", db_path)
+
+            with open(db_path, "rb") as db_file:
+                self.assertEqual(db_file.read(), b"previous database")
+            with open(report_path, "r", encoding="utf-8") as report_file:
+                self.assertEqual(report_file.read(), '{"previous": true}')
+            with open(cache_path, "r", encoding="utf-8") as cache_file:
+                self.assertEqual(cache_file.read(), '{"previous": true}')
+            self.assertFalse(os.path.exists(db_path + ".importing"))
+
+    def test_cancelled_import_discards_staging_data_and_keeps_previous_result(self):
+        export_dir = os.path.join(FIXTURES_DIR, "result_mixed")
+        with tempfile.TemporaryDirectory(prefix="tgwr-cancelled-import-") as temp_dir:
+            db_path = os.path.join(temp_dir, "tgwr.db")
+            report_path = os.path.join(temp_dir, "report.json")
+            with open(db_path, "wb") as db_file:
+                db_file.write(b"previous database")
+            with open(report_path, "w", encoding="utf-8") as report_file:
+                report_file.write('{"previous": true}')
+
+            original_recreate = tgwr_worker.recreate_db
+
+            def recreate_then_cancel(path):
+                conn = original_recreate(path)
+                tgwr_worker._CANCEL_EVENT.set()
+                return conn
+
+            output = io.StringIO()
+            try:
+                with mock.patch.object(tgwr_worker, "recreate_db", side_effect=recreate_then_cancel):
+                    with contextlib.redirect_stdout(output):
+                        do_import(export_dir, "desktop", db_path)
+            finally:
+                tgwr_worker._CANCEL_EVENT.clear()
+
+            events = [json.loads(line) for line in output.getvalue().splitlines() if line.strip()]
+            self.assertIn({"type": "import_error", "message": "Import cancelled"}, events)
+            with open(db_path, "rb") as db_file:
+                self.assertEqual(db_file.read(), b"previous database")
+            with open(report_path, "r", encoding="utf-8") as report_file:
+                self.assertEqual(report_file.read(), '{"previous": true}')
+            self.assertFalse(os.path.exists(db_path + ".importing"))
+            self.assertFalse(os.path.exists(db_path + ".importing-wal"))
+            self.assertFalse(os.path.exists(db_path + ".importing-shm"))
 
 
 if __name__ == "__main__":

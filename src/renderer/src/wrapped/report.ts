@@ -262,6 +262,10 @@ export function sanitizeReportForSharing(report: unknown, options: SharePrivacyO
   const nameMap = new Map<string, string>()
   const peerMap = new Map<string, string>()
 
+  const containsExactDate = (value: string): boolean => {
+    return /\b(?:\d{4}-\d{2}-\d{2}|\d{2}\.\d{2}\.\d{4})\b/.test(value)
+  }
+
   const anonymousName = (value: string): string => {
     const key = value.trim() || 'unknown'
     const existing = nameMap.get(key)
@@ -281,6 +285,7 @@ export function sanitizeReportForSharing(report: unknown, options: SharePrivacyO
   }
 
   const walk = (value: unknown): unknown => {
+    if (options.hideExactDates && typeof value === 'string' && containsExactDate(value)) return null
     if (Array.isArray(value)) return value.map((item) => walk(item))
     if (!isRecord(value)) return value
 

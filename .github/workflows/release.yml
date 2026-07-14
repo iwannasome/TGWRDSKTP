@@ -29,20 +29,34 @@ jobs:
             command: dist:mac
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - run: npm ci
+      - run: npm run release:version-check
       - run: python -m pip install -r worker/requirements-build.txt
       - run: npm run typecheck
       - run: npm run test:worker
       - run: npm run ${{ matrix.command }}
-      - uses: actions/upload-artifact@v4
+      - name: Проверить запуск packaged app и перезапуск worker (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          sudo chown root:root release/linux-unpacked/chrome-sandbox
+          sudo chmod 4755 release/linux-unpacked/chrome-sandbox
+          xvfb-run -a npm run app:smoke
+      - name: Проверить запуск packaged app и перезапуск worker
+        if: runner.os != 'Linux'
+        run: npm run app:smoke
+      - name: Сформировать SHA-256
+        run: node scripts/generate-checksums.mjs "release/SHA256SUMS-${{ matrix.name }}.txt"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: TGWR-${{ matrix.name }}
           path: |
@@ -51,5 +65,27 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.rpm
+            release/SHA256SUMS-*.txt
           if-no-files-found: error
           retention-days: 14
+
+  draft-release:
+    name: Подготовить черновик GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: TGWR-*
+          path: release
+          merge-multiple: true
+      - name: Собрать общую SHA-256 ведомость
+        run: node scripts/generate-checksums.mjs
+      - name: Создать черновик релиза
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag --generate-notes --title "TGWR by IWS $GITHUB_REF_NAME"

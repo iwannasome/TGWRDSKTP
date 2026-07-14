@@ -14,13 +14,31 @@ const IPC_WORKER_EVENT = 'tgwr:worker-event' as const
 const IPC_WORKER_PING = 'tgwr:worker-ping' as const
 const IPC_WORKER_IMPORT = 'tgwr:worker-import' as const
 const IPC_WORKER_BUILD_REPORT = 'tgwr:worker-build-report' as const
+const IPC_WORKER_PRELOAD_REPORTS = 'tgwr:worker-preload-reports' as const
 const IPC_WORKER_CANCEL = 'tgwr:worker-cancel' as const
+const IPC_WORKER_RESTART = 'tgwr:worker-restart' as const
 const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
 const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
+const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
+
+const REPORT_CACHE_REVISION = 2
+const REPORT_CACHE_DIR_NAME = 'report-cache'
+const PACKAGED_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'"
+].join('; ')
 
 if (process.platform === 'linux') {
   app.disableHardwareAcceleration()
@@ -60,12 +78,36 @@ let pendingEvents: unknown[] = []
 let lastKnownStatus: WorkerStatusEvent = {
   type: 'worker_status',
   status: 'fail',
-  message: 'Worker not started',
+  message: 'Модуль анализа запускается',
   ts: new Date().toISOString()
 }
+let smokeWorkerPong = false
+let smokeRendererReady = false
+let smokeExitScheduled = false
+let smokeRestartStarted = false
+let smokePackagedCspApplied = false
+let workerRestartPromise: Promise<void> | null = null
+let dataDeletionRunning = false
 
 function nowIso(): string {
   return new Date().toISOString()
+}
+
+function finishPackagedSmokeWhenReady(): void {
+  if (process.env.TGWR_SMOKE_EXIT_ON_PONG !== '1') return
+  if (!smokeWorkerPong || !smokeRendererReady || !smokePackagedCspApplied || smokeExitScheduled) return
+
+  if (process.env.TGWR_SMOKE_RESTART_WORKER === '1' && !smokeRestartStarted) {
+    smokeRestartStarted = true
+    smokeWorkerPong = false
+    void restartWorkerProcess()
+    return
+  }
+
+  smokeExitScheduled = true
+  const workerState = smokeRestartStarted ? 'restart_pong' : 'pong'
+  console.log(`tgwr_packaged_app_smoke=ok worker=${workerState} renderer=ready`)
+  setTimeout(() => app.quit(), 50)
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -128,10 +170,10 @@ function openExternalIfAllowed(rawUrl: string): boolean {
 
 function sendToWorker(cmdObj: unknown): void {
   if (!workerProc || workerProc.stdin.destroyed) {
-    emitStatus('fail', 'Worker not running')
+    emitStatus('fail', 'Модуль анализа не запущен')
     emitToRenderer({
       type: 'worker_send_fail',
-      message: 'Worker not running',
+      message: 'Модуль анализа не запущен',
       ts: nowIso(),
       cmd: isPlainObject(cmdObj) ? (cmdObj as JsonObject) : { valueType: typeof cmdObj }
     })
@@ -145,7 +187,7 @@ function sendToWorker(cmdObj: unknown): void {
     const msg = err instanceof Error ? err.message : String(err)
     emitToRenderer({
       type: 'worker_send_fail',
-      message: 'Failed to serialize command',
+      message: 'Не удалось подготовить команду для модуля анализа',
       ts: nowIso(),
       error: msg
     })
@@ -156,7 +198,7 @@ function sendToWorker(cmdObj: unknown): void {
     workerProc.stdin.write(`${line}\n`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    emitStatus('fail', `Failed to write to worker stdin: ${msg}`)
+    emitStatus('fail', `Не удалось передать команду модулю анализа: ${msg}`)
   }
 }
 
@@ -188,13 +230,9 @@ function handleWorkerStdoutChunk(text: string): void {
     }
 
     emitToRenderer(parsed)
-    if (
-      process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' &&
-      isPlainObject(parsed) &&
-      parsed.type === 'pong'
-    ) {
-      console.log('tgwr_packaged_worker_smoke=ok')
-      setTimeout(() => app.quit(), 50)
+    if (isPlainObject(parsed) && parsed.type === 'pong') {
+      smokeWorkerPong = true
+      finishPackagedSmokeWhenReady()
     }
   }
 }
@@ -223,12 +261,70 @@ function attachWorker(proc: ChildProcessWithoutNullStreams): void {
   proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
     workerProc = null
     workerCommandUsed = null
-    emitStatus('fail', `Worker exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`)
+    emitStatus('fail', `Модуль анализа завершил работу (код ${code ?? '—'}, сигнал ${signal ?? '—'})`)
   })
 
   proc.on('error', (err: Error) => {
-    emitStatus('fail', `Worker process error: ${err.message}`)
+    emitStatus('fail', `Ошибка процесса анализа: ${err.message}`)
   })
+}
+
+async function waitForWorkerExit(proc: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
+  return await new Promise((resolvePromise) => {
+    let settled = false
+    const onClose = () => finish(true)
+    const finish = (value: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      proc.removeListener('close', onClose)
+      resolvePromise(value)
+    }
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    proc.once('close', onClose)
+  })
+}
+
+async function stopWorkerProcess(): Promise<void> {
+  const proc = workerProc
+  if (!proc) return
+
+  const gracefulExit = waitForWorkerExit(proc, 2_000)
+  try {
+    proc.kill()
+  } catch {
+    // The process may already be terminating; the close wait below remains authoritative.
+  }
+  if (await gracefulExit) return
+
+  const forcedExit = waitForWorkerExit(proc, 2_000)
+  try {
+    proc.kill('SIGKILL')
+  } catch {
+    // The second wait reports a deterministic error if the process cannot be stopped.
+  }
+  if (!(await forcedExit)) throw new Error('Не удалось остановить модуль анализа')
+}
+
+async function restartWorkerProcess(): Promise<void> {
+  if (workerRestartPromise) return await workerRestartPromise
+
+  workerRestartPromise = (async () => {
+    emitStatus('fail', 'Перезапускаю модуль анализа…')
+    try {
+      await stopWorkerProcess()
+      startWorker()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      emitStatus('fail', message)
+    }
+  })()
+
+  try {
+    await workerRestartPromise
+  } finally {
+    workerRestartPromise = null
+  }
 }
 
 function startWorker(): void {
@@ -274,7 +370,7 @@ function startWorker(): void {
         'fail',
         app.isPackaged
           ? 'Не удалось запустить встроенный модуль анализа. Переустанови TGWR.'
-          : `Python not found (tried: ${tried.join(', ')}). Install Python 3 and ensure it is on PATH.`
+          : `Python 3 не найден (проверено: ${tried.join(', ')}). Установи Python 3 и перезапусти TGWR.`
       )
       return
     }
@@ -295,7 +391,7 @@ function startWorker(): void {
         return
       }
 
-      emitStatus('fail', `Failed to start worker via "${candidate.label}": ${err.message}`)
+      emitStatus('fail', `Не удалось запустить модуль анализа через ${candidate.label}: ${err.message}`)
       emitHost('error', 'Worker spawn error', {
         command: candidate.label,
         message: err.message
@@ -312,7 +408,7 @@ function startWorker(): void {
 
       attachWorker(proc)
 
-      emitStatus('ok', app.isPackaged ? 'Встроенный модуль анализа запущен' : `Worker started (${candidate.label})`)
+      emitStatus('ok', app.isPackaged ? 'Встроенный модуль анализа запущен' : `Модуль анализа запущен (${candidate.label})`)
       emitHost('info', 'Worker connected', {
         command: workerCommandUsed ?? candidate.label,
         packaged: app.isPackaged
@@ -347,12 +443,36 @@ function createWindow(): void {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webSecurity: true,
+      devTools: !app.isPackaged
     }
   })
 
   win.setMenuBarVisibility(false)
   mainWindow = win
+
+  if (app.isPackaged) {
+    win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      if (!details.url.startsWith('file:')) {
+        callback({ responseHeaders: details.responseHeaders })
+        return
+      }
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [PACKAGED_CONTENT_SECURITY_POLICY]
+        }
+      })
+      if (process.env.TGWR_SMOKE_EXIT_ON_PONG === '1' && !smokePackagedCspApplied) {
+        smokePackagedCspApplied = true
+        console.log('tgwr_packaged_csp=applied')
+        finishPackagedSmokeWhenReady()
+      }
+    })
+  } else {
+    smokePackagedCspApplied = true
+  }
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     openExternalIfAllowed(url)
@@ -360,15 +480,7 @@ function createWindow(): void {
   })
 
   win.webContents.on('will-navigate', (event, url) => {
-    const currentUrl = win.webContents.getURL()
-    if (url === currentUrl) return
-
-    try {
-      if (currentUrl && new URL(url).origin === new URL(currentUrl).origin) return
-    } catch {
-      //
-    }
-
+    if (url === win.webContents.getURL()) return
     event.preventDefault()
     openExternalIfAllowed(url)
   })
@@ -406,6 +518,47 @@ async function computeDbPath(): Promise<{ db_path: string; location: 'userData' 
 function dataFilesForDb(dbPath: string): string[] {
   const baseDir = dirname(dbPath)
   return [dbPath, `${dbPath}-wal`, `${dbPath}-shm`, join(baseDir, 'report.json')]
+}
+
+function importStagingFilesForDb(dbPath: string): string[] {
+  const stagingDbPath = `${dbPath}.importing`
+  return [stagingDbPath, `${stagingDbPath}-wal`, `${stagingDbPath}-shm`]
+}
+
+function reportCacheRootForDb(dbPath: string): string {
+  return join(dirname(dbPath), REPORT_CACHE_DIR_NAME)
+}
+
+function reportCacheDirForDb(dbPath: string): string {
+  return join(reportCacheRootForDb(dbPath), `v${REPORT_CACHE_REVISION}`)
+}
+
+async function listCachedReportYears(dbPath: string): Promise<number[]> {
+  try {
+    const entries = await fsp.readdir(reportCacheDirForDb(dbPath), { withFileTypes: true })
+    return entries
+      .flatMap((entry) => {
+        if (!entry.isFile()) return []
+        const match = /^report-(\d{4})\.json$/.exec(entry.name)
+        if (!match) return []
+        const year = Number(match[1])
+        return Number.isInteger(year) && year >= 2000 && year <= 2200 ? [year] : []
+      })
+      .sort((a, b) => b - a)
+  } catch {
+    return []
+  }
+}
+
+async function clearReportArtifacts(dbPath: string): Promise<boolean> {
+  const reportPath = join(dirname(dbPath), 'report.json')
+  const cacheRoot = reportCacheRootForDb(dbPath)
+  const existed = existsSync(reportPath) || existsSync(cacheRoot)
+  await Promise.all([
+    fsp.rm(reportPath, { force: true }),
+    fsp.rm(cacheRoot, { recursive: true, force: true })
+  ])
+  return existed
 }
 
 function legacyDbPath(): string | null {
@@ -461,9 +614,9 @@ function isPathInsideDir(parentDir: string, childPath: string): boolean {
 ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
   const parent = mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined
   const options: OpenDialogOptions = {
-    title: 'Select Telegram Desktop Export folder',
+    title: 'Выберите папку экспорта Telegram Desktop',
     properties: ['openDirectory', 'dontAddToRecent'],
-    buttonLabel: 'Select folder'
+    buttonLabel: 'Выбрать папку'
   }
   const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
   if (res.canceled) return null
@@ -477,9 +630,9 @@ ipcMain.handle(IPC_PICK_EXPORT_DIR, async () => {
 ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
   const parent = mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined
   const options: OpenDialogOptions = {
-    title: 'Select folder to export TGWR slides',
+    title: 'Выберите папку для экспорта слайдов TGWR',
     properties: ['openDirectory', 'createDirectory', 'dontAddToRecent'],
-    buttonLabel: 'Select folder'
+    buttonLabel: 'Выбрать папку'
   }
   const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
   if (res.canceled) return null
@@ -494,7 +647,7 @@ ipcMain.handle(IPC_PICK_OUTPUT_DIR, async () => {
 ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
   try {
     if (!isPlainObject(payload)) {
-      return { ok: false, error: 'Invalid payload (expected object)' }
+      return { ok: false, error: 'Некорректные данные для сохранения файла' }
     }
 
     const directoryToken = typeof payload.directory_token === 'string' ? payload.directory_token : ''
@@ -503,7 +656,9 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
 
     const dirPath = outputDirectoryGrants.get(directoryToken)
     if (!dirPath) return { ok: false, error: 'Папка экспорта не была выбрана в текущем сеансе' }
-    if (!isAllowedOutputFilename(filename)) return { ok: false, error: 'Unsafe filename or unsupported extension' }
+    if (!isAllowedOutputFilename(filename)) {
+      return { ok: false, error: 'Недопустимое имя файла или формат: разрешены только PNG и PDF' }
+    }
 
     let bytes: Uint8Array
     try {
@@ -524,18 +679,27 @@ ipcMain.handle(IPC_WRITE_OUTPUT_FILE, async (_event, payload: unknown) => {
           bytes = Buffer.from(Object.values(bytesAny) as number[])
         }
       } else {
-        return { ok: false, error: 'bytes must be Uint8Array/ArrayBuffer, got ' + typeof bytesAny }
+        return { ok: false, error: `Не удалось подготовить содержимое файла (тип: ${typeof bytesAny})` }
       }
     } catch (e) {
-      return { ok: false, error: 'Failed to parse bytes: ' + String(e) }
+      return { ok: false, error: `Не удалось подготовить содержимое файла: ${String(e)}` }
     }
 
     await fsp.mkdir(dirPath, { recursive: true })
     const outPath = resolve(dirPath, filename)
     if (!isPathInsideDir(dirPath, outPath)) {
-      return { ok: false, error: 'Output path escaped selected directory' }
+      return { ok: false, error: 'Путь файла вышел за пределы выбранной папки' }
     }
-    await fsp.writeFile(outPath, Buffer.from(bytes))
+
+    // Записываем рядом и атомарно заменяем цель: не оставляем частичный файл
+    // и заменяем существующий симлинк вместо перехода по нему.
+    const tempPath = join(dirPath, `.${filename}.${randomUUID()}.tmp`)
+    try {
+      await fsp.writeFile(tempPath, Buffer.from(bytes), { flag: 'wx' })
+      await fsp.rename(tempPath, outPath)
+    } finally {
+      await fsp.rm(tempPath, { force: true }).catch(() => undefined)
+    }
     return { ok: true, path: outPath }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -549,12 +713,15 @@ ipcMain.handle(IPC_LOAD_REPORT, async () => {
     const report_path = join(dirname(db_path), 'report.json')
 
     if (!existsSync(report_path)) {
-      return { ok: false, db_path, report_path, error: `report.json not found at: ${report_path}` }
+      return { ok: false, db_path, report_path, error: 'Сохранённый отчёт не найден' }
     }
 
     const txt = await fsp.readFile(report_path, { encoding: 'utf8' })
     const report = JSON.parse(txt) as unknown
-    return { ok: true, db_path, report_path, report }
+    const meta = isPlainObject(report) && isPlainObject(report.meta) ? report.meta : {}
+    const report_stale = Number(meta.report_cache_revision ?? 0) !== REPORT_CACHE_REVISION
+    const cached_years = await listCachedReportYears(db_path)
+    return { ok: true, db_path, report_path, report, cached_years, report_stale }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
@@ -565,8 +732,7 @@ ipcMain.handle(IPC_RESET_REPORT, async () => {
   try {
     const { db_path } = await computeDbPath()
     const report_path = join(dirname(db_path), 'report.json')
-    const existed = existsSync(report_path)
-    await fsp.rm(report_path, { force: true })
+    const existed = await clearReportArtifacts(db_path)
     return { ok: true, db_path, report_path, deleted: existed }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -575,13 +741,22 @@ ipcMain.handle(IPC_RESET_REPORT, async () => {
 })
 
 ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
+  if (dataDeletionRunning) {
+    return { ok: false, error: 'Полное удаление данных уже выполняется' }
+  }
+
+  dataDeletionRunning = true
   try {
-    sendToWorker({ cmd: 'cancel' })
+    if (workerRestartPromise) await workerRestartPromise
+    await stopWorkerProcess()
     const { db_path } = await computeDbPath()
-    const candidates = new Set(dataFilesForDb(db_path))
+    const candidates = new Set([...dataFilesForDb(db_path), ...importStagingFilesForDb(db_path)])
+    const cacheRoots = new Set([reportCacheRootForDb(db_path)])
     const legacy = legacyDbPath()
     if (legacy) {
       for (const filePath of dataFilesForDb(legacy)) candidates.add(filePath)
+      for (const filePath of importStagingFilesForDb(legacy)) candidates.add(filePath)
+      cacheRoots.add(reportCacheRootForDb(legacy))
     }
 
     const deleted: string[] = []
@@ -589,6 +764,11 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
       if (!existsSync(filePath)) continue
       await fsp.rm(filePath, { force: true })
       deleted.push(filePath)
+    }
+    for (const cacheRoot of cacheRoots) {
+      if (!existsSync(cacheRoot)) continue
+      await fsp.rm(cacheRoot, { recursive: true, force: true })
+      deleted.push(cacheRoot)
     }
 
     return {
@@ -600,6 +780,9 @@ ipcMain.handle(IPC_DELETE_ALL_DATA, async () => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: msg }
+  } finally {
+    dataDeletionRunning = false
+    startWorker()
   }
 })
 
@@ -608,7 +791,7 @@ async function forwardImportExport(exportDir: unknown): Promise<void> {
     emitToRenderer({
       type: 'ipc_invalid_cmd',
       ts: nowIso(),
-      message: 'import_export requires export_dir: string'
+      message: 'Для импорта нужно выбрать папку Telegram Export'
     })
     return
   }
@@ -638,8 +821,18 @@ ipcMain.on(IPC_WORKER_PING, () => {
   sendToWorker({ cmd: 'ping' })
 })
 
+ipcMain.on(IPC_RENDERER_READY, () => {
+  smokeRendererReady = true
+  finishPackagedSmokeWhenReady()
+})
+
 ipcMain.on(IPC_WORKER_CANCEL, () => {
   sendToWorker({ cmd: 'cancel' })
+})
+
+ipcMain.on(IPC_WORKER_RESTART, () => {
+  if (dataDeletionRunning) return
+  void restartWorkerProcess()
 })
 
 ipcMain.on(IPC_WORKER_IMPORT, (_event, exportDir: unknown) => {
@@ -658,6 +851,25 @@ ipcMain.on(IPC_WORKER_BUILD_REPORT, (_event, year: unknown) => {
 
   void computeDbPath().then(({ db_path }) => {
     sendToWorker({ cmd: 'build_report', db_path, ...(year === undefined ? {} : { year: Number(year) }) })
+  })
+})
+
+ipcMain.on(IPC_WORKER_PRELOAD_REPORTS, (_event, years: unknown) => {
+  if (!Array.isArray(years)) {
+    emitToRenderer({
+      type: 'ipc_invalid_cmd',
+      ts: nowIso(),
+      message: 'Список годов для предзагрузки должен быть массивом'
+    })
+    return
+  }
+
+  const normalized = [...new Set(years)]
+    .filter((year): year is number => Number.isInteger(year) && Number(year) >= 2000 && Number(year) <= 2200)
+    .map(Number)
+
+  void computeDbPath().then(({ db_path }) => {
+    sendToWorker({ cmd: 'preload_reports', db_path, years: normalized })
   })
 })
 

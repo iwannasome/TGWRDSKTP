@@ -130,11 +130,15 @@ async function generateExport() {
       id: 200002,
       type: 'personal_chat',
       name: 'Maximilian LongName With Mixed Русский English Tokens',
-      messages: makeMessages({
+      messages: makeSegmentedMessages({
         peerId: 'user200002',
         peerName: 'Maximilian LongName With Mixed Русский English Tokens',
-        startMs: Date.UTC(2025, 3, 1, 23, 30, 0),
-        count: 5100
+        segments: Array.from({ length: 100 }, (_, day) => ({
+          startMs: Date.UTC(2025, 0, day + 1, 0, 0, 0),
+          count: 51,
+          stepMinutes: 7,
+          textPrefix: 'устойчивый большой ночной диалог'
+        }))
       })
     },
     {
@@ -323,9 +327,9 @@ async function generateExport() {
         peerId: 'user300009',
         peerName: 'Ровные месяцы с большой дырой',
         segments: [0, 1, 2, 9, 10, 11].map((month) => ({
-          startMs: Date.UTC(2025, month, 5, 10, 0, 0),
+          startMs: Date.UTC(2025, month, 5, 0, 0, 0),
           count: 100,
-          stepMinutes: 60,
+          stepMinutes: 3,
           textPrefix: 'активный месяц вокруг длинного провала'
         }))
       })
@@ -481,7 +485,32 @@ async function runWorkerSmoke() {
     )
     if (built.type !== 'report_done') throw new Error(`Report failed: ${built.message}`)
 
-    return built.report_path
+    worker.send({ cmd: 'preload_reports', db_path: dbPath, years: [2024] })
+    const preloaded = await worker.waitFor(
+      (event) => (event.type === 'report_cached' && event.msk_year_used === 2024) || event.type === 'report_preload_error',
+      '2024 preload result'
+    )
+    if (preloaded.type !== 'report_cached') throw new Error(`Report preload failed: ${preloaded.message}`)
+
+    worker.send({ cmd: 'build_report', db_path: dbPath, year: 2024 })
+    const switchedToCachedYear = await worker.waitFor(
+      (event) => (event.type === 'report_done' && event.msk_year_used === 2024) || event.type === 'report_error',
+      'cached year switch'
+    )
+    if (switchedToCachedYear.type !== 'report_done' || switchedToCachedYear.source !== 'cache') {
+      throw new Error(`Cached year did not open from disk cache: ${JSON.stringify(switchedToCachedYear)}`)
+    }
+
+    worker.send({ cmd: 'build_report', db_path: dbPath, year: 2025 })
+    const switchedBack = await worker.waitFor(
+      (event) => (event.type === 'report_done' && event.msk_year_used === 2025) || event.type === 'report_error',
+      'cached current year switch'
+    )
+    if (switchedBack.type !== 'report_done' || switchedBack.source !== 'cache') {
+      throw new Error(`Current year did not reopen from disk cache: ${JSON.stringify(switchedBack)}`)
+    }
+
+    return switchedBack.report_path
   } finally {
     worker.stop()
   }
@@ -627,7 +656,7 @@ function assertReport(report) {
     ]
   }
 
-  const assertLiveSessionQuality = (label, period) => {
+  const assertLiveSessionQuality = (label, period, minimumTotal) => {
     const insights = period?.conversation_insights ?? {}
     const checks = []
     for (const key of ['alive_dialog', 'longest_live_session']) {
@@ -637,6 +666,8 @@ function assertReport(report) {
       checks.push([`${label}.${key}.bounded_message_gap`, Number(evidence.session_gap_limit_seconds ?? 0) === 30 * 60 && Number(evidence.observed_max_gap_seconds ?? Number.POSITIVE_INFINITY) <= 30 * 60])
       checks.push([`${label}.${key}.minimum_density`, Number(evidence.density_per_hour ?? 0) >= 4])
       checks.push([`${label}.${key}.two_sided`, Number(evidence.sent_messages ?? 0) > 0 && Number(evidence.received_messages ?? 0) > 0])
+      checks.push([`${label}.${key}.large_dialog`, Number(insight?.winner?.total_messages ?? 0) >= minimumTotal && Number(evidence.minimum_messages_required ?? 0) === minimumTotal])
+      checks.push([`${label}.${key}.large_dialog_candidates`, (insight?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= minimumTotal)])
     }
     return checks
   }
@@ -649,21 +680,45 @@ function assertReport(report) {
     const reply = insights.reply_rhythm
     const initiative = insights.contact_initiator
     const restarter = insights.silence_restarter
+    const nightCompanion = insights.night_companion
+    const dayAnchor = insights.day_anchor
+    const mediaBond = insights.media_bond
+    const mediaCandidates = mediaBond?.candidates ?? []
+
+    const timeProfileChecks = (key, insight) => {
+      const candidates = insight?.candidates ?? []
+      const hasCandidates = candidates.length > 0
+      return [
+        [`${label}.${key}.minimum_volume`, !hasCandidates || (Number(insight?.winner?.total_messages ?? 0) >= 3000 && Number(insight?.evidence?.minimum_messages_required ?? 0) === 3000)],
+        [`${label}.${key}.candidates_qualified`, candidates.every((candidate) => Number(candidate?.total_messages ?? 0) >= 3000)],
+        [`${label}.${key}.leave_one_out_baseline`, !hasCandidates || (Number(insight?.evidence?.baseline_messages ?? 0) >= 1500 && insight?.evidence?.baseline_excludes_candidate === true)]
+      ]
+    }
 
     return [
       [`${label}.stable_dialog_fixture`, stable?.winner?.peer_from_id === 'user300001'],
       [`${label}.stable_dialog_calendar_coverage`, Number(stable?.evidence?.coverage_ratio ?? 0) >= thresholds.stableCoverage && Number(stable?.evidence?.observed_months ?? 0) >= 12],
+      [`${label}.stable_dialog_formula_evidence`, Number(stable?.evidence?.monthly_deviation_ratio ?? -1) >= 0 && Math.abs((Number(stable?.evidence?.stability_ratio ?? 0) + Number(stable?.evidence?.monthly_deviation_ratio ?? 0)) - 1) < 0.0002],
+      [`${label}.stable_dialog_threshold_evidence`, Number(stable?.evidence?.minimum_messages_required ?? 0) === thresholds.stableMessages && Number(stable?.evidence?.minimum_stability_ratio ?? 0) === thresholds.stableScore],
       [`${label}.stable_dialog_gap_fixture_blocked`, !(stable?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
+      ...timeProfileChecks('night_companion', nightCompanion),
+      ...timeProfileChecks('day_anchor', dayAnchor),
+      [`${label}.night_companion_small_night_chat_blocked`, !(nightCompanion?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300009')],
       [`${label}.closer_dialog_minimum_volume`, Number(closer?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(closer?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
       [`${label}.faded_dialog_minimum_volume`, Number(faded?.winner?.total_messages ?? 0) >= thresholds.trendMessages && Number(faded?.evidence?.minimum_messages_required ?? 0) === thresholds.trendMessages],
+      [`${label}.trend_windows_are_matched`, Number(closer?.evidence?.matched_window_days ?? 0) > 0 && Number(closer?.evidence?.trend_span_days ?? 0) >= thresholds.trendSpanDays && Number(closer?.evidence?.minimum_trend_span_days ?? 0) === thresholds.trendSpanDays],
       [`${label}.tiny_growth_fixture_blocked`, !(closer?.candidates ?? []).some((candidate) => candidate?.peer_from_id === 'user300010')],
       [`${label}.reply_rhythm_samples`, Number(reply?.evidence?.reply_samples ?? 0) >= thresholds.replySamples && Number(reply?.evidence?.minimum_reply_samples ?? 0) === thresholds.replySamples],
       [`${label}.contact_initiator_gap`, Number(initiative?.evidence?.contact_gap_seconds ?? 0) === 12 * 60 * 60],
       [`${label}.contact_initiator_samples`, Number(initiative?.evidence?.contact_events ?? 0) >= thresholds.contactEvents && Number(initiative?.evidence?.minimum_contact_events ?? 0) === thresholds.contactEvents],
       [`${label}.contact_initiator_dominance`, Number(initiative?.evidence?.dominance_ratio ?? 0) >= 0.6],
+      [`${label}.contact_initiator_large_dialog`, Number(initiative?.winner?.total_messages ?? 0) >= thresholds.majorMessages && (initiative?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= thresholds.majorMessages)],
       [`${label}.silence_restarter_gap`, Number(restarter?.evidence?.silence_gap_seconds ?? 0) === 7 * 24 * 60 * 60],
       [`${label}.silence_restarter_samples`, Number(restarter?.evidence?.restart_events ?? 0) >= thresholds.restartEvents && Number(restarter?.evidence?.minimum_restart_events ?? 0) === thresholds.restartEvents],
-      [`${label}.silence_restarter_dominance`, Number(restarter?.evidence?.dominance_ratio ?? 0) >= 0.6]
+      [`${label}.silence_restarter_dominance`, Number(restarter?.evidence?.dominance_ratio ?? 0) >= 0.6],
+      [`${label}.silence_restarter_large_dialog`, Number(restarter?.winner?.total_messages ?? 0) >= thresholds.majorMessages && (restarter?.candidates ?? []).every((candidate) => Number(candidate?.total_messages ?? 0) >= thresholds.majorMessages)],
+      [`${label}.media_bond_large_dialog`, mediaCandidates.length === 0 || (Number(mediaBond?.winner?.total_messages ?? 0) >= thresholds.majorMessages && Number(mediaBond?.evidence?.minimum_messages_required ?? 0) === thresholds.majorMessages)],
+      [`${label}.media_bond_above_other_dialogs`, mediaCandidates.length === 0 || (Number(mediaBond?.evidence?.media_lift_vs_archive ?? 0) >= 0.03 && Number(mediaBond?.evidence?.baseline_messages ?? 0) >= 1000 && mediaBond?.evidence?.baseline_excludes_candidate === true)]
     ]
   }
 
@@ -687,10 +742,10 @@ function assertReport(report) {
     ...assertInsightContract('year', year),
     ...assertLongestSilenceQuality('all_time', allTime),
     ...assertLongestSilenceQuality('year', year),
-    ...assertLiveSessionQuality('all_time', allTime),
-    ...assertLiveSessionQuality('year', year),
-    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, trendMessages: 1200, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
-    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, trendMessages: 1000, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
+    ...assertLiveSessionQuality('all_time', allTime, 500),
+    ...assertLiveSessionQuality('year', year, 400),
+    ...assertBehavioralInsightQuality('all_time', allTime, { stableCoverage: 0.6, stableMessages: 520, stableScore: 0.4, trendMessages: 1200, trendSpanDays: 120, majorMessages: 500, replySamples: 30, contactEvents: 12, restartEvents: 4 }),
+    ...assertBehavioralInsightQuality('year', year, { stableCoverage: 0.65, stableMessages: 420, stableScore: 0.45, trendMessages: 1000, trendSpanDays: 90, majorMessages: 400, replySamples: 20, contactEvents: 10, restartEvents: 3 }),
     ...assertComebackQuality('all_time', allTime),
     ...assertComebackQuality('year', year),
     ['all_time.comeback_59_day_spike_blocked', getInsightWinnerPeer(allTime, 'comeback') !== 'user300002'],
@@ -703,6 +758,7 @@ function assertReport(report) {
     ['report.schema_version', report?.schema_version === 2],
     ['meta.self_from_id', report?.meta?.self_from_id === selfId],
     ['meta.msk_year_used', report?.meta?.msk_year_used === 2025],
+    ['meta.report_cache_revision', report?.meta?.report_cache_revision === 2],
     ['meta.available_years', Array.isArray(report?.meta?.available_years) && report.meta.available_years.some((item) => item?.year === 2025 && item?.messages === 25468)],
     ['year.total_messages', year?.total_messages > 4000],
     ['top_10_people_by_messages', year?.top_10_people_by_messages?.length >= 2],
@@ -720,6 +776,7 @@ function assertReport(report) {
     ['direction_extremes', Boolean(year?.most_balanced_day?.date && year?.most_one_sided_day?.date)],
     ['night_insights', Boolean(year?.night_peak_hour && year?.most_night_date)],
     ['reply_thresholds', year?.who_you_reply_fastest?.minimum_messages_required === 2500 && year?.who_you_ignore_most?.minimum_messages_required === 3000],
+    ['reply_sample_thresholds', Number(year?.who_you_reply_fastest?.reply_samples ?? 0) >= 20 && Number(year?.who_you_ignore_most?.reply_samples ?? 0) >= 20 && year?.who_you_reply_fastest?.minimum_reply_samples === 20 && year?.who_you_ignore_most?.minimum_reply_samples === 20],
     ['emoji_metrics', typeof year?.messages_with_emoji_count === 'number' && typeof year?.emoji_streak_max_messages === 'number'],
     ['media_insights', Boolean(year?.top_media_type?.type && year?.most_media_month?.value)],
     ['day_night_person_details', Boolean(year?.day_person?.day_peak_hour && year?.night_person?.night_peak_hour)],
@@ -1049,6 +1106,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
         const deadline = Date.now() + 7000;
         let openedExisting = false;
         let clickedExport = false;
+        let previewSlideChecked = 0;
         const tick = () => {
           const root = document.querySelector('[data-tgwr-view]');
           const view = root && root.getAttribute('data-tgwr-view');
@@ -1077,8 +1135,28 @@ function renderHarnessHtml(report, assets, slideIndex) {
           if (preview) {
             const previewText = preview.textContent || '';
             const checked = Array.from(preview.querySelectorAll('input[type="checkbox"]')).every((input) => input.checked);
-            if (previewText.includes('Собеседник ') && !previewText.includes('Александра Очень') && checked) {
+            const counter = previewText.match(/([0-9]+)[/]([0-9]+) *·/);
+            const currentSlide = counter ? Number(counter[1]) : 0;
+            const totalSlides = counter ? Number(counter[2]) : 0;
+            const containsPrivateName = previewText.includes('Александра Очень');
+            const containsExactDate = /(?:^|[^0-9])(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}[.][0-9]{2}[.][0-9]{4})(?:$|[^0-9])/.test(previewText);
+
+            if (!checked || containsPrivateName || containsExactDate) {
+              document.body.setAttribute('data-share-preview-check', 'fail:privacy');
+              showHarnessError('Share preview leaked private data. checked=' + checked + ', name=' + containsPrivateName + ', date=' + containsExactDate + ', slide=' + currentSlide + '/' + totalSlides);
+              return;
+            }
+
+            if (currentSlide > previewSlideChecked) previewSlideChecked = currentSlide;
+            if (totalSlides > 0 && currentSlide === totalSlides && previewSlideChecked === totalSlides) {
               document.body.setAttribute('data-share-preview-check', 'ok');
+              return;
+            }
+
+            const next = findButtonByText('Дальше →');
+            if (next && currentSlide > 0 && currentSlide < totalSlides) {
+              next.click();
+              setTimeout(tick, 80);
               return;
             }
           }
@@ -1130,11 +1208,14 @@ function renderHarnessHtml(report, assets, slideIndex) {
       });
       window.__TGWR_REPORT__ = ${JSON.stringify(report)};
       window.tgwr = {
+        rendererReady: () => {},
         onWorkerEvent: () => () => {},
         pingWorker: () => {},
         importExport: () => {},
         buildReport: () => {},
+        preloadReports: () => {},
         cancelWorker: () => {},
+        restartWorker: () => {},
         pickExportDir: async () => null,
         pickOutputDir: async () => null,
         writeOutputFile: async () => ({ ok: true, path: '' }),
@@ -1144,6 +1225,8 @@ function renderHarnessHtml(report, assets, slideIndex) {
           ok: true,
           db_path: ${JSON.stringify(dbPath)},
           report_path: ${JSON.stringify(join(outDir, 'report.json'))},
+          cached_years: [2025],
+          report_stale: false,
           report: window.__TGWR_REPORT__
         })
       };
@@ -1155,6 +1238,18 @@ function renderHarnessHtml(report, assets, slideIndex) {
   </body>
 </html>
 `
+}
+
+function assertHarnessInlineScriptParses(report) {
+  const html = renderHarnessHtml(report, { cssFile: 'smoke.css', jsFile: 'smoke.js' }, 0)
+  const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+  if (!inlineScript) throw new Error('Synthetic harness is missing its inline bootstrap script')
+  try {
+    new Function(inlineScript)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Synthetic harness inline script does not parse: ${message}`)
+  }
 }
 
 async function startHarnessServer(report) {
@@ -1458,6 +1553,7 @@ async function main() {
   const reportPath = await runWorkerSmoke()
   const report = JSON.parse(await readFile(reportPath, 'utf8'))
   assertReport(report)
+  assertHarnessInlineScriptParses(report)
   const baseTargets = process.env.TGWR_SMOKE_ALL_SLIDES === '1' ? allSlideTargets() : undefined
   const expandedMobileTargets = [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
   const screenshots = [

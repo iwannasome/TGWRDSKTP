@@ -4,13 +4,16 @@ const IPC_WORKER_EVENT = 'tgwr:worker-event' as const
 const IPC_WORKER_PING = 'tgwr:worker-ping' as const
 const IPC_WORKER_IMPORT = 'tgwr:worker-import' as const
 const IPC_WORKER_BUILD_REPORT = 'tgwr:worker-build-report' as const
+const IPC_WORKER_PRELOAD_REPORTS = 'tgwr:worker-preload-reports' as const
 const IPC_WORKER_CANCEL = 'tgwr:worker-cancel' as const
+const IPC_WORKER_RESTART = 'tgwr:worker-restart' as const
 const IPC_PICK_EXPORT_DIR = 'tgwr:pick-export-dir' as const
 const IPC_PICK_OUTPUT_DIR = 'tgwr:pick-output-dir' as const
 const IPC_WRITE_OUTPUT_FILE = 'tgwr:write-output-file' as const
 const IPC_LOAD_REPORT = 'tgwr:load-report' as const
 const IPC_RESET_REPORT = 'tgwr:reset-report' as const
 const IPC_DELETE_ALL_DATA = 'tgwr:delete-all-data' as const
+const IPC_RENDERER_READY = 'tgwr:renderer-ready' as const
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -22,6 +25,8 @@ export type LoadReportResult =
       db_path: string
       report_path: string
       report: unknown
+      cached_years: number[]
+      report_stale: boolean
     }
   | {
       ok: false
@@ -59,11 +64,14 @@ export type DataMutationResult =
     }
 
 export interface TgwrApi {
+  rendererReady: () => void
   onWorkerEvent: (cb: (payload: unknown) => void) => () => void
   pingWorker: () => void
   importExport: (exportDir: string) => void
   buildReport: (year?: number) => void
+  preloadReports: (years: number[]) => void
   cancelWorker: () => void
+  restartWorker: () => void
 
   pickExportDir: () => Promise<string | null>
   pickOutputDir: () => Promise<OutputDirectoryGrant | null>
@@ -76,10 +84,12 @@ export interface TgwrApi {
 
 function normalizeDataMutationResult(value: unknown): DataMutationResult {
   if (isPlainObject(value) && typeof value.ok === 'boolean') return value as DataMutationResult
-  return { ok: false, error: 'Invalid response from main process' }
+  return { ok: false, error: 'Приложение вернуло некорректный ответ' }
 }
 
 const api: TgwrApi = {
+  rendererReady: () => ipcRenderer.send(IPC_RENDERER_READY),
+
   onWorkerEvent: (cb) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => cb(payload)
     ipcRenderer.on(IPC_WORKER_EVENT, listener)
@@ -89,7 +99,9 @@ const api: TgwrApi = {
   pingWorker: () => ipcRenderer.send(IPC_WORKER_PING),
   importExport: (exportDir) => ipcRenderer.send(IPC_WORKER_IMPORT, exportDir),
   buildReport: (year) => ipcRenderer.send(IPC_WORKER_BUILD_REPORT, year),
+  preloadReports: (years) => ipcRenderer.send(IPC_WORKER_PRELOAD_REPORTS, years),
   cancelWorker: () => ipcRenderer.send(IPC_WORKER_CANCEL),
+  restartWorker: () => ipcRenderer.send(IPC_WORKER_RESTART),
 
   pickExportDir: async () => {
     const res = await ipcRenderer.invoke(IPC_PICK_EXPORT_DIR)
@@ -113,15 +125,15 @@ const api: TgwrApi = {
       if (res.ok) {
         return { ok: true, path: typeof res.path === 'string' ? res.path : '' }
       }
-      return { ok: false, error: typeof res.error === 'string' ? res.error : 'Unknown error' }
+      return { ok: false, error: typeof res.error === 'string' ? res.error : 'Неизвестная ошибка сохранения' }
     }
-    return { ok: false, error: 'Invalid response from main process' }
+    return { ok: false, error: 'Приложение вернуло некорректный ответ' }
   },
 
   loadReport: async () => {
     const res = await ipcRenderer.invoke(IPC_LOAD_REPORT)
     if (isPlainObject(res) && typeof res.ok === 'boolean') return res as LoadReportResult
-    return { ok: false, error: 'Invalid response from main process' }
+    return { ok: false, error: 'Приложение вернуло некорректный ответ' }
   },
 
   resetReport: async () => normalizeDataMutationResult(await ipcRenderer.invoke(IPC_RESET_REPORT)),

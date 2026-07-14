@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -20,42 +22,50 @@ function executableCandidates() {
 
 const executable = executableCandidates().find((candidate) => existsSync(candidate))
 if (!executable) throw new Error('Не найдена распакованная сборка. Сначала выполни npm run pack:app.')
+const smokeUserData = await mkdtemp(join(tmpdir(), 'tgwr-packaged-smoke-'))
 
-await new Promise((resolvePromise, reject) => {
-  const child = spawn(executable, [], {
-    cwd: root,
-    env: { ...process.env, TGWR_SMOKE_EXIT_ON_PONG: '1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true
-  })
-  let output = ''
-  let settled = false
+try {
+  await new Promise((resolvePromise, reject) => {
+    const child = spawn(executable, [`--user-data-dir=${smokeUserData}`], {
+      cwd: root,
+      env: { ...process.env, TGWR_SMOKE_EXIT_ON_PONG: '1', TGWR_SMOKE_RESTART_WORKER: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    })
+    let output = ''
+    let settled = false
 
-  const finish = (error) => {
-    if (settled) return
-    settled = true
-    clearTimeout(timeout)
-    if (!child.killed) child.kill()
-    if (error) reject(error)
-    else resolvePromise()
-  }
-
-  const inspect = (chunk) => {
-    output += chunk.toString('utf8')
-    if (output.includes('tgwr_packaged_worker_smoke=ok')) {
-      console.log('packaged_app_smoke=ok bundled_worker=pong')
-      finish()
+    const finish = (error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      if (!child.killed) child.kill()
+      if (error) reject(error)
+      else resolvePromise()
     }
-  }
 
-  const timeout = setTimeout(() => {
-    finish(new Error(`Установленное приложение не дождалось pong от worker.\n${output.slice(-4000)}`))
-  }, 20_000)
+    const inspect = (chunk) => {
+      output += chunk.toString('utf8')
+      if (
+        output.includes('tgwr_packaged_csp=applied') &&
+        output.includes('tgwr_packaged_app_smoke=ok worker=restart_pong renderer=ready')
+      ) {
+        console.log('packaged_app_smoke=ok bundled_worker=restart_pong renderer=ready csp=applied isolated_user_data=yes')
+        finish()
+      }
+    }
 
-  child.stdout.on('data', inspect)
-  child.stderr.on('data', inspect)
-  child.on('error', finish)
-  child.on('exit', (code) => {
-    if (!settled) finish(new Error(`Приложение завершилось до проверки worker (code=${code ?? 'null'}).\n${output.slice(-4000)}`))
+    const timeout = setTimeout(() => {
+      finish(new Error(`Установленное приложение не подтвердило готовность интерфейса и worker.\n${output.slice(-4000)}`))
+    }, 45_000)
+
+    child.stdout.on('data', inspect)
+    child.stderr.on('data', inspect)
+    child.on('error', finish)
+    child.on('exit', (code) => {
+      if (!settled) finish(new Error(`Приложение завершилось до проверки интерфейса и worker (code=${code ?? 'null'}).\n${output.slice(-4000)}`))
+    })
   })
-})
+} finally {
+  await rm(smokeUserData, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 })
+}

@@ -30,13 +30,15 @@ npm run verify
 - Share Preview, навигация, People и insight export;
 - PyInstaller worker pong;
 - electron-builder package;
-- packaged Electron → bundled worker pong.
+- packaged Electron → bundled worker pong, принудительный перезапуск и повторный pong.
 
 ## GitHub Actions
 
 - `.github/workflows/ci.yml` работает на push и pull request;
 - `.github/workflows/release.yml` запускается вручную или тегом `v*`;
-- release workflow сохраняет установщики как GitHub Actions artifacts на 14 дней.
+- CI запускает packaged app и перезапускает встроенный worker на Windows x64, macOS Intel/ARM64 и Linux x64;
+- ручной release workflow сохраняет установщики и SHA-256 как GitHub Actions artifacts на 14 дней;
+- запуск по тегу `v*` дополнительно создаёт **черновик** GitHub Release со всеми установщиками и общей `SHA256SUMS.txt`. Публикация черновика остаётся ручным решением владельца.
 
 Пример:
 
@@ -45,13 +47,15 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-Перед тегом версия в `package.json`, `package-lock.json`, worker и интерфейсе должна совпадать.
+Перед тегом `npm run release:version-check` автоматически проверяет совпадение версии в `package.json`, `package-lock.json`, worker, интерфейсе и README, а также соответствие самого тега.
 
 ## Подпись приложений
 
 Текущий workflow способен собрать проверенные, но неподписанные artifacts. Для публичного распространения необходимо добавить сертификаты в GitHub Secrets и только затем включить подпись/notarization в release job.
 
 Секреты и сертификаты нельзя коммитить в репозиторий, передавать через issue/PR или печатать в логах. После подключения подписи требуется отдельная проверка установленного NSIS и DMG на чистых машинах.
+
+Границы локальной защиты и остаточные риски зафиксированы в [SECURITY.md](SECURITY.md). Перед публикацией проверь, что они всё ещё соответствуют фактической поставке.
 
 ## Ручная приёмка
 
@@ -62,5 +66,5 @@ git push origin v0.2.0
 3. переключить год и `ALL`;
 4. проверить пересборку отчёта без повторного импорта;
 5. открыть Share Preview и экспортировать безопасный PNG/PDF;
-6. выполнить «Стереть все данные» и проверить отсутствие БД/report;
+6. выполнить «Стереть все данные», дождаться возврата на стартовый экран и проверить отсутствие БД, отчёта и кэша;
 7. убедиться, что после перезапуска старый отчёт больше не предлагается.

@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -7,6 +7,25 @@ const releaseDir = join(root, 'release')
 const executableName = process.platform === 'win32' ? 'tgwr-worker.exe' : 'tgwr-worker'
 const expectedSuffix = ['worker-bin', `${process.platform}-${process.arch}`, executableName].join('/')
 const files = []
+
+const preloadPath = join(root, 'dist', 'preload', 'index.js')
+let preloadSource = ''
+try {
+  preloadSource = await readFile(preloadPath, 'utf8')
+} catch {
+  throw new Error('Не найден CommonJS preload dist/preload/index.js')
+}
+if (!preloadSource.includes('require("electron")')) {
+  throw new Error('Preload собран не в CommonJS и не сможет работать внутри Electron sandbox')
+}
+
+const rendererHtml = await readFile(join(root, 'dist', 'renderer', 'index.html'), 'utf8')
+if (!/<html\s+lang=["']ru["']/i.test(rendererHtml)) {
+  throw new Error('Renderer не помечен как русскоязычный документ')
+}
+for (const directive of ["object-src 'none'", "base-uri 'none'", "form-action 'none'"]) {
+  if (!rendererHtml.includes(directive)) throw new Error(`В renderer CSP отсутствует ${directive}`)
+}
 
 async function walk(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -20,6 +39,9 @@ await walk(releaseDir)
 const normalized = files.map((filePath) => relative(releaseDir, filePath).split(sep).join('/'))
 const workerRelative = normalized.find((filePath) => filePath.endsWith(expectedSuffix))
 if (!workerRelative) throw new Error(`В package не найден ${expectedSuffix}`)
+if (!normalized.some((filePath) => filePath.toLowerCase().endsWith('resources/license.txt'))) {
+  throw new Error('В package не найден текст MIT-лицензии resources/LICENSE.txt')
+}
 if (normalized.some((filePath) => filePath.endsWith('worker/tgwr_worker.py'))) {
   throw new Error('В package неожиданно попал исходный tgwr_worker.py')
 }
