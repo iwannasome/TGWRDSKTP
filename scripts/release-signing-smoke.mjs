@@ -55,8 +55,29 @@ for (const secret of [
 ]) {
   assert(releaseWorkflow.includes(secret), `Release workflow не проверяет секрет ${secret}`)
 }
-const signingAssignments = releaseWorkflow.match(/TGWR_REQUIRE_CODE_SIGNING:.*startsWith\(github\.ref.*'1'.*'0'/g) ?? []
+const signingAssignments = releaseWorkflow.match(/TGWR_REQUIRE_CODE_SIGNING: "1"/g) ?? []
 assert(signingAssignments.length === 2, 'Теговые Windows/macOS сборки не включают fail-closed подпись')
+
+function workflowStep(name, nextName) {
+  const start = releaseWorkflow.indexOf(`- name: ${name}`)
+  const end = releaseWorkflow.indexOf(`- name: ${nextName}`, start + 1)
+  assert(start >= 0 && end > start, `Не найден release-шаг ${name}`)
+  return releaseWorkflow.slice(start, end)
+}
+
+const unsignedWindowsStep = workflowStep(
+  'Собрать неподписанный Windows installer для проверки',
+  'Собрать и подписать stable Windows installer'
+)
+assert(unsignedWindowsStep.includes('!startsWith(github.ref'), 'Unsigned Windows-шаг доступен теговому релизу')
+assert(!unsignedWindowsStep.includes('WIN_CSC_'), 'Пустой Windows signing secret попадает в unsigned-сборку')
+
+const unsignedMacStep = workflowStep(
+  'Собрать неподписанный macOS DMG для проверки',
+  'Подготовить App Store Connect API key'
+)
+assert(unsignedMacStep.includes('!startsWith(github.ref'), 'Unsigned macOS-шаг доступен теговому релизу')
+assert(!unsignedMacStep.includes('CSC_LINK'), 'Пустой macOS signing secret попадает в unsigned-сборку')
 assert(releaseWorkflow.includes('base64.b64decode'), 'App Store Connect API key не декодируется во временный закрытый файл')
 assert(releaseWorkflow.includes('Get-AuthenticodeSignature'), 'Windows-подпись не проверяется после сборки')
 assert(releaseWorkflow.includes('xcrun stapler validate'), 'macOS notarization ticket не проверяется после сборки')
