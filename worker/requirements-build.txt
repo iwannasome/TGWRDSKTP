@@ -1,7 +1,7 @@
 -r requirements-runtime.txt
 pyinstaller==6.21.0
 altgraph==0.17.5
-macholib==1.16.3; sys_platform == "darwin"
+macholib==1.16.4; sys_platform == "darwin"
 packaging==26.2
 pefile==2024.8.26; sys_platform == "win32"
 pyinstaller-hooks-contrib==2026.6

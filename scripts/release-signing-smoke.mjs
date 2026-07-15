@@ -59,6 +59,10 @@ for (const secret of [
 }
 const signingAssignments = releaseWorkflow.match(/TGWR_REQUIRE_CODE_SIGNING: "1"/g) ?? []
 assert(signingAssignments.length === 2, 'Теговые Windows/macOS сборки не включают fail-closed подпись')
+assert(releaseWorkflow.includes('windows_signed:'), 'Release workflow не публикует режим подписи Windows')
+assert(releaseWorkflow.includes('mac_signed:'), 'Release workflow не публикует режим подписи macOS')
+assert(releaseWorkflow.includes('prerelease:'), 'Release workflow не определяет unsigned pre-release')
+assert(releaseWorkflow.includes('Неполный набор секретов подписи'), 'Частичный набор signing secrets не отклоняется')
 
 function workflowStep(name, nextName) {
   const start = releaseWorkflow.indexOf(`- name: ${name}`)
@@ -68,18 +72,26 @@ function workflowStep(name, nextName) {
 }
 
 const unsignedWindowsStep = workflowStep(
-  'Собрать неподписанный Windows installer для проверки',
+  'Собрать неподписанный Windows installer',
   'Собрать и подписать stable Windows installer'
 )
-assert(unsignedWindowsStep.includes('!startsWith(github.ref'), 'Unsigned Windows-шаг доступен теговому релизу')
+assert(
+  unsignedWindowsStep.includes("needs.release-credentials.outputs.windows_signed != 'true'"),
+  'Unsigned Windows-шаг не доступен теговому релизу без сертификата'
+)
 assert(!unsignedWindowsStep.includes('WIN_CSC_'), 'Пустой Windows signing secret попадает в unsigned-сборку')
 
 const unsignedMacStep = workflowStep(
-  'Собрать неподписанный macOS DMG для проверки',
+  'Собрать неподписанный macOS DMG',
   'Подготовить App Store Connect API key'
 )
-assert(unsignedMacStep.includes('!startsWith(github.ref'), 'Unsigned macOS-шаг доступен теговому релизу')
+assert(
+  unsignedMacStep.includes("needs.release-credentials.outputs.mac_signed != 'true'"),
+  'Unsigned macOS-шаг не доступен теговому релизу без сертификата'
+)
 assert(!unsignedMacStep.includes('CSC_LINK'), 'Пустой macOS signing secret попадает в unsigned-сборку')
+assert(releaseWorkflow.includes('args+=(--prerelease --latest=false)'), 'Unsigned release не помечается как pre-release')
+assert(releaseWorkflow.includes('SHA-256'), 'Release notes не предупреждают о проверке unsigned artifacts')
 assert(releaseWorkflow.includes('base64.b64decode'), 'App Store Connect API key не декодируется во временный закрытый файл')
 assert(releaseWorkflow.includes('Get-AuthenticodeSignature'), 'Windows-подпись не проверяется после сборки')
 assert(releaseWorkflow.includes('xcrun stapler validate'), 'macOS notarization ticket не проверяется после сборки')
@@ -116,4 +128,4 @@ for (const source of [entitlements, inheritedEntitlements]) {
   )
 }
 
-console.log('release_signing_smoke=ok unsigned=explicit stable=fail_closed artifacts=installed_or_mounted windows=authenticode macos=notarized')
+console.log('release_signing_smoke=ok unsigned=prerelease partial_secrets=rejected signed=verified artifacts=installed_or_mounted')

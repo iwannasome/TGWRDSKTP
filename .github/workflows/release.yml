@@ -10,8 +10,12 @@ permissions:
 
 jobs:
   release-credentials:
-    name: Проверить сертификаты stable-релиза
+    name: Определить режим подписи релиза
     runs-on: ubuntu-24.04
+    outputs:
+      windows_signed: ${{ steps.signing-policy.outputs.windows_signed }}
+      mac_signed: ${{ steps.signing-policy.outputs.mac_signed }}
+      prerelease: ${{ steps.signing-policy.outputs.prerelease }}
     env:
       TGWR_TAG_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
       WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
@@ -22,31 +26,78 @@ jobs:
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
     steps:
-      - name: Не допустить неподписанный stable-тег
+      - name: Проверить целостность наборов сертификатов
+        id: signing-policy
         shell: bash
         run: |
           if [ "$TGWR_TAG_RELEASE" != "true" ]; then
-            echo "Ручной прогон собирает проверочные artifacts без требования сертификатов."
+            echo "windows_signed=false" >> "$GITHUB_OUTPUT"
+            echo "mac_signed=false" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "Ручной прогон собирает проверочные artifacts без подписи."
             exit 0
           fi
 
-          missing=()
+          check_group() {
+            local output_name="$1"
+            shift
+            local present=0
+            local missing=()
+            local name
+
+            for name in "$@"; do
+              if [ -n "${!name:-}" ]; then
+                present=$((present + 1))
+              else
+                missing+=("$name")
+              fi
+            done
+
+            if [ "$present" -eq 0 ]; then
+              printf '%s=false\n' "$output_name" >> "$GITHUB_OUTPUT"
+              return 0
+            fi
+
+            if [ "${#missing[@]}" -ne 0 ]; then
+              printf '::error::Неполный набор секретов подписи: отсутствует %s\n' "${missing[@]}"
+              return 1
+            fi
+
+            printf '%s=true\n' "$output_name" >> "$GITHUB_OUTPUT"
+          }
+
+          check_group windows_signed WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
+          check_group mac_signed \
+            MAC_CSC_LINK MAC_CSC_KEY_PASSWORD \
+            APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER
+
+          windows_signed=false
+          mac_signed=false
+          for name in WIN_CSC_LINK WIN_CSC_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              windows_signed=false
+              break
+            fi
+            windows_signed=true
+          done
           for name in \
-            WIN_CSC_LINK WIN_CSC_KEY_PASSWORD \
             MAC_CSC_LINK MAC_CSC_KEY_PASSWORD \
             APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER
           do
             if [ -z "${!name:-}" ]; then
-              missing+=("$name")
+              mac_signed=false
+              break
             fi
+            mac_signed=true
           done
 
-          if [ "${#missing[@]}" -ne 0 ]; then
-            printf '::error::Для stable-релиза отсутствует GitHub Secret %s\n' "${missing[@]}"
-            exit 1
+          if [ "$windows_signed" = "true" ] && [ "$mac_signed" = "true" ]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "Windows и macOS будут подписаны; релиз можно публиковать как stable."
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Одна или обе desktop-платформы будут выпущены без подписи; GitHub Release станет pre-release."
           fi
-
-          echo "Все секреты подписи Windows и notarization macOS доступны."
 
   quality:
     name: Полный release gate
@@ -123,21 +174,21 @@ jobs:
       - name: Собрать Linux artifacts
         if: runner.os == 'Linux'
         run: npm run ${{ matrix.command }}
-      - name: Собрать неподписанный Windows installer для проверки
-        if: runner.os == 'Windows' && !startsWith(github.ref, 'refs/tags/v')
+      - name: Собрать неподписанный Windows installer
+        if: runner.os == 'Windows' && (!startsWith(github.ref, 'refs/tags/v') || needs.release-credentials.outputs.windows_signed != 'true')
         run: npm run ${{ matrix.command }}
       - name: Собрать и подписать stable Windows installer
-        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v') && needs.release-credentials.outputs.windows_signed == 'true'
         run: npm run ${{ matrix.command }}
         env:
           TGWR_REQUIRE_CODE_SIGNING: "1"
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-      - name: Собрать неподписанный macOS DMG для проверки
-        if: runner.os == 'macOS' && !startsWith(github.ref, 'refs/tags/v')
+      - name: Собрать неподписанный macOS DMG
+        if: runner.os == 'macOS' && (!startsWith(github.ref, 'refs/tags/v') || needs.release-credentials.outputs.mac_signed != 'true')
         run: npm run ${{ matrix.command }}
       - name: Подготовить App Store Connect API key
-        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v') && needs.release-credentials.outputs.mac_signed == 'true'
         shell: bash
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
@@ -149,7 +200,7 @@ jobs:
           chmod 600 "$key_path"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
       - name: Собрать, подписать и notarize stable macOS DMG
-        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v') && needs.release-credentials.outputs.mac_signed == 'true'
         run: npm run ${{ matrix.command }}
         env:
           TGWR_REQUIRE_CODE_SIGNING: "1"
@@ -158,7 +209,7 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
       - name: Проверить Authenticode stable-installer
-        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v') && needs.release-credentials.outputs.windows_signed == 'true'
         shell: pwsh
         run: |
           $installers = @(Get-ChildItem release/*.exe)
@@ -173,7 +224,7 @@ jobs:
             Write-Host "Authenticode подтверждён: $($installer.Name)"
           }
       - name: Проверить подпись и notarization stable-DMG
-        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v') && needs.release-credentials.outputs.mac_signed == 'true'
         shell: bash
         run: |
           app_path="$(find release -maxdepth 3 -type d -name '*.app' -print -quit)"
@@ -333,7 +384,7 @@ jobs:
           echo "appimage_artifact_smoke=ok extract=completed app=started"
       - name: Сформировать SHA-256
         run: node scripts/generate-checksums.mjs "release/SHA256SUMS-${{ matrix.name }}.txt"
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TGWR-${{ matrix.name }}
           path: |
@@ -349,20 +400,60 @@ jobs:
   draft-release:
     name: Подготовить черновик GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [release-credentials, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: TGWR-*
           path: release
           merge-multiple: true
       - name: Собрать общую SHA-256 ведомость
         run: node scripts/generate-checksums.mjs
+      - name: Описать режим доверия установщиков
+        shell: bash
+        env:
+          WINDOWS_SIGNED: ${{ needs.release-credentials.outputs.windows_signed }}
+          MAC_SIGNED: ${{ needs.release-credentials.outputs.mac_signed }}
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "## Установка и доверие ОС"
+            echo
+            echo "TGWR распространяется напрямую через GitHub Releases, без магазинов приложений. Обработка Telegram Export полностью локальная."
+            echo
+            if [ "$WINDOWS_SIGNED" = "true" ]; then
+              echo "- Windows: установщик подписан Authenticode."
+            else
+              echo "- Windows: установщик пока не подписан; SmartScreen может показать предупреждение «неизвестный издатель». Сверь SHA-256 и запускай файл только с этой страницы Releases."
+            fi
+            if [ "$MAC_SIGNED" = "true" ]; then
+              echo "- macOS: приложение подписано Developer ID и notarized Apple."
+            else
+              echo "- macOS: DMG пока не подписан и не notarized; для первого запуска может понадобиться «Системные настройки → Конфиденциальность и безопасность → Всё равно открыть»."
+            fi
+            echo "- Linux: подпись издателя не используется; для проверки приложена общая SHA-256 ведомость."
+          } > "$notes"
+          echo "TGWR_RELEASE_NOTES=$notes" >> "$GITHUB_ENV"
       - name: Создать черновик релиза
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --draft --verify-tag --generate-notes --title "TGWR by IWS $GITHUB_REF_NAME"
+          PRERELEASE: ${{ needs.release-credentials.outputs.prerelease }}
+        run: |
+          args=(
+            "$GITHUB_REF_NAME"
+            release/*
+            --draft
+            --verify-tag
+            --generate-notes
+            --notes-file "$TGWR_RELEASE_NOTES"
+            --title "TGWR by IWS $GITHUB_REF_NAME"
+          )
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease --latest=false)
+          fi
+          gh release create "${args[@]}"
