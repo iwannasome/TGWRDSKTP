@@ -123,13 +123,19 @@ jobs:
       - name: Собрать Linux artifacts
         if: runner.os == 'Linux'
         run: npm run ${{ matrix.command }}
-      - name: Собрать и подписать Windows installer
-        if: runner.os == 'Windows'
+      - name: Собрать неподписанный Windows installer для проверки
+        if: runner.os == 'Windows' && !startsWith(github.ref, 'refs/tags/v')
+        run: npm run ${{ matrix.command }}
+      - name: Собрать и подписать stable Windows installer
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
         run: npm run ${{ matrix.command }}
         env:
-          TGWR_REQUIRE_CODE_SIGNING: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          TGWR_REQUIRE_CODE_SIGNING: "1"
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      - name: Собрать неподписанный macOS DMG для проверки
+        if: runner.os == 'macOS' && !startsWith(github.ref, 'refs/tags/v')
+        run: npm run ${{ matrix.command }}
       - name: Подготовить App Store Connect API key
         if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -142,11 +148,11 @@ jobs:
           printf '%s' "$APPLE_API_KEY_BASE64" | python3 -c 'import base64, sys; sys.stdout.buffer.write(base64.b64decode(sys.stdin.buffer.read(), validate=True))' > "$key_path"
           chmod 600 "$key_path"
           echo "APPLE_API_KEY=$key_path" >> "$GITHUB_ENV"
-      - name: Собрать, подписать и notarize macOS DMG
-        if: runner.os == 'macOS'
+      - name: Собрать, подписать и notarize stable macOS DMG
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
         run: npm run ${{ matrix.command }}
         env:
-          TGWR_REQUIRE_CODE_SIGNING: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          TGWR_REQUIRE_CODE_SIGNING: "1"
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
