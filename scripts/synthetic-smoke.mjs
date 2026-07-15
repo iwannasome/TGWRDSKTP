@@ -16,7 +16,7 @@ const outDir = join(workDir, 'out')
 const screenshotsDir = join(workDir, 'screenshots')
 const dbPath = join(outDir, 'tgwr.db')
 const selfId = 'user100000000'
-const SLIDE_COUNT = 14
+const SLIDE_COUNT = 15
 
 function pythonCandidates() {
   const localPython = process.platform === 'win32'
@@ -1344,7 +1344,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
       window.tgwr = {
         rendererReady: () => {},
         onWorkerEvent: (cb) => {
-          const timer = setTimeout(() => cb({ type: 'pong', version: '0.2.0' }), 20);
+          const timer = setTimeout(() => cb({ type: 'pong', version: '0.2.1' }), 20);
           return () => clearTimeout(timer);
         },
         pingWorker: () => {},
@@ -1485,6 +1485,9 @@ async function runScreenshots(report, options = {}) {
       const renderedIndex = Math.min(slideIndex, Math.max(0, renderedTotal - 1))
       if (renderedTotal <= 0 || !domRes.stdout.includes(`${renderedIndex + 1} / ${renderedTotal}`)) {
         throw new Error(`DOM check opened wrong slide for ${label} slide ${slideIndex + 1}`)
+      }
+      if (slideIndex >= renderedTotal - 1 && !domRes.stdout.includes('data-tgwr-credits="true"')) {
+        throw new Error(`DOM check found no Credits at the end of the ${label} deck`)
       }
 
       const res = await runChrome(chrome, [

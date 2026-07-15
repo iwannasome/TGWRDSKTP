@@ -42,10 +42,12 @@ import Slide14LongestMessage from './slides/Slide14LongestMessage'
 import Slide15LongestStreak from './slides/Slide15LongestStreak'
 import Slide16LongestSilence from './slides/Slide16LongestSilence'
 import Slide20End from './slides/Slide20End'
+import Slide21Credits from './slides/Slide21Credits'
 
 const SLIDE_W = 1920
 const SLIDE_H = 1080
 const PREVIEW_SCALE = 0.34
+const MAX_STORY_SLIDES = 14
 
 const DEFAULT_PRIVACY: SharePrivacyOptions = {
   hideNames: true,
@@ -117,8 +119,11 @@ function buildStorySlides(report: unknown, period: PeriodKey): SlideDef[] {
     slides.push(candidate)
   }
 
-  slides.push({ id: 'final', title: 'Wrapped готов', Component: Slide20End })
-  return slides.slice(0, 14)
+  return [
+    ...slides.slice(0, MAX_STORY_SLIDES - 1),
+    { id: 'final', title: 'Wrapped готов', Component: Slide20End },
+    { id: 'credits', title: 'Команда и благодарности', Component: Slide21Credits }
+  ]
 }
 
 type SlidesViewProps = {

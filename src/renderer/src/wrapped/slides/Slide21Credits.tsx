@@ -21,7 +21,10 @@ export default function Slide21Credits({ exporting }: SlideCommonProps): JSX.Ele
       subtitle="Люди, без которых этот Telegram Wrapped не был бы таким."
       footerHint="Спасибо за помощь, фидбек и поддержку."
     >
-      <div className="grid h-full min-h-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-6">
+      <div
+        data-tgwr-credits="true"
+        className="grid h-full min-h-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-6"
+      >
         <motion.div
           initial={exporting ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
