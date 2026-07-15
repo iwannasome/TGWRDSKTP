@@ -1344,7 +1344,7 @@ function renderHarnessHtml(report, assets, slideIndex) {
       window.tgwr = {
         rendererReady: () => {},
         onWorkerEvent: (cb) => {
-          const timer = setTimeout(() => cb({ type: 'pong', version: '0.2.0' }), 20);
+          const timer = setTimeout(() => cb({ type: 'pong', version: '0.2.1' }), 20);
           return () => clearTimeout(timer);
         },
         pingWorker: () => {},

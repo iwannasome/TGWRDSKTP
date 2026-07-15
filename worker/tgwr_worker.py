@@ -18,7 +18,7 @@ from html import unescape
 from html.parser import HTMLParser
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 REPORT_SCHEMA_VERSION = 2
 REPORT_CACHE_REVISION = 3
 REPORT_CACHE_DIR_NAME = "report-cache"

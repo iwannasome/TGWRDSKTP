@@ -1019,7 +1019,7 @@ export default function App(): JSX.Element {
           <aside className="flex min-h-[220px] flex-col justify-between rounded-[24px] border border-[rgba(var(--tgwr-border-rgb),0.16)] bg-[rgba(var(--tgwr-card-rgb),0.58)] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.30)] backdrop-blur-xl lg:sticky lg:top-4 lg:h-[calc(100vh-32px)]">
             <div>
               <div className="inline-flex rounded-full border border-[rgba(var(--tgwr-accent1-rgb),0.22)] bg-[rgba(var(--tgwr-accent1-rgb),0.10)] px-3 py-1.5 text-[12px] font-semibold text-sky-100">
-                TGWR by IWS · v0.2.0 · local
+                TGWR by IWS · v0.2.1 · local
               </div>
               <div className="mt-5 text-[34px] font-semibold leading-tight text-slate-50">Telegram Wrapped без облака</div>
               <div className="mt-3 max-w-[260px] text-[14px] leading-relaxed text-[rgba(var(--tgwr-muted-rgb),0.90)]">
