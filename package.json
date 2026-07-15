@@ -20,7 +20,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
-    "test:security": "node scripts/security-smoke.mjs",
+    "test:security": "node scripts/security-smoke.mjs && node scripts/release-signing-smoke.mjs",
     "test:worker": "node scripts/run-python.mjs -m unittest discover -s worker/tests -p test_*.py -v",
     "test:synthetic": "npm run build && node scripts/synthetic-smoke.mjs",
     "test:synthetic:full": "npm run build && node scripts/synthetic-smoke.mjs --all-slides",
@@ -121,6 +121,10 @@
       ],
       "icon": "build/icon.icns",
       "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "notarize": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "artifactName": "TGWR-by-IWS-${version}-${arch}.${ext}"
     },
 

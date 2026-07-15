@@ -41,7 +41,8 @@ npm run verify
 - до нативной matrix релиз повторяет полный security, fixtures и browser gate всех слайдов;
 - CI запускает packaged app и перезапускает встроенный worker на Windows x64, macOS Intel/ARM64 и Linux x64;
 - ручной release workflow сохраняет установщики и SHA-256 как GitHub Actions artifacts на 14 дней;
-- запуск по тегу `v*` дополнительно создаёт **черновик** GitHub Release со всеми установщиками и общей `SHA256SUMS.txt`. Публикация черновика остаётся ручным решением владельца.
+- ручной запуск разрешает собрать проверочные неподписанные artifacts, но не создаёт GitHub Release;
+- запуск по тегу `v*` требует сертификаты, проверяет Authenticode и macOS notarization, а затем создаёт **черновик** GitHub Release со всеми установщиками и общей `SHA256SUMS.txt`. Публикация черновика остаётся ручным решением владельца.
 
 Пример:
 
@@ -54,7 +55,21 @@ git push origin v0.2.0
 
 ## Подпись приложений
 
-Текущий workflow способен собрать проверенные, но неподписанные artifacts. Для публичного распространения необходимо добавить сертификаты в GitHub Secrets и только затем включить подпись/notarization в release job.
+Ручной workflow способен собрать проверочные неподписанные artifacts. Теговый `stable`-релиз работает fail-closed: без полного набора сертификатов job `Проверить сертификаты stable-релиза` завершается ошибкой, нативная matrix не запускается и черновик GitHub Release не создаётся.
+
+Нужны следующие repository secrets:
+
+| Secret | Назначение |
+|---|---|
+| `WIN_CSC_LINK` | Base64 или защищённая ссылка на Windows `.p12/.pfx` code-signing certificate |
+| `WIN_CSC_KEY_PASSWORD` | Пароль Windows-сертификата |
+| `MAC_CSC_LINK` | Base64 Developer ID Application `.p12` |
+| `MAC_CSC_KEY_PASSWORD` | Пароль macOS-сертификата |
+| `APPLE_API_KEY_BASE64` | Base64-содержимое App Store Connect `.p8` API key |
+| `APPLE_API_KEY_ID` | Key ID из App Store Connect |
+| `APPLE_API_ISSUER` | Issuer ID из App Store Connect |
+
+Windows-сборка перед упаковкой включает `forceCodeSigning`, а после неё проверяет каждый `.exe` через `Get-AuthenticodeSignature`. macOS-сборка декодирует `.p8` только во временный файл с закрытыми правами, использует Hardened Runtime и минимальные Electron entitlements, выполняет notarization через electron-builder, монтирует каждый готовый DMG и проверяет подпись и stapled ticket приложения внутри него, а затем удаляет временный ключ.
 
 Секреты и сертификаты нельзя коммитить в репозиторий, передавать через issue/PR или печатать в логах. После подключения подписи требуется отдельная проверка установленного NSIS и DMG на чистых машинах.
 
@@ -64,7 +79,7 @@ git push origin v0.2.0
 
 Перед публикацией:
 
-1. убедиться, что Dependabot alerts/security updates, secret scanning, push protection и private vulnerability reporting включены в настройках GitHub;
+1. убедиться, что Dependabot alerts/security updates, secret scanning, push protection и private vulnerability reporting всё ещё включены в настройках GitHub;
 2. установить artifact на чистую систему без Python и Node.js;
 3. импортировать небольшой тестовый Telegram Export;
 4. переключить год и `ALL`;
