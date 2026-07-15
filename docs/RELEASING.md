@@ -39,7 +39,8 @@ npm run verify
 - `.github/workflows/release.yml` запускается вручную или тегом `v*`;
 - теговый релиз разрешён только когда тег указывает на текущую вершину `master`;
 - до нативной matrix релиз повторяет полный security, fixtures и browser gate всех слайдов;
-- CI запускает packaged app и перезапускает встроенный worker на Windows x64, macOS Intel/ARM64 и Linux x64;
+- CI запускает распакованный packaged app и перезапускает встроенный worker на Windows x64, macOS Intel/ARM64 и Linux x64;
+- release workflow дополнительно проверяет именно пользовательские файлы: тихо устанавливает и удаляет NSIS, монтирует DMG read-only и извлекает AppImage, после чего запускает приложение и single-instance smoke из каждого artifact;
 - ручной release workflow сохраняет установщики и SHA-256 как GitHub Actions artifacts на 14 дней;
 - ручной запуск разрешает собрать проверочные неподписанные artifacts, но не создаёт GitHub Release;
 - запуск по тегу `v*` требует сертификаты, проверяет Authenticode и macOS notarization, а затем создаёт **черновик** GitHub Release со всеми установщиками и общей `SHA256SUMS.txt`. Публикация черновика остаётся ручным решением владельца.
@@ -69,7 +70,7 @@ git push origin v0.2.0
 | `APPLE_API_KEY_ID` | Key ID из App Store Connect |
 | `APPLE_API_ISSUER` | Issuer ID из App Store Connect |
 
-Windows-сборка перед упаковкой включает `forceCodeSigning`, а после неё проверяет каждый `.exe` через `Get-AuthenticodeSignature`. macOS-сборка декодирует `.p8` только во временный файл с закрытыми правами, использует Hardened Runtime и минимальные Electron entitlements, выполняет notarization через electron-builder, монтирует каждый готовый DMG и проверяет подпись и stapled ticket приложения внутри него, а затем удаляет временный ключ.
+Windows-сборка перед упаковкой включает `forceCodeSigning`, а после неё проверяет каждый `.exe` через `Get-AuthenticodeSignature`. Независимо от режима подписи готовый NSIS устанавливается в изолированный каталог runner, оттуда запускается и затем удаляется штатным uninstaller. macOS-сборка декодирует `.p8` только во временный файл с закрытыми правами, использует Hardened Runtime и минимальные Electron entitlements, выполняет notarization через electron-builder, монтирует каждый готовый DMG и проверяет подпись и stapled ticket приложения внутри него, а затем удаляет временный ключ. Отдельный smoke запускает TGWR непосредственно с read-only образа. Linux-проверка извлекает готовый AppImage и запускает renderer и встроенный worker из его фактического содержимого.
 
 Секреты и сертификаты нельзя коммитить в репозиторий, передавать через issue/PR или печатать в логах. После подключения подписи требуется отдельная проверка установленного NSIS и DMG на чистых машинах.
 
@@ -80,7 +81,7 @@ Windows-сборка перед упаковкой включает `forceCodeSi
 Перед публикацией:
 
 1. убедиться, что Dependabot alerts/security updates, secret scanning, push protection и private vulnerability reporting всё ещё включены в настройках GitHub;
-2. установить artifact на чистую систему без Python и Node.js;
+2. установить artifact на чистую систему без Python и Node.js; автоматическая тихая установка/монтирование уже проверяет технический путь, но не заменяет видимые окна установщика, Gatekeeper/SmartScreen и человеческую оценку первого запуска;
 3. импортировать небольшой тестовый Telegram Export;
 4. переключить год и `ALL`;
 5. проверить пересборку отчёта без повторного импорта;
