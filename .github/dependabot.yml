@@ -8,8 +8,17 @@ updates:
       time: "06:00"
       timezone: Europe/Moscow
     groups:
+      react-major:
+        patterns: [react, react-dom, "@types/react", "@types/react-dom"]
+        update-types: [major]
+      vite-major:
+        patterns: [vite, "@vitejs/plugin-react", electron-vite]
+        update-types: [major]
       npm-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
 
   - package-ecosystem: pip
@@ -37,4 +46,7 @@ updates:
       interval: weekly
       time: "06:00"
       timezone: Europe/Moscow
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
