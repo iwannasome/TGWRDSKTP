@@ -30,6 +30,7 @@ from tgwr_worker import (  # noqa: E402
     scan_export_dir,
     load_json_safely,
     ensure_import_disk_capacity,
+    extract_emojis,
     _pick_person_by_time_profile,
     MAX_INFERRED_REPLY_SECONDS,
 )
@@ -120,6 +121,10 @@ class ImportFixtureTests(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected.get("total_messages"), 3000)
         self.assertEqual(MAX_INFERRED_REPLY_SECONDS, 48 * 60 * 60)
+
+    def test_emoji_extraction_keeps_emoji_and_skips_other_unicode_symbols(self):
+        self.assertEqual(extract_emojis("готово 🔥✨ 🇷🇺"), ["🔥", "✨", "🇷", "🇺"])
+        self.assertEqual(extract_emojis("не эмодзи: A, 1, ™, ♯, ❨"), [])
 
     def test_html_group_is_detected_but_personal_chat_is_kept(self):
         group_file = os.path.join(FIXTURES_DIR, "html_group", "messages.html")
