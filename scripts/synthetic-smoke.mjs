@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir, userInfo } from 'node:os'
@@ -7,7 +7,10 @@ import { dirname, join, resolve } from 'node:path'
 
 const root = resolve(dirname(new URL(import.meta.url).pathname), '..')
 const smokeUser = userInfo().username.replace(/[^a-zA-Z0-9_.-]/g, '_')
-const workDir = process.env.TGWR_SMOKE_WORKDIR || join(tmpdir(), `tgwr-synthetic-smoke-${smokeUser}`)
+const configuredWorkDir = process.env.TGWR_SMOKE_WORKDIR?.trim()
+const workDir = configuredWorkDir
+  ? resolve(configuredWorkDir)
+  : await mkdtemp(join(tmpdir(), `tgwr-synthetic-smoke-${smokeUser}-`))
 const exportDir = join(workDir, 'TelegramExportSynthetic')
 const outDir = join(workDir, 'out')
 const screenshotsDir = join(workDir, 'screenshots')
@@ -126,7 +129,7 @@ function makeSegmentedMessages({ peerId, peerName, segments }) {
 }
 
 async function generateExport() {
-  await rm(workDir, { recursive: true, force: true })
+  if (configuredWorkDir) await rm(workDir, { recursive: true, force: true })
   await mkdir(exportDir, { recursive: true })
   await mkdir(outDir, { recursive: true })
   await mkdir(screenshotsDir, { recursive: true })
@@ -1386,8 +1389,14 @@ function renderHarnessHtml(report, assets, slideIndex) {
 
 function assertHarnessInlineScriptParses(report) {
   const html = renderHarnessHtml(report, { cssFile: 'smoke.css', jsFile: 'smoke.js' }, 0)
-  const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
-  if (!inlineScript) throw new Error('Synthetic harness is missing its inline bootstrap script')
+  const startMarker = '<script>'
+  const endMarker = '</script>'
+  const scriptStart = html.indexOf(startMarker)
+  const scriptEnd = scriptStart === -1 ? -1 : html.indexOf(endMarker, scriptStart + startMarker.length)
+  if (scriptStart === -1 || scriptEnd === -1) {
+    throw new Error('Synthetic harness is missing its inline bootstrap script')
+  }
+  const inlineScript = html.slice(scriptStart + startMarker.length, scriptEnd)
   try {
     new Function(inlineScript)
   } catch (error) {
@@ -1415,8 +1424,9 @@ async function startHarnessServer(report) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
       res.end(renderHarnessHtml(report, assets, Number.isFinite(slideIndex) ? slideIndex : 0))
     } catch (err) {
+      console.error('Synthetic harness request failed', err)
       res.statusCode = 500
-      res.end(err instanceof Error ? err.message : String(err))
+      res.end('Synthetic harness request failed')
     }
   })
 

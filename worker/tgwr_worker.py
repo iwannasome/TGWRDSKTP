@@ -8,6 +8,7 @@ import sqlite3
 import statistics
 import sys
 import threading
+import unicodedata
 import ijson
 from bisect import bisect_left, bisect_right
 from collections import Counter, defaultdict
@@ -2155,21 +2156,19 @@ _URL_RE = re.compile(
 
 _WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё]{2,}", flags=re.UNICODE)
 
-_EMOJI_RE = re.compile(
-    "["
-    "\U0001F1E0-\U0001F1FF"
-    "\U0001F300-\U0001F5FF"
-    "\U0001F600-\U0001F64F"
-    "\U0001F680-\U0001F6FF"
-    "\U0001F700-\U0001F77F"
-    "\U0001F780-\U0001F7FF"
-    "\U0001F800-\U0001F8FF"
-    "\U0001F900-\U0001F9FF"
-    "\U0001FA00-\U0001FAFF"
-    "\u2600-\u26FF"
-    "\u2700-\u27BF"
-    "]"
+_EMOJI_CODEPOINT_RANGES = (
+    (0x1F1E6, 0x1F1FF),
+    (0x1F300, 0x1FAFF),
+    (0x2600, 0x26FF),
+    (0x2700, 0x27BF),
 )
+
+
+def _is_emoji_codepoint(character: str) -> bool:
+    codepoint = ord(character)
+    if not any(start <= codepoint <= end for start, end in _EMOJI_CODEPOINT_RANGES):
+        return False
+    return unicodedata.category(character) in {"So", "Sk"}
 
 
 def _strip_urls(text: str) -> str:
@@ -2201,7 +2200,7 @@ def extract_emojis(text: str) -> List[str]:
     if not text:
         return []
     s = _strip_urls(text)
-    return _EMOJI_RE.findall(s)
+    return [character for character in s if _is_emoji_codepoint(character)]
 
 
 def _median_int(values: List[int]) -> int:
