@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 function executableCandidates() {
+  const explicitExecutable = process.env.TGWR_SMOKE_EXECUTABLE?.trim()
+  if (explicitExecutable) return [resolve(explicitExecutable)]
   if (process.platform === 'win32') {
     return [join(root, 'release', 'win-unpacked', 'TGWR by IWS.exe')]
   }
@@ -69,7 +71,13 @@ function waitForSecondaryExit(child) {
 }
 
 const executable = executableCandidates().find((candidate) => existsSync(candidate))
-if (!executable) throw new Error('Не найдена распакованная сборка. Сначала выполни npm run pack:app.')
+if (!executable) {
+  throw new Error(
+    process.env.TGWR_SMOKE_EXECUTABLE?.trim()
+      ? 'Не найден executable, явно переданный через TGWR_SMOKE_EXECUTABLE.'
+      : 'Не найдена распакованная сборка. Сначала выполни npm run pack:app.'
+  )
+}
 
 const smokeUserData = await mkdtemp(join(tmpdir(), 'tgwr-single-instance-smoke-'))
 let primary = null
@@ -96,7 +104,8 @@ try {
     throw new Error('Первая копия TGWR завершилась после запуска второй вместо сохранения единственного окна.')
   }
 
-  console.log('single_instance_smoke=ok primary=alive secondary=blocked isolated_user_data=yes')
+  const source = process.env.TGWR_SMOKE_EXECUTABLE?.trim() ? 'artifact' : 'unpacked'
+  console.log(`single_instance_smoke=ok source=${source} primary=alive secondary=blocked isolated_user_data=yes`)
 } finally {
   if (secondary && secondary.exitCode === null && secondary.signalCode === null) secondary.kill()
   if (primary && primary.exitCode === null && primary.signalCode === null) primary.kill()

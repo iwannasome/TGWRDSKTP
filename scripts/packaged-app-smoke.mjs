@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 function executableCandidates() {
+  const explicitExecutable = process.env.TGWR_SMOKE_EXECUTABLE?.trim()
+  if (explicitExecutable) return [resolve(explicitExecutable)]
   if (process.platform === 'win32') {
     return [join(root, 'release', 'win-unpacked', 'TGWR by IWS.exe')]
   }
@@ -21,7 +23,13 @@ function executableCandidates() {
 }
 
 const executable = executableCandidates().find((candidate) => existsSync(candidate))
-if (!executable) throw new Error('Не найдена распакованная сборка. Сначала выполни npm run pack:app.')
+if (!executable) {
+  throw new Error(
+    process.env.TGWR_SMOKE_EXECUTABLE?.trim()
+      ? 'Не найден executable, явно переданный через TGWR_SMOKE_EXECUTABLE.'
+      : 'Не найдена распакованная сборка. Сначала выполни npm run pack:app.'
+  )
+}
 const smokeUserData = await mkdtemp(join(tmpdir(), 'tgwr-packaged-smoke-'))
 
 try {
@@ -50,7 +58,8 @@ try {
         output.includes('tgwr_packaged_csp=applied') &&
         output.includes('tgwr_packaged_app_smoke=ok worker=restart_pong renderer=ready')
       ) {
-        console.log('packaged_app_smoke=ok bundled_worker=restart_pong renderer=ready csp=applied isolated_user_data=yes')
+        const source = process.env.TGWR_SMOKE_EXECUTABLE?.trim() ? 'artifact' : 'unpacked'
+        console.log(`packaged_app_smoke=ok source=${source} bundled_worker=restart_pong renderer=ready csp=applied isolated_user_data=yes`)
         finish()
       }
     }

@@ -36,11 +36,13 @@ try {
 }
 assert(invalidModeRejected, 'Неизвестный режим подписи принят без ошибки')
 
-const [releaseWorkflow, packageSource, entitlements, inheritedEntitlements] = await Promise.all([
+const [releaseWorkflow, packageSource, entitlements, inheritedEntitlements, packagedSmoke, singleInstanceSmoke] = await Promise.all([
   readFile(join(root, '.github', 'workflows', 'release.yml'), 'utf8'),
   readFile(join(root, 'package.json'), 'utf8'),
   readFile(join(root, 'build', 'entitlements.mac.plist'), 'utf8'),
-  readFile(join(root, 'build', 'entitlements.mac.inherit.plist'), 'utf8')
+  readFile(join(root, 'build', 'entitlements.mac.inherit.plist'), 'utf8'),
+  readFile(join(root, 'scripts', 'packaged-app-smoke.mjs'), 'utf8'),
+  readFile(join(root, 'scripts', 'single-instance-smoke.mjs'), 'utf8')
 ])
 const packageConfig = JSON.parse(packageSource)
 
@@ -81,6 +83,24 @@ assert(!unsignedMacStep.includes('CSC_LINK'), 'Пустой macOS signing secret
 assert(releaseWorkflow.includes('base64.b64decode'), 'App Store Connect API key не декодируется во временный закрытый файл')
 assert(releaseWorkflow.includes('Get-AuthenticodeSignature'), 'Windows-подпись не проверяется после сборки')
 assert(releaseWorkflow.includes('xcrun stapler validate'), 'macOS notarization ticket не проверяется после сборки')
+assert(
+  releaseWorkflow.includes('Установить, запустить и удалить готовый Windows installer') &&
+    releaseWorkflow.includes('/S /currentuser /D=$installRoot'),
+  'Готовый Windows installer не проходит тихую установку и запуск'
+)
+assert(
+  releaseWorkflow.includes('Смонтировать и запустить приложение из готового macOS DMG') &&
+    releaseWorkflow.includes('-nobrowse -readonly -quiet'),
+  'Готовый macOS DMG не монтируется read-only для запуска'
+)
+assert(
+  releaseWorkflow.includes('Извлечь и запустить приложение из готового Linux AppImage') &&
+    releaseWorkflow.includes('--appimage-extract'),
+  'Готовый Linux AppImage не извлекается и не запускается'
+)
+for (const smokeSource of [packagedSmoke, singleInstanceSmoke]) {
+  assert(smokeSource.includes('TGWR_SMOKE_EXECUTABLE'), 'App smoke не принимает executable из готового artifact')
+}
 assert(packageConfig.build.mac?.notarize === true, 'macOS notarization не включена в electron-builder')
 assert(packageConfig.build.mac?.hardenedRuntime === true, 'macOS Hardened Runtime не включён явно')
 assert(packageConfig.build.mac?.entitlements === 'build/entitlements.mac.plist', 'Основные macOS entitlements не подключены')
@@ -96,4 +116,4 @@ for (const source of [entitlements, inheritedEntitlements]) {
   )
 }
 
-console.log('release_signing_smoke=ok unsigned=explicit stable=fail_closed windows=authenticode macos=notarized')
+console.log('release_signing_smoke=ok unsigned=explicit stable=fail_closed artifacts=installed_or_mounted windows=authenticode macos=notarized')

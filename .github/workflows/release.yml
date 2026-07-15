@@ -228,6 +228,109 @@ jobs:
       - name: Проверить запуск packaged app и перезапуск worker
         if: runner.os != 'Linux'
         run: npm run app:smoke
+      - name: Установить, запустить и удалить готовый Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem release/*.exe | Where-Object { $_.Name -like '*Setup*' })
+          if ($installer.Count -ne 1) {
+            throw "Ожидался один Windows installer, найдено: $($installer.Count)"
+          }
+
+          $installRoot = Join-Path $env:RUNNER_TEMP 'tgwr-nsis-smoke'
+          New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
+          $install = Start-Process -FilePath $installer[0].FullName -ArgumentList "/S /currentuser /D=$installRoot" -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "NSIS installer завершился с кодом $($install.ExitCode)"
+          }
+
+          $app = @(Get-ChildItem $installRoot -Recurse -File -Filter 'TGWR by IWS.exe')
+          if ($app.Count -ne 1) {
+            throw "После NSIS-установки ожидался один TGWR by IWS.exe, найдено: $($app.Count)"
+          }
+
+          try {
+            $env:TGWR_SMOKE_EXECUTABLE = $app[0].FullName
+            npm run app:smoke
+            if ($LASTEXITCODE -ne 0) {
+              throw "Установленное Windows-приложение не прошло app:smoke"
+            }
+          } finally {
+            Remove-Item Env:TGWR_SMOKE_EXECUTABLE -ErrorAction SilentlyContinue
+            $uninstaller = @(Get-ChildItem $installRoot -Recurse -File -Filter 'Uninstall *.exe')
+            if ($uninstaller.Count -eq 1) {
+              $uninstall = Start-Process -FilePath $uninstaller[0].FullName -ArgumentList '/S --delete-app-data' -Wait -PassThru
+              if ($uninstall.ExitCode -ne 0) {
+                throw "NSIS uninstaller завершился с кодом $($uninstall.ExitCode)"
+              }
+            } else {
+              throw "После установки не найден единственный NSIS uninstaller"
+            }
+          }
+
+          if (Test-Path $app[0].FullName) {
+            throw "NSIS uninstaller оставил основной executable"
+          }
+          Write-Host "nsis_artifact_smoke=ok install=completed app=started uninstall=completed"
+      - name: Смонтировать и запустить приложение из готового macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          dmgs=(release/*.dmg)
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "Ожидался один macOS DMG, найдено: ${#dmgs[@]}" >&2
+            exit 1
+          fi
+
+          mount_dir="$(mktemp -d "$RUNNER_TEMP/tgwr-dmg-smoke.XXXXXX")"
+          cleanup_mount() {
+            hdiutil detach "$mount_dir" -quiet >/dev/null 2>&1 || true
+            rmdir "$mount_dir" >/dev/null 2>&1 || true
+          }
+          trap cleanup_mount EXIT
+          hdiutil attach "${dmgs[0]}" -mountpoint "$mount_dir" -nobrowse -readonly -quiet
+
+          shipped_apps=("$mount_dir"/*.app)
+          if [ "${#shipped_apps[@]}" -ne 1 ]; then
+            echo "В DMG ожидалось одно приложение, найдено: ${#shipped_apps[@]}" >&2
+            exit 1
+          fi
+          shipped_executable="${shipped_apps[0]}/Contents/MacOS/TGWR by IWS"
+          if [ ! -x "$shipped_executable" ]; then
+            echo "В DMG отсутствует исполняемый TGWR by IWS" >&2
+            exit 1
+          fi
+
+          TGWR_SMOKE_EXECUTABLE="$shipped_executable" npm run app:smoke
+          echo "dmg_artifact_smoke=ok mount=readonly app=started"
+      - name: Извлечь и запустить приложение из готового Linux AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          appimages=(release/*.AppImage)
+          if [ "${#appimages[@]}" -ne 1 ]; then
+            echo "Ожидался один Linux AppImage, найдено: ${#appimages[@]}" >&2
+            exit 1
+          fi
+
+          extract_dir="$(mktemp -d "$RUNNER_TEMP/tgwr-appimage-smoke.XXXXXX")"
+          chmod +x "${appimages[0]}"
+          (
+            cd "$extract_dir"
+            "$GITHUB_WORKSPACE/${appimages[0]}" --appimage-extract >/dev/null
+          )
+          artifact_executable="$extract_dir/squashfs-root/tgwr"
+          if [ ! -x "$artifact_executable" ]; then
+            echo "После извлечения AppImage отсутствует executable tgwr" >&2
+            exit 1
+          fi
+
+          sudo chown root:root "$extract_dir/squashfs-root/chrome-sandbox"
+          sudo chmod 4755 "$extract_dir/squashfs-root/chrome-sandbox"
+          TGWR_SMOKE_EXECUTABLE="$artifact_executable" xvfb-run -a npm run app:smoke
+          echo "appimage_artifact_smoke=ok extract=completed app=started"
       - name: Сформировать SHA-256
         run: node scripts/generate-checksums.mjs "release/SHA256SUMS-${{ matrix.name }}.txt"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
